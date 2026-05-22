@@ -1,0 +1,1780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>METALFLUX — Custom Print T-Shirts</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --pure-white: #ffffff;
+            --off-white: #fafafa;
+            --light-gray: #f0f0f0;
+            --mid-gray: #e0e0e0;
+            --text-gray: #888888;
+            --dark-gray: #333333;
+            --pure-black: #000000;
+            --near-black: #111111;
+            --charcoal: #1a1a1a;
+            --liquid-1: #e8e8e8;
+            --liquid-2: #c0c0c0;
+            --liquid-3: #a0a0a0;
+            --liquid-4: #707070;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: var(--pure-white);
+            color: var(--pure-black);
+            overflow-x: hidden;
+            cursor: none;
+        }
+
+        /* Custom Cursor — circle scales on interactive hover (difference blend) */
+        .cursor {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--pure-white);
+            border-radius: 50%;
+            position: fixed;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 9999;
+            opacity: 0;
+            will-change: transform;
+            transform: translate(-50%, -50%) scale(1);
+            transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                        background 0.2s ease,
+                        border-color 0.2s ease,
+                        opacity 0.2s ease;
+            mix-blend-mode: difference;
+        }
+
+        .cursor.visible {
+            opacity: 1;
+        }
+
+        .cursor.hover {
+            transform: translate(-50%, -50%) scale(2.5);
+            background: var(--pure-white);
+            border-color: transparent;
+        }
+
+        .cursor-dot {
+            width: 6px;
+            height: 6px;
+            background: var(--pure-white);
+            border-radius: 50%;
+            position: fixed;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 10000;
+            opacity: 0;
+            will-change: transform;
+            transform: translate(-50%, -50%);
+            transition: transform 0.15s ease, opacity 0.2s ease;
+            mix-blend-mode: difference;
+        }
+
+        .cursor-dot.visible {
+            opacity: 1;
+        }
+
+        .cursor-dot.hover {
+            transform: translate(-50%, -50%) scale(0);
+        }
+
+        /* Navigation */
+        .nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 24px 48px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1000;
+            background: rgba(255,255,255,0.9);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--light-gray);
+        }
+
+        .nav-logo {
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: 1.5rem;
+            letter-spacing: -0.02em;
+            color: var(--pure-black);
+            text-decoration: none;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 40px;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--pure-black);
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            position: relative;
+            padding: 4px 0;
+        }
+
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0;
+            height: 1.5px;
+            background: var(--pure-black);
+            transition: width 0.3s ease;
+        }
+
+        .nav-links a:hover::after {
+            width: 100%;
+        }
+
+        .nav-cart {
+            position: relative;
+            color: var(--pure-black);
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .cart-count {
+            position: absolute;
+            top: -8px;
+            right: -12px;
+            background: var(--pure-black);
+            color: var(--pure-white);
+            font-size: 0.65rem;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+        }
+
+        /* Sections */
+        .section {
+            min-height: 100vh;
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 120px 48px 80px;
+        }
+
+        /* HERO SECTION */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+            background: var(--pure-white);
+        }
+
+        .hero-content {
+            width: 100%;
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            align-items: center;
+            position: relative;
+            z-index: 2;
+        }
+
+        .hero-text {
+            padding-left: 48px;
+        }
+
+        .hero-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--text-gray);
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .hero-label::before {
+            content: '';
+            width: 40px;
+            height: 1px;
+            background: var(--text-gray);
+        }
+
+        .hero-title {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(3rem, 8vw, 7rem);
+            font-weight: 800;
+            line-height: 0.95;
+            letter-spacing: -0.03em;
+            margin-bottom: 32px;
+            color: var(--pure-black);
+        }
+
+        .hero-title span {
+            display: block;
+        }
+
+        .hero-title span:nth-child(2) {
+            color: var(--text-gray);
+        }
+
+        .hero-desc {
+            font-size: 1.1rem;
+            line-height: 1.7;
+            color: var(--dark-gray);
+            max-width: 480px;
+            margin-bottom: 40px;
+            font-weight: 300;
+        }
+
+        .hero-cta {
+            display: inline-flex;
+            align-items: center;
+            gap: 16px;
+            padding: 18px 40px;
+            background: var(--pure-black);
+            color: var(--pure-white);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            border: none;
+            cursor: none;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.4s ease;
+        }
+
+        .hero-cta::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.6s ease;
+        }
+
+        .hero-cta:hover::before {
+            left: 100%;
+        }
+
+        .hero-cta:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+        }
+
+        .hero-visual {
+            position: relative;
+            height: 600px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .shape-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        .geo-shape {
+            position: absolute;
+            transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .geo-shape-1 {
+            width: 300px;
+            height: 400px;
+            background: linear-gradient(135deg, var(--light-gray), var(--mid-gray));
+            clip-path: polygon(0 0, 100% 15%, 85% 100%, 15% 85%);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2;
+        }
+
+        .geo-shape-2 {
+            width: 200px;
+            height: 200px;
+            background: linear-gradient(45deg, var(--mid-gray), var(--text-gray));
+            clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+            top: 20%;
+            right: 10%;
+            z-index: 3;
+            animation: floatShape 6s ease-in-out infinite;
+        }
+
+        .geo-shape-3 {
+            width: 150px;
+            height: 250px;
+            background: linear-gradient(180deg, var(--text-gray), var(--dark-gray));
+            clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+            bottom: 10%;
+            left: 5%;
+            z-index: 1;
+            animation: floatShape 8s ease-in-out infinite reverse;
+        }
+
+        .geo-shape-4 {
+            width: 80px;
+            height: 80px;
+            background: var(--pure-black);
+            clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+            top: 15%;
+            left: 20%;
+            z-index: 4;
+            animation: rotateShape 10s linear infinite;
+        }
+
+        @keyframes floatShape {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(5deg); }
+        }
+
+        @keyframes rotateShape {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .hero-image-placeholder {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 280px;
+            height: 380px;
+            background: var(--light-gray);
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .hero-image-placeholder img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: filter 0.4s ease;
+        }
+
+        .hero-image-placeholder:hover img {
+            filter: contrast(1.1);
+        }
+
+        .liquid-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, 
+                rgba(192,192,192,0.15) 0%, 
+                rgba(128,128,128,0.1) 50%, 
+                rgba(192,192,192,0.15) 100%);
+            background-size: 400% 400%;
+            animation: liquidFlow 8s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        @keyframes liquidFlow {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        /* COLLECTION SECTION */
+        .collection {
+            background: var(--pure-black);
+            color: var(--pure-white);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .collection::before {
+            content: '';
+            position: absolute;
+            top: -100px;
+            right: -100px;
+            width: 400px;
+            height: 400px;
+            background: var(--charcoal);
+            clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+            opacity: 0.5;
+        }
+
+        .collection-content {
+            max-width: 1400px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        .section-header {
+            margin-bottom: 80px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+        }
+
+        .section-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--text-gray);
+            margin-bottom: 16px;
+        }
+
+        .section-title {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(2.5rem, 5vw, 4rem);
+            font-weight: 700;
+            line-height: 1.1;
+            letter-spacing: -0.02em;
+        }
+
+        .view-all {
+            color: var(--text-gray);
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: color 0.3s ease;
+        }
+
+        .view-all:hover {
+            color: var(--pure-white);
+        }
+
+        .products-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 30px;
+            align-items: stretch;
+        }
+
+        .product-card {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            background: var(--charcoal);
+            overflow: hidden;
+            cursor: none;
+            transition: transform 0.4s ease;
+        }
+
+        .product-card:hover {
+            transform: translateY(-8px);
+        }
+
+        .product-image {
+            width: 100%;
+            aspect-ratio: 3/4;
+            background: var(--dark-gray);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .product-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: all 0.5s ease;
+        }
+
+        .product-card:hover .product-image img {
+            transform: scale(1.05);
+        }
+
+        .product-tag {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            padding: 6px 14px;
+            background: var(--pure-white);
+            color: var(--pure-black);
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            z-index: 2;
+        }
+
+        .product-info {
+            padding: 24px;
+        }
+
+        .product-name {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            letter-spacing: -0.01em;
+            color: var(--pure-white);
+        }
+
+        .product-price {
+            font-size: 1rem;
+            color: var(--text-gray);
+            font-weight: 300;
+        }
+
+        .product-cta {
+            position: absolute;
+            bottom: 24px;
+            right: 24px;
+            width: 48px;
+            height: 48px;
+            background: var(--pure-white);
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: none;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+        }
+
+        .product-card:hover .product-cta {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .product-cta svg {
+            width: 20px;
+            height: 20px;
+            stroke: var(--pure-black);
+        }
+
+        /* ABOUT SECTION */
+        .about {
+            background: var(--pure-white);
+            position: relative;
+        }
+
+        .about-content {
+            max-width: 1400px;
+            width: 100%;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 80px;
+            align-items: center;
+        }
+
+        .about-visual {
+            position: relative;
+            height: 600px;
+        }
+
+        .about-shape-1 {
+            position: absolute;
+            width: 350px;
+            height: 450px;
+            background: linear-gradient(135deg, var(--light-gray), var(--mid-gray));
+            clip-path: polygon(0% 15%, 15% 0%, 85% 0%, 100% 15%, 100% 85%, 85% 100%, 15% 100%, 0% 85%);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .about-shape-2 {
+            position: absolute;
+            width: 120px;
+            height: 120px;
+            border: 2px solid var(--mid-gray);
+            border-radius: 50%;
+            top: 10%;
+            right: 10%;
+            animation: pulse 4s ease-in-out infinite;
+        }
+
+        .about-shape-3 {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            background: var(--pure-black);
+            clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+            bottom: 15%;
+            left: 5%;
+            animation: floatShape 7s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.3; }
+            50% { transform: scale(1.2); opacity: 0.6; }
+        }
+
+        .about-image {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 300px;
+            height: 400px;
+            overflow: hidden;
+        }
+
+        .about-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .about-text {
+            padding-right: 48px;
+        }
+
+        .about-text p {
+            font-size: 1.1rem;
+            line-height: 1.8;
+            color: var(--dark-gray);
+            margin-bottom: 24px;
+            font-weight: 300;
+        }
+
+        .about-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            margin-top: 48px;
+            padding-top: 48px;
+            border-top: 1px solid var(--light-gray);
+        }
+
+        .stat-number {
+            font-family: 'Syne', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--pure-black);
+            margin-bottom: 8px;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: var(--text-gray);
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        /* LOOKBOOK SECTION */
+        .lookbook {
+            background: var(--off-white);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .lookbook::after {
+            content: '';
+            position: absolute;
+            bottom: -150px;
+            left: -150px;
+            width: 500px;
+            height: 500px;
+            background: var(--light-gray);
+            clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+            opacity: 0.5;
+        }
+
+        .lookbook-content {
+            max-width: 1400px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        .lookbook-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            gap: 20px;
+            margin-top: 60px;
+            align-items: stretch;
+        }
+
+        .lookbook-item {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 3/4;
+            background: var(--light-gray);
+            overflow: hidden;
+            cursor: none;
+        }
+
+        .lookbook-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: all 0.5s ease;
+        }
+
+        .lookbook-item:hover img {
+            transform: scale(1.05);
+        }
+
+        .lookbook-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            padding: 30px;
+            background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .lookbook-item:hover .lookbook-overlay {
+            opacity: 1;
+        }
+
+        .lookbook-overlay h4 {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: var(--pure-white);
+        }
+
+        .lookbook-overlay p {
+            font-size: 0.8rem;
+            color: var(--mid-gray);
+        }
+
+        /* CUSTOMIZE SECTION */
+        .customize {
+            background: var(--pure-black);
+            color: var(--pure-white);
+            position: relative;
+        }
+
+        .customize-content {
+            max-width: 1400px;
+            width: 100%;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 80px;
+            align-items: center;
+        }
+
+        .customize-text {
+            padding-left: 48px;
+        }
+
+        .customize-text .section-title {
+            color: var(--pure-white);
+        }
+
+        .customize-features {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            margin-top: 40px;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 20px;
+            padding: 24px;
+            background: var(--charcoal);
+            border-left: 3px solid var(--pure-white);
+            transition: all 0.3s ease;
+        }
+
+        .feature-item:hover {
+            background: var(--dark-gray);
+            transform: translateX(8px);
+        }
+
+        .feature-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--pure-white);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .feature-icon svg {
+            width: 24px;
+            height: 24px;
+            stroke: var(--pure-black);
+        }
+
+        .feature-text h4 {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: var(--pure-white);
+        }
+
+        .feature-text p {
+            font-size: 0.9rem;
+            color: var(--text-gray);
+            line-height: 1.5;
+        }
+
+        .customize-visual {
+            position: relative;
+            height: 600px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .customize-shape {
+            width: 400px;
+            height: 500px;
+            background: linear-gradient(135deg, var(--charcoal), var(--dark-gray));
+            clip-path: polygon(20% 0%, 80% 0%, 100% 20%, 100% 80%, 80% 100%, 20% 100%, 0% 80%, 0% 20%);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .customize-shape img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .customize-shape::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, 
+                rgba(192,192,192,0.2) 0%, 
+                transparent 50%, 
+                rgba(128,128,128,0.2) 100%);
+            animation: liquidFlow 6s ease-in-out infinite;
+        }
+
+        /* CONTACT/FOOTER SECTION */
+        .contact {
+            background: var(--pure-white);
+            min-height: auto;
+            padding: 120px 48px 60px;
+            border-top: 1px solid var(--light-gray);
+        }
+
+        .contact-content {
+            max-width: 1400px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        .contact-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 60px;
+            margin-bottom: 80px;
+        }
+
+        .contact-brand h3 {
+            font-family: 'Syne', sans-serif;
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 20px;
+            letter-spacing: -0.02em;
+            color: var(--pure-black);
+        }
+
+        .contact-brand p {
+            font-size: 0.95rem;
+            color: var(--dark-gray);
+            line-height: 1.7;
+            max-width: 300px;
+        }
+
+        .contact-col h4 {
+            font-family: 'Syne', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            margin-bottom: 24px;
+            color: var(--text-gray);
+        }
+
+        .contact-col ul {
+            list-style: none;
+        }
+
+        .contact-col ul li {
+            margin-bottom: 12px;
+        }
+
+        .contact-col ul li a {
+            color: var(--dark-gray);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.3s ease;
+        }
+
+        .contact-col ul li a:hover {
+            color: var(--pure-black);
+        }
+
+        .newsletter {
+            margin-top: 24px;
+        }
+
+        .newsletter-input {
+            display: flex;
+            gap: 0;
+        }
+
+        .newsletter-input input {
+            flex: 1;
+            padding: 14px 20px;
+            background: var(--off-white);
+            border: 1px solid var(--mid-gray);
+            color: var(--pure-black);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+
+        .newsletter-input input:focus {
+            border-color: var(--pure-black);
+        }
+
+        .newsletter-input input::placeholder {
+            color: var(--text-gray);
+        }
+
+        .newsletter-input button {
+            padding: 14px 24px;
+            background: var(--pure-black);
+            color: var(--pure-white);
+            border: none;
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 600;
+            font-size: 0.85rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            cursor: none;
+            transition: all 0.3s ease;
+        }
+
+        .newsletter-input button:hover {
+            background: var(--dark-gray);
+        }
+
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 40px;
+            border-top: 1px solid var(--light-gray);
+        }
+
+        .footer-bottom p {
+            font-size: 0.8rem;
+            color: var(--text-gray);
+        }
+
+        .social-links {
+            display: flex;
+            gap: 20px;
+        }
+
+        .social-links a {
+            width: 40px;
+            height: 40px;
+            border: 1px solid var(--mid-gray);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--dark-gray);
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+
+        .social-links a:hover {
+            background: var(--pure-black);
+            color: var(--pure-white);
+            border-color: var(--pure-black);
+        }
+
+        /* SCROLL ANIMATIONS */
+        .reveal {
+            opacity: 0;
+            transform: translateY(40px);
+            transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .reveal.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* LIQUID METAL EFFECT */
+        .liquid-metal {
+            position: relative;
+        }
+
+        .liquid-metal::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, 
+                var(--liquid-1), var(--liquid-2), var(--liquid-3), var(--liquid-4),
+                var(--liquid-1), var(--liquid-2), var(--liquid-3), var(--liquid-4));
+            background-size: 400% 400%;
+            z-index: -1;
+            animation: liquidGradient 8s ease infinite;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .liquid-metal:hover::before {
+            opacity: 1;
+        }
+
+        @keyframes liquidGradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* RESPONSIVE */
+        @media (max-width: 1024px) {
+            .hero-content,
+            .about-content,
+            .customize-content {
+                grid-template-columns: 1fr;
+                gap: 60px;
+            }
+
+            .contact-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .hero-text,
+            .about-text,
+            .customize-text {
+                padding: 0;
+            }
+
+            .hero-visual,
+            .about-visual,
+            .customize-visual {
+                height: 400px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .nav {
+                padding: 20px 24px;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .section {
+                padding: 100px 24px 60px;
+            }
+
+            .products-grid {
+                grid-template-columns: repeat(2, 1fr);
+                grid-template-rows: repeat(2, auto);
+            }
+
+            .lookbook-grid {
+                grid-template-columns: repeat(2, 1fr);
+                grid-template-rows: repeat(4, 1fr);
+            }
+
+            .contact-grid {
+                grid-template-columns: 1fr;
+                gap: 40px;
+            }
+
+            .about-stats {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+
+            .cursor, .cursor-dot {
+                display: none;
+            }
+
+            body {
+                cursor: auto;
+            }
+        }
+
+        /* Mobile Menu */
+        .mobile-menu-btn {
+            display: none;
+            flex-direction: column;
+            gap: 6px;
+            background: none;
+            border: none;
+            cursor: none;
+            padding: 8px;
+        }
+
+        .mobile-menu-btn span {
+            width: 24px;
+            height: 2px;
+            background: var(--pure-black);
+            transition: all 0.3s ease;
+        }
+
+        @media (max-width: 768px) {
+            .mobile-menu-btn {
+                display: flex;
+            }
+        }
+    </style>
+<base target="_blank">
+</head>
+<body>
+    <!-- Custom Cursor -->
+    <div class="cursor"></div>
+    <div class="cursor-dot"></div>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <a href="#" class="nav-logo">METALFLUX</a>
+        <ul class="nav-links">
+            <li><a href="#collection">Collection</a></li>
+            <li><a href="#about">About</a></li>
+            <li><a href="#lookbook">Lookbook</a></li>
+            <li><a href="#customize">Customize</a></li>
+            <li><a href="#contact">Contact</a></li>
+        </ul>
+        <a href="#" class="nav-cart">
+            Cart
+            <span class="cart-count">3</span>
+        </a>
+        <button class="mobile-menu-btn" aria-label="Menu">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
+    </nav>
+
+    <!-- HERO SECTION -->
+    <section class="hero section" id="hero">
+        <div class="hero-content">
+            <div class="hero-text">
+                <div class="hero-label">New Collection 2026</div>
+                <h1 class="hero-title">
+                    <span>WEAR</span>
+                    <span>YOUR</span>
+                    <span>METAL</span>
+                </h1>
+                <p class="hero-desc">
+                    Custom print t-shirts crafted for the bold. Unconventional shapes, liquid metal aesthetics, and dopamine-inducing designs that redefine streetwear.
+                </p>
+                <a href="#collection" class="hero-cta liquid-metal">
+                    Explore Collection
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+            <div class="hero-visual">
+                <div class="shape-container">
+                    <div class="geo-shape geo-shape-1"></div>
+                    <div class="geo-shape geo-shape-2"></div>
+                    <div class="geo-shape geo-shape-3"></div>
+                    <div class="geo-shape geo-shape-4"></div>
+                    <div class="hero-image-placeholder">
+                        <img src="https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=600&h=800&fit=crop" alt="MetalFlux T-Shirt">
+                        <div class="liquid-overlay"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- COLLECTION SECTION -->
+    <section class="collection section" id="collection">
+        <div class="collection-content">
+            <div class="section-header reveal">
+                <div>
+                    <div class="section-label">Latest Drops</div>
+                    <h2 class="section-title">The Collection</h2>
+                </div>
+                <a href="#" class="view-all">
+                    View All
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+            <div class="products-grid">
+                <div class="product-card reveal">
+                    <div class="product-image">
+                        <img src="https://images.unsplash.com/photo-1503341504253-dff4815485f1?w=600&h=800&fit=crop" alt="Liquid Chrome Tee">
+                        <span class="product-tag">New</span>
+                    </div>
+                    <div class="product-info">
+                        <h3 class="product-name">Liquid Chrome</h3>
+                        <p class="product-price">$89.00</p>
+                    </div>
+                    <button class="product-cta" aria-label="Add to cart">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+                            <path d="M12 5v14M5 12h14"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="product-card reveal">
+                    <div class="product-image">
+                        <img src="https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=600&h=800&fit=crop" alt="Mercury Flow Tee">
+                        <span class="product-tag">Best Seller</span>
+                    </div>
+                    <div class="product-info">
+                        <h3 class="product-name">Mercury Flow</h3>
+                        <p class="product-price">$95.00</p>
+                    </div>
+                    <button class="product-cta" aria-label="Add to cart">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+                            <path d="M12 5v14M5 12h14"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="product-card reveal">
+                    <div class="product-image">
+                        <img src="https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=600&h=800&fit=crop" alt="Platinum Void Tee">
+                    </div>
+                    <div class="product-info">
+                        <h3 class="product-name">Platinum Void</h3>
+                        <p class="product-price">$79.00</p>
+                    </div>
+                    <button class="product-cta" aria-label="Add to cart">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+                            <path d="M12 5v14M5 12h14"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="product-card reveal">
+                    <div class="product-image">
+                        <img src="https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=600&h=800&fit=crop" alt="Molten Silver Tee">
+                        <span class="product-tag">Limited</span>
+                    </div>
+                    <div class="product-info">
+                        <h3 class="product-name">Molten Silver</h3>
+                        <p class="product-price">$99.00</p>
+                    </div>
+                    <button class="product-cta" aria-label="Add to cart">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+                            <path d="M12 5v14M5 12h14"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ABOUT SECTION -->
+    <section class="about section" id="about">
+        <div class="about-content">
+            <div class="about-visual reveal">
+                <div class="about-shape-1"></div>
+                <div class="about-shape-2"></div>
+                <div class="about-shape-3"></div>
+                <div class="about-image">
+                    <img src="https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=600&h=800&fit=crop" alt="About MetalFlux">
+                </div>
+            </div>
+            <div class="about-text reveal">
+                <div class="section-label">Our Story</div>
+                <h2 class="section-title">Forged in<br>Creativity</h2>
+                <p>
+                    MetalFlux was born from a desire to break free from conventional fashion. We believe clothing should be an extension of your boldest self — a canvas for expression that transcends the ordinary.
+                </p>
+                <p>
+                    Every piece in our collection is designed with unconventional geometries and liquid metal aesthetics. Our custom print technology allows us to create textures and patterns that shift and shimmer like molten silver, giving each garment a unique, living quality.
+                </p>
+                <p>
+                    We don't follow trends. We forge them. Each design is a statement, each shape a rebellion against the mundane.
+                </p>
+                <div class="about-stats">
+                    <div>
+                        <div class="stat-number">50K+</div>
+                        <div class="stat-label">Happy Customers</div>
+                    </div>
+                    <div>
+                        <div class="stat-number">200+</div>
+                        <div class="stat-label">Unique Designs</div>
+                    </div>
+                    <div>
+                        <div class="stat-number">15</div>
+                        <div class="stat-label">Countries</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- LOOKBOOK SECTION -->
+    <section class="lookbook section" id="lookbook">
+        <div class="lookbook-content">
+            <div class="section-header reveal">
+                <div>
+                    <div class="section-label">Visual Stories</div>
+                    <h2 class="section-title">Lookbook</h2>
+                </div>
+                <a href="#" class="view-all">
+                    View All
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+            <div class="lookbook-grid">
+                <div class="lookbook-item reveal">
+                    <img src="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&h=800&fit=crop" alt="Look 1">
+                    <div class="lookbook-overlay">
+                        <h4>Urban Chrome</h4>
+                        <p>Spring / Summer 2026</p>
+                    </div>
+                </div>
+                <div class="lookbook-item reveal">
+                    <img src="https://images.unsplash.com/photo-1509631179647-0177331693ae?w=600&h=800&fit=crop" alt="Look 2">
+                    <div class="lookbook-overlay">
+                        <h4>Midnight Alloy</h4>
+                        <p>Spring / Summer 2026</p>
+                    </div>
+                </div>
+                <div class="lookbook-item reveal">
+                    <img src="https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=600&h=800&fit=crop" alt="Look 3">
+                    <div class="lookbook-overlay">
+                        <h4>Silver Surge</h4>
+                        <p>Spring / Summer 2026</p>
+                    </div>
+                </div>
+                <div class="lookbook-item reveal">
+                    <img src="https://images.unsplash.com/photo-1483985988355-763728e1935b?w=600&h=800&fit=crop" alt="Look 4">
+                    <div class="lookbook-overlay">
+                        <h4>Titanium Dream</h4>
+                        <p>Spring / Summer 2026</p>
+                    </div>
+                </div>
+                <div class="lookbook-item reveal">
+                    <img src="https://images.unsplash.com/photo-1469334031218-e42a4846a759?w=600&h=800&fit=crop" alt="Look 5">
+                    <div class="lookbook-overlay">
+                        <h4>Chrome Horizon</h4>
+                        <p>Spring / Summer 2026</p>
+                    </div>
+                </div>
+                <div class="lookbook-item reveal">
+                    <img src="https://images.unsplash.com/photo-1539109136881-3be0616acf4b?w=600&h=800&fit=crop" alt="Look 6">
+                    <div class="lookbook-overlay">
+                        <h4>Steel Mirage</h4>
+                        <p>Spring / Summer 2026</p>
+                    </div>
+                </div>
+                <div class="lookbook-item reveal">
+                    <img src="https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=600&h=800&fit=crop" alt="Look 7">
+                    <div class="lookbook-overlay">
+                        <h4>Alloy Pulse</h4>
+                        <p>Spring / Summer 2026</p>
+                    </div>
+                </div>
+                <div class="lookbook-item reveal">
+                    <img src="https://images.unsplash.com/photo-1529139574469-a303027c1d8b?w=600&h=800&fit=crop" alt="Look 8">
+                    <div class="lookbook-overlay">
+                        <h4>Nickel Glow</h4>
+                        <p>Spring / Summer 2026</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CUSTOMIZE SECTION -->
+    <section class="customize section" id="customize">
+        <div class="customize-content">
+            <div class="customize-text reveal">
+                <div class="section-label">Make It Yours</div>
+                <h2 class="section-title">Custom<br>Prints</h2>
+                <p style="font-size: 1.1rem; line-height: 1.7; color: var(--text-gray); margin-bottom: 24px; font-weight: 300;">
+                    Turn your vision into wearable art. Our advanced printing technology brings your designs to life with liquid metal precision and unmatched durability.
+                </p>
+                <div class="customize-features">
+                    <div class="feature-item">
+                        <div class="feature-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+                                <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+                                <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+                                <path d="M2 2l7.586 7.586"/>
+                                <circle cx="11" cy="11" r="2"/>
+                            </svg>
+                        </div>
+                        <div class="feature-text">
+                            <h4>Upload Your Design</h4>
+                            <p>Drag and drop your artwork. We support all major formats with instant preview.</p>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+                                <circle cx="12" cy="12" r="3"/>
+                                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+                            </svg>
+                        </div>
+                        <div class="feature-text">
+                            <h4>Precision Printing</h4>
+                            <p>Industry-leading DTG printing with liquid metal finish. Every detail captured perfectly.</p>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
+                                <rect x="1" y="3" width="15" height="13"/>
+                                <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
+                                <circle cx="5.5" cy="18.5" r="2.5"/>
+                                <circle cx="18.5" cy="18.5" r="2.5"/>
+                            </svg>
+                        </div>
+                        <div class="feature-text">
+                            <h4>Fast Delivery</h4>
+                            <p>Shipped within 48 hours. Track your order in real-time from print to doorstep.</p>
+                        </div>
+                    </div>
+                </div>
+                <a href="#" class="hero-cta liquid-metal" style="margin-top: 40px;">
+                    Start Designing
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+            <div class="customize-visual reveal">
+                <div class="customize-shape">
+                    <img src="https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=600&h=800&fit=crop" alt="Custom Print">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CONTACT / FOOTER -->
+    <section class="contact" id="contact">
+        <div class="contact-content">
+            <div class="contact-grid">
+                <div class="contact-brand">
+                    <h3>METALFLUX</h3>
+                    <p>Custom print t-shirts for the bold. Unconventional shapes, liquid metal aesthetics, and dopamine-inducing designs.</p>
+                    <div class="newsletter">
+                        <h4 style="font-family: 'Syne', sans-serif; font-size: 0.9rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 16px; color: var(--text-gray);">Newsletter</h4>
+                        <div class="newsletter-input">
+                            <input type="email" placeholder="Enter your email">
+                            <button>Join</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="contact-col">
+                    <h4>Shop</h4>
+                    <ul>
+                        <li><a href="#">New Arrivals</a></li>
+                        <li><a href="#">Best Sellers</a></li>
+                        <li><a href="#">Custom Prints</a></li>
+                        <li><a href="#">Limited Edition</a></li>
+                        <li><a href="#">Sale</a></li>
+                    </ul>
+                </div>
+                <div class="contact-col">
+                    <h4>Company</h4>
+                    <ul>
+                        <li><a href="#">About Us</a></li>
+                        <li><a href="#">Careers</a></li>
+                        <li><a href="#">Press</a></li>
+                        <li><a href="#">Sustainability</a></li>
+                        <li><a href="#">Affiliates</a></li>
+                    </ul>
+                </div>
+                <div class="contact-col">
+                    <h4>Support</h4>
+                    <ul>
+                        <li><a href="#">FAQ</a></li>
+                        <li><a href="#">Shipping</a></li>
+                        <li><a href="#">Returns</a></li>
+                        <li><a href="#">Size Guide</a></li>
+                        <li><a href="#">Contact</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>© 2026 MetalFlux. All rights reserved.</p>
+                <div class="social-links">
+                    <a href="#" aria-label="Instagram">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+                            <path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z"/>
+                            <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
+                        </svg>
+                    </a>
+                    <a href="#" aria-label="Twitter">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 3a10.9 10.9 0 01-3.14 1.53 4.48 4.48 0 00-7.86 3v1A10.66 10.66 0 013 4s-4 9 5 13a11.64 11.64 0 01-7 2c9 5 20 0 20-11.5a4.5 4.5 0 00-.08-.83A7.72 7.72 0 0023 3z"/>
+                        </svg>
+                    </a>
+                    <a href="#" aria-label="TikTok">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 12a4 4 0 104 4V4a5 5 0 005 5"/>
+                        </svg>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        // Custom Cursor — circle scales on hover over interactive elements
+        const cursor = document.querySelector('.cursor');
+        const cursorDot = document.querySelector('.cursor-dot');
+        const interactiveSelector = 'a, button, input, textarea, select, label, .product-card, .lookbook-item, .hero-cta, .view-all, .nav-logo, .nav-cart, [role="button"]';
+        const prefersFinePointer = window.matchMedia('(pointer: fine)').matches;
+
+        if (prefersFinePointer && cursor && cursorDot) {
+            let mouseX = 0, mouseY = 0;
+            let cursorX = 0, cursorY = 0;
+            let hoverDepth = 0;
+
+            const setHover = (active) => {
+                hoverDepth += active ? 1 : -1;
+                if (hoverDepth < 0) hoverDepth = 0;
+                const isHover = hoverDepth > 0;
+                cursor.classList.toggle('hover', isHover);
+                cursorDot.classList.toggle('hover', isHover);
+            };
+
+            document.addEventListener('mousemove', (e) => {
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+                cursor.classList.add('visible');
+                cursorDot.classList.add('visible');
+                cursorDot.style.left = mouseX + 'px';
+                cursorDot.style.top = mouseY + 'px';
+            });
+
+            document.addEventListener('mouseleave', () => {
+                cursor.classList.remove('visible');
+                cursorDot.classList.remove('visible');
+            });
+
+            document.querySelectorAll(interactiveSelector).forEach((el) => {
+                el.addEventListener('mouseenter', () => setHover(true));
+                el.addEventListener('mouseleave', () => setHover(false));
+            });
+
+            function animateCursor() {
+                cursorX += (mouseX - cursorX) * 0.15;
+                cursorY += (mouseY - cursorY) * 0.15;
+                cursor.style.left = cursorX + 'px';
+                cursor.style.top = cursorY + 'px';
+                requestAnimationFrame(animateCursor);
+            }
+            animateCursor();
+        }
+
+        // Scroll Reveal Animation
+        const revealElements = document.querySelectorAll('.reveal');
+
+        const revealObserver = new IntersectionObserver((entries) => {
+            entries.forEach((entry, index) => {
+                if (entry.isIntersecting) {
+                    setTimeout(() => {
+                        entry.target.classList.add('active');
+                    }, index * 100);
+                }
+            });
+        }, {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        });
+
+        revealElements.forEach(el => revealObserver.observe(el));
+
+        // Parallax Effect for Geometric Shapes
+        document.addEventListener('mousemove', (e) => {
+            const shapes = document.querySelectorAll('.geo-shape, .about-shape-1, .about-shape-2, .about-shape-3');
+            const x = (window.innerWidth - e.pageX * 2) / 100;
+            const y = (window.innerHeight - e.pageY * 2) / 100;
+
+            shapes.forEach((shape, index) => {
+                const speed = (index + 1) * 0.5;
+                shape.style.transform = `translate(${x * speed}px, ${y * speed}px)`;
+            });
+        });
+
+        // Smooth scroll for navigation links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // Cart functionality
+        let cartCount = 3;
+        const cartCountEl = document.querySelector('.cart-count');
+
+        document.querySelectorAll('.product-cta').forEach(btn => {
+            btn.addEventListener('click', function() {
+                cartCount++;
+                cartCountEl.textContent = cartCount;
+                cartCountEl.style.transform = 'scale(1.4)';
+                setTimeout(() => {
+                    cartCountEl.style.transform = 'scale(1)';
+                }, 200);
+            });
+        });
+
+        // Newsletter form
+        document.querySelector('.newsletter-input button').addEventListener('click', function() {
+            const input = document.querySelector('.newsletter-input input');
+            if (input.value) {
+                this.textContent = 'Joined!';
+                this.style.background = '#4ade80';
+                input.value = '';
+                setTimeout(() => {
+                    this.textContent = 'Join';
+                    this.style.background = '';
+                }, 2000);
+            }
+        });
+
+        // Liquid Metal Canvas Background
+        const canvas = document.createElement('canvas');
+        canvas.className = 'liquid-canvas';
+        document.body.appendChild(canvas);
+        const ctx = canvas.getContext('2d');
+
+        let width, height;
+        let time = 0;
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+        resize();
+        window.addEventListener('resize', resize);
+
+        function drawLiquidMetal() {
+            ctx.clearRect(0, 0, width, height);
+
+            const gradient = ctx.createRadialGradient(
+                width * 0.5 + Math.sin(time * 0.5) * 100,
+                height * 0.5 + Math.cos(time * 0.3) * 100,
+                0,
+                width * 0.5,
+                height * 0.5,
+                width * 0.8
+            );
+
+            gradient.addColorStop(0, 'rgba(200, 200, 200, 0.06)');
+            gradient.addColorStop(0.5, 'rgba(150, 150, 150, 0.03)');
+            gradient.addColorStop(1, 'rgba(100, 100, 100, 0.01)');
+
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+
+            // Draw flowing lines
+            for (let i = 0; i < 5; i++) {
+                ctx.beginPath();
+                ctx.strokeStyle = `rgba(180, 180, 180, ${0.02 + i * 0.005})`;
+                ctx.lineWidth = 1;
+
+                for (let x = 0; x < width; x += 5) {
+                    const y = height * 0.3 + i * 80 + 
+                             Math.sin((x * 0.003) + time + i) * 50 +
+                             Math.sin((x * 0.007) + time * 0.5) * 30;
+                    if (x === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }
+
+            time += 0.01;
+            requestAnimationFrame(drawLiquidMetal);
+        }
+        drawLiquidMetal();
+
+        // Product card tilt effect
+        document.querySelectorAll('.product-card').forEach(card => {
+            card.addEventListener('mousemove', (e) => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const centerX = rect.width / 2;
+                const centerY = rect.height / 2;
+                const rotateX = (y - centerY) / 20;
+                const rotateY = (centerX - x) / 20;
+
+                card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-8px)`;
+            });
+
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = 'perspective(1000px) rotateX(0) rotateY(0) translateY(0)';
+            });
+        });
+    </script>
+</body>
+</html>
