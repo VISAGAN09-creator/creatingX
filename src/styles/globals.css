@@ -1,0 +1,170 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --pure-white: #ffffff;
+  --off-white: #fafafa;
+  --light-gray: #f0f0f0;
+  --mid-gray: #e0e0e0;
+  --text-gray: #888888;
+  --dark-gray: #333333;
+  --pure-black: #000000;
+  --near-black: #111111;
+  --charcoal: #1a1a1a;
+  --liquid-1: #e8e8e8;
+  --liquid-2: #c0c0c0;
+  --liquid-3: #a0a0a0;
+  --liquid-4: #707070;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 92px;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  overflow-x: hidden;
+  background: var(--pure-white);
+  color: var(--pure-black);
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+img {
+  display: block;
+}
+
+button,
+a,
+input {
+  font: inherit;
+}
+
+@media (pointer: fine) {
+  body,
+  a,
+  button,
+  input,
+  textarea,
+  select,
+  [role='button'],
+  [data-cursor='hover'] {
+    cursor: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+::selection {
+  background: var(--pure-black);
+  color: var(--pure-white);
+}
+
+.liquid-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.liquid-metal {
+  isolation: isolate;
+  position: relative;
+}
+
+.liquid-metal::before {
+  position: absolute;
+  inset: -2px;
+  z-index: -1;
+  background: linear-gradient(
+    45deg,
+    var(--liquid-1),
+    var(--liquid-2),
+    var(--liquid-3),
+    var(--liquid-4),
+    var(--liquid-1),
+    var(--liquid-2),
+    var(--liquid-3),
+    var(--liquid-4)
+  );
+  background-size: 400% 400%;
+  content: '';
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  animation: liquidGradient 8s ease infinite;
+}
+
+.liquid-metal:hover::before {
+  opacity: 1;
+}
+
+.metal-sheen {
+  position: relative;
+  overflow: hidden;
+}
+
+.metal-sheen::after {
+  position: absolute;
+  inset: 0;
+  left: -120%;
+  width: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  content: '';
+  transition: left 0.65s ease;
+}
+
+.metal-sheen:hover::after {
+  left: 120%;
+}
+
+.clip-hero-main {
+  clip-path: polygon(0 0, 100% 15%, 85% 100%, 15% 85%);
+}
+
+.clip-pentagon {
+  clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+}
+
+.clip-hex {
+  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+}
+
+.clip-star {
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+}
+
+.clip-octagon-soft {
+  clip-path: polygon(0% 15%, 15% 0%, 85% 0%, 100% 15%, 100% 85%, 85% 100%, 15% 100%, 0% 85%);
+}
+
+.clip-octagon {
+  clip-path: polygon(20% 0%, 80% 0%, 100% 20%, 100% 80%, 80% 100%, 20% 100%, 0% 80%, 0% 20%);
+}
+
+@keyframes liquidGradient {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
