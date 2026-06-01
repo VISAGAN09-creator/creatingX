@@ -2,10 +2,11 @@ import { PenTool, Settings, Truck } from 'lucide-react';
 import type { Feature, FooterColumn, LookbookItem, NavLink, Product } from '../types';
 
 export const navLinks: NavLink[] = [
-  { label: 'Collection', href: '#collection' },
-  { label: 'About', href: '#about' },
+  { label: 'Latest Drop', href: '#latest-drop' },
+  { label: 'Collections', href: '#collections' },
   { label: 'Lookbook', href: '#lookbook' },
   { label: 'Customize', href: '#customize' },
+  { label: 'About', href: '#about' },
   { label: 'Contact', href: '#contact' },
 ];
 
@@ -17,6 +18,10 @@ export const products: Product[] = [
     image: 'https://images.unsplash.com/photo-1503341504253-dff4815485f1?w=600&h=800&fit=crop',
     alt: 'Liquid Chrome Tee',
     tag: 'New',
+    theme: 'Streetwear',
+    collectionImage: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=900&h=1100&fit=crop',
+    isLatestDrop: true,
+    dropOrder: 1,
   },
   {
     id: 'mercury-flow',
@@ -25,6 +30,10 @@ export const products: Product[] = [
     image: 'https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=600&h=800&fit=crop',
     alt: 'Mercury Flow Tee',
     tag: 'Best Seller',
+    theme: 'Chrome Core',
+    collectionImage: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=900&h=1100&fit=crop',
+    isLatestDrop: true,
+    dropOrder: 2,
   },
   {
     id: 'platinum-void',
@@ -32,6 +41,8 @@ export const products: Product[] = [
     price: 79,
     image: 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=600&h=800&fit=crop',
     alt: 'Platinum Void Tee',
+    theme: 'Minimal',
+    collectionImage: 'https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=900&h=1100&fit=crop',
   },
   {
     id: 'molten-silver',
@@ -40,6 +51,10 @@ export const products: Product[] = [
     image: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=600&h=800&fit=crop',
     alt: 'Molten Silver Tee',
     tag: 'Limited',
+    theme: 'Streetwear',
+    collectionImage: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=900&h=1100&fit=crop',
+    isLatestDrop: true,
+    dropOrder: 3,
   },
 ];
 

@@ -17,9 +17,38 @@ function numericPrice(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function orderValue(value: unknown) {
+function optionalOrder(value: unknown) {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
-  return Number.MAX_SAFE_INTEGER;
+  if (typeof value !== 'string') return undefined;
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function booleanValue(value: unknown) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1;
+  if (typeof value !== 'string') return null;
+
+  const normalized = value.trim().toLowerCase();
+  if (['true', 'yes', '1', 'latest'].includes(normalized)) return true;
+  if (['false', 'no', '0'].includes(normalized)) return false;
+
+  return null;
+}
+
+function timestampValue(value: unknown) {
+  if (value instanceof Date) return value.getTime();
+  if (!value || typeof value !== 'object') return undefined;
+
+  const maybeTimestamp = value as { toMillis?: () => number; seconds?: number };
+  if (typeof maybeTimestamp.toMillis === 'function') {
+    const millis = maybeTimestamp.toMillis();
+    return Number.isFinite(millis) ? millis : undefined;
+  }
+
+  if (typeof maybeTimestamp.seconds === 'number') return maybeTimestamp.seconds * 1000;
+  return undefined;
 }
 
 function sortByOrder<T extends { order?: number; id: string }>(items: T[]) {
@@ -31,6 +60,9 @@ function sortByOrder<T extends { order?: number; id: string }>(items: T[]) {
 function toProduct(id: string, data: DocumentData): Product {
   const name = text(data.name) ?? text(data.title) ?? 'Product info unavailable';
   const image = text(data.image) ?? text(data.imageUrl) ?? text(data.imageAddress) ?? '';
+  const tag = text(data.tag);
+  const latestDrop =
+    booleanValue(data.isLatestDrop) ?? booleanValue(data.latestDrop) ?? booleanValue(data.latest);
 
   return {
     id,
@@ -38,8 +70,19 @@ function toProduct(id: string, data: DocumentData): Product {
     price: numericPrice(data.price),
     image,
     alt: text(data.alt) ?? text(data.imageAlt) ?? name,
-    tag: text(data.tag) ?? undefined,
-    order: orderValue(data.order),
+    tag: tag ?? undefined,
+    theme: text(data.theme) ?? text(data.collection) ?? text(data.category) ?? undefined,
+    collectionImage:
+      text(data.collectionImage) ??
+      text(data.collectionImageUrl) ??
+      text(data.themeImage) ??
+      text(data.themeImageUrl) ??
+      undefined,
+    isLatestDrop: latestDrop ?? (tag?.toLowerCase().includes('new') ? true : undefined),
+    order: optionalOrder(data.order),
+    dropOrder: optionalOrder(data.dropOrder) ?? optionalOrder(data.latestDropOrder),
+    collectionOrder: optionalOrder(data.collectionOrder) ?? optionalOrder(data.themeOrder),
+    createdAt: timestampValue(data.createdAt) ?? timestampValue(data.updatedAt),
   };
 }
 
@@ -53,7 +96,7 @@ function toLookbookItem(id: string, data: DocumentData): LookbookItem {
     season: text(data.season) ?? text(data.subtitle) ?? 'Lookbook details unavailable',
     image,
     alt: text(data.alt) ?? text(data.imageAlt) ?? title,
-    order: orderValue(data.order),
+    order: optionalOrder(data.order),
   };
 }
 

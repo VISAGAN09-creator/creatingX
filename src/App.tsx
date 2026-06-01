@@ -1,16 +1,18 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { About } from './components/About';
 import { CartDrawer } from './components/CartDrawer';
-import { Collection } from './components/Collection';
+import { Collections } from './components/Collection';
 import { CustomCursor } from './components/CustomCursor';
 import { Customize } from './components/Customize';
 import { Footer } from './components/Footer';
 import { Hero } from './components/Hero';
+import { LatestDrop } from './components/LatestDrop';
 import { LiquidCanvas } from './components/LiquidCanvas';
 import { Lookbook } from './components/Lookbook';
 import { Navbar } from './components/Navbar';
+import { getProducts } from './data/firestoreContent';
 import { products, seedCartProductIds } from './data/siteData';
-import type { CartLine, Product } from './types';
+import type { CartLine, DataStatus, Product } from './types';
 
 function createSeedCart(): CartLine[] {
   return seedCartProductIds
@@ -22,6 +24,29 @@ function createSeedCart(): CartLine[] {
 export default function App() {
   const [cartOpen, setCartOpen] = useState(false);
   const [cartLines, setCartLines] = useState<CartLine[]>(createSeedCart);
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
+  const [catalogStatus, setCatalogStatus] = useState<DataStatus>('loading');
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getProducts()
+      .then((items) => {
+        if (!isMounted) return;
+        setCatalogProducts(items);
+        setCatalogStatus('ready');
+      })
+      .catch((error) => {
+        console.error('Unable to load products from Firestore', error);
+        if (!isMounted) return;
+        setCatalogProducts([]);
+        setCatalogStatus('error');
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const cartCount = useMemo(
     () => cartLines.reduce((total, line) => total + line.quantity, 0),
@@ -74,10 +99,11 @@ export default function App() {
       <Navbar cartCount={cartCount} onCartOpen={() => setCartOpen(true)} />
       <main className="relative z-[1] overflow-x-hidden">
         <Hero />
-        <Collection onAddToCart={addToCart} />
-        <About />
-        <Lookbook />
+        <LatestDrop products={catalogProducts} status={catalogStatus} onAddToCart={addToCart} />
+        <Collections products={catalogProducts} status={catalogStatus} onAddToCart={addToCart} />
+        <Lookbook products={catalogProducts} status={catalogStatus} onAddToCart={addToCart} />
         <Customize />
+        <About />
       </main>
       <Footer />
       <CartDrawer

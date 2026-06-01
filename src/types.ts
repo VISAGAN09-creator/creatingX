@@ -12,11 +12,28 @@ export type Product = {
   image: string;
   alt: string;
   tag?: string;
+  theme?: string;
+  collectionImage?: string;
+  isLatestDrop?: boolean;
   order?: number;
+  dropOrder?: number;
+  collectionOrder?: number;
+  createdAt?: number;
 };
 
 export type CartLine = Product & {
   quantity: number;
+};
+
+export type DataStatus = 'loading' | 'ready' | 'error';
+
+export type ProductCollection = {
+  id: string;
+  name: string;
+  image: string;
+  alt: string;
+  productCount: number;
+  order?: number;
 };
 
 export type LookbookItem = {
