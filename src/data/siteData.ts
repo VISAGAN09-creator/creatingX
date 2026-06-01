@@ -45,48 +45,56 @@ export const products: Product[] = [
 
 export const lookbookItems: LookbookItem[] = [
   {
+    id: 'urban-chrome',
     title: 'Urban Chrome',
     season: 'Spring / Summer 2026',
     image: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&h=800&fit=crop',
     alt: 'Look 1',
   },
   {
+    id: 'midnight-alloy',
     title: 'Midnight Alloy',
     season: 'Spring / Summer 2026',
     image: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=600&h=800&fit=crop',
     alt: 'Look 2',
   },
   {
+    id: 'silver-surge',
     title: 'Silver Surge',
     season: 'Spring / Summer 2026',
     image: 'https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=600&h=800&fit=crop',
     alt: 'Look 3',
   },
   {
+    id: 'titanium-dream',
     title: 'Titanium Dream',
     season: 'Spring / Summer 2026',
     image: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?w=600&h=800&fit=crop',
     alt: 'Look 4',
   },
   {
+    id: 'chrome-horizon',
     title: 'Chrome Horizon',
     season: 'Spring / Summer 2026',
     image: 'https://images.unsplash.com/photo-1469334031218-e42a4846a759?w=600&h=800&fit=crop',
     alt: 'Look 5',
   },
   {
+    id: 'steel-mirage',
     title: 'Steel Mirage',
     season: 'Spring / Summer 2026',
     image: 'https://images.unsplash.com/photo-1539109136881-3be0616acf4b?w=600&h=800&fit=crop',
     alt: 'Look 6',
   },
   {
+    id: 'alloy-pulse',
     title: 'Alloy Pulse',
     season: 'Spring / Summer 2026',
     image: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=600&h=800&fit=crop',
     alt: 'Look 7',
   },
   {
+    id: 'nickel-glow',
     title: 'Nickel Glow',
     season: 'Spring / Summer 2026',
     image: 'https://images.unsplash.com/photo-1529139574469-a303027c1d8b?w=600&h=800&fit=crop',

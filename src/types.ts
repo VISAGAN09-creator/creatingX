@@ -8,10 +8,11 @@ export type NavLink = {
 export type Product = {
   id: string;
   name: string;
-  price: number;
+  price: number | null;
   image: string;
   alt: string;
   tag?: string;
+  order?: number;
 };
 
 export type CartLine = Product & {
@@ -19,10 +20,12 @@ export type CartLine = Product & {
 };
 
 export type LookbookItem = {
+  id: string;
   title: string;
   season: string;
   image: string;
   alt: string;
+  order?: number;
 };
 
 export type Feature = {

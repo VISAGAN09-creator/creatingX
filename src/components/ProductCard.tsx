@@ -16,6 +16,7 @@ export function ProductCard({ product, index, onAdd }: ProductCardProps) {
   const shouldReduceMotion = useReducedMotion();
   const rotateX = useMotionValue(0);
   const rotateY = useMotionValue(0);
+  const isPurchasable = typeof product.price === 'number';
 
   const handleMouseMove = (event: React.MouseEvent<HTMLElement>) => {
     if (shouldReduceMotion || !window.matchMedia('(pointer: fine)').matches) return;
@@ -46,6 +47,7 @@ export function ProductCard({ product, index, onAdd }: ProductCardProps) {
           <SmartImage
             src={product.image}
             alt={product.alt}
+            fallbackLabel="Product image unavailable"
             className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
           />
           {product.tag && (
@@ -60,9 +62,12 @@ export function ProductCard({ product, index, onAdd }: ProductCardProps) {
         </div>
         <MagneticButton
           type="button"
-          aria-label={`Add ${product.name} to cart`}
-          onClick={() => onAdd(product)}
-          className="absolute bottom-5 right-5 flex h-12 w-12 items-center justify-center bg-white text-black opacity-100 transition duration-300 sm:translate-y-2 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100"
+          aria-label={isPurchasable ? `Add ${product.name} to cart` : `${product.name} price unavailable`}
+          disabled={!isPurchasable}
+          onClick={() => {
+            if (isPurchasable) onAdd(product);
+          }}
+          className="absolute bottom-5 right-5 flex h-12 w-12 items-center justify-center bg-white text-black opacity-100 transition duration-300 disabled:cursor-not-allowed disabled:opacity-45 sm:translate-y-2 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100"
         >
           <Plus size={20} strokeWidth={2} />
         </MagneticButton>

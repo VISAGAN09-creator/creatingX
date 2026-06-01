@@ -149,7 +149,9 @@ export function CartDrawer({
                               <Plus size={15} strokeWidth={2} />
                             </button>
                           </div>
-                          <p className="text-sm font-semibold text-black">{formatPrice(line.price * line.quantity)}</p>
+                          <p className="text-sm font-semibold text-black">
+                            {formatPrice((line.price ?? 0) * line.quantity)}
+                          </p>
                         </div>
                       </div>
                     </motion.article>

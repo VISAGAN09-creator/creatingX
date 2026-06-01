@@ -29,7 +29,7 @@ export default function App() {
   );
 
   const subtotal = useMemo(
-    () => cartLines.reduce((total, line) => total + line.price * line.quantity, 0),
+    () => cartLines.reduce((total, line) => total + (line.price ?? 0) * line.quantity, 0),
     [cartLines],
   );
 
