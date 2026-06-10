@@ -6,9 +6,10 @@ type LookbookProps = {
   products: Product[];
   status: DataStatus;
   onAddToCart: (product: Product) => void;
+  onViewAll: () => void;
 };
 
-export function Lookbook({ products, status, onAddToCart }: LookbookProps) {
+export function Lookbook({ products, status, onAddToCart, onViewAll }: LookbookProps) {
   return (
     <section
       id="lookbook"
@@ -16,7 +17,7 @@ export function Lookbook({ products, status, onAddToCart }: LookbookProps) {
     >
       <div className="absolute -bottom-36 -right-36 h-[380px] w-[380px] bg-metal-light opacity-60 clip-pentagon sm:h-[500px] sm:w-[500px]" />
       <div className="relative mx-auto w-full max-w-shell">
-        <SectionHeader label="Lookbook" title="All Product Looks" />
+        <SectionHeader label="Lookbook" title="All Product Looks" onAction={onViewAll} />
 
         {status === 'loading' && (
           <p className="text-sm uppercase tracking-[0.18em] text-metal-text">Loading products...</p>

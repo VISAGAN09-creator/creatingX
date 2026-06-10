@@ -9,6 +9,7 @@ type SectionHeaderProps = {
   dark?: boolean;
   actionHref?: `#${string}`;
   actionLabel?: string;
+  onAction?: () => void;
 };
 
 export function SectionHeader({
@@ -17,7 +18,10 @@ export function SectionHeader({
   dark = false,
   actionHref,
   actionLabel = 'View All',
+  onAction,
 }: SectionHeaderProps) {
+  const shouldShowAction = Boolean(actionHref || onAction);
+
   return (
     <Reveal className="mb-12 flex flex-col gap-6 sm:mb-16 sm:flex-row sm:items-end sm:justify-between lg:mb-20">
       <div>
@@ -26,12 +30,16 @@ export function SectionHeader({
           {title}
         </h2>
       </div>
-      {actionHref && (
+      {shouldShowAction && (
         <MagneticAnchor
-          href={actionHref}
+          href={actionHref ?? '#products'}
           onClick={(event) => {
             event.preventDefault();
-            scrollToHash(actionHref);
+            if (onAction) {
+              onAction();
+              return;
+            }
+            if (actionHref) scrollToHash(actionHref);
           }}
           className={`inline-flex w-fit items-center gap-2 text-[0.85rem] font-medium uppercase tracking-[0.05em] transition-colors ${
             dark ? 'text-metal-text hover:text-white' : 'text-metal-text hover:text-black'

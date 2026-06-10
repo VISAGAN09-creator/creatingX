@@ -12,6 +12,7 @@ export type Product = {
   image: string;
   alt: string;
   tag?: string;
+  filters?: string[];
   theme?: string;
   collectionImage?: string;
   isLatestDrop?: boolean;

@@ -10,9 +10,11 @@ import { LatestDrop } from './components/LatestDrop';
 import { LiquidCanvas } from './components/LiquidCanvas';
 import { Lookbook } from './components/Lookbook';
 import { Navbar } from './components/Navbar';
+import { ProductViewingPage } from './components/ProductViewingPage';
 import { getProducts } from './data/firestoreContent';
 import { products, seedCartProductIds } from './data/siteData';
 import type { CartLine, DataStatus, Product } from './types';
+import { scrollToHash } from './utils/scroll';
 
 function createSeedCart(): CartLine[] {
   return seedCartProductIds
@@ -26,6 +28,9 @@ export default function App() {
   const [cartLines, setCartLines] = useState<CartLine[]>(createSeedCart);
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
   const [catalogStatus, setCatalogStatus] = useState<DataStatus>('loading');
+  const [activePage, setActivePage] = useState<'home' | 'products'>(() =>
+    window.location.hash === '#products' ? 'products' : 'home',
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -45,6 +50,21 @@ export default function App() {
 
     return () => {
       isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const syncPageFromHash = () => {
+      setActivePage(window.location.hash === '#products' ? 'products' : 'home');
+    };
+
+    syncPageFromHash();
+    window.addEventListener('hashchange', syncPageFromHash);
+    window.addEventListener('popstate', syncPageFromHash);
+
+    return () => {
+      window.removeEventListener('hashchange', syncPageFromHash);
+      window.removeEventListener('popstate', syncPageFromHash);
     };
   }, []);
 
@@ -92,18 +112,60 @@ export default function App() {
     setCartLines((currentLines) => currentLines.filter((line) => line.id !== id));
   }, []);
 
+  const openProductPage = useCallback(() => {
+    setActivePage('products');
+    window.history.pushState(null, '', '#products');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const navigateToHomeSection = useCallback((href: string) => {
+    setActivePage('home');
+    window.history.pushState(null, '', href);
+    window.setTimeout(() => scrollToHash(href), 0);
+  }, []);
+
   return (
     <>
       <CustomCursor />
       <LiquidCanvas />
-      <Navbar cartCount={cartCount} onCartOpen={() => setCartOpen(true)} />
+      <Navbar
+        cartCount={cartCount}
+        onCartOpen={() => setCartOpen(true)}
+        onNavigate={navigateToHomeSection}
+      />
       <main className="relative z-[1] overflow-x-hidden">
-        <Hero />
-        <LatestDrop products={catalogProducts} status={catalogStatus} onAddToCart={addToCart} />
-        <Collections products={catalogProducts} status={catalogStatus} onAddToCart={addToCart} />
-        <Lookbook products={catalogProducts} status={catalogStatus} onAddToCart={addToCart} />
-        <Customize />
-        <About />
+        {activePage === 'products' ? (
+          <ProductViewingPage
+            products={catalogProducts}
+            status={catalogStatus}
+            onAddToCart={addToCart}
+            onBack={() => navigateToHomeSection('#hero')}
+          />
+        ) : (
+          <>
+            <Hero />
+            <LatestDrop
+              products={catalogProducts}
+              status={catalogStatus}
+              onAddToCart={addToCart}
+              onViewAll={openProductPage}
+            />
+            <Collections
+              products={catalogProducts}
+              status={catalogStatus}
+              onAddToCart={addToCart}
+              onViewAll={openProductPage}
+            />
+            <Lookbook
+              products={catalogProducts}
+              status={catalogStatus}
+              onAddToCart={addToCart}
+              onViewAll={openProductPage}
+            />
+            <Customize />
+            <About />
+          </>
+        )}
       </main>
       <Footer />
       <CartDrawer

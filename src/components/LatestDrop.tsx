@@ -7,13 +7,14 @@ type LatestDropProps = {
   products: Product[];
   status: DataStatus;
   onAddToCart: (product: Product) => void;
+  onViewAll: () => void;
 };
 
 function latestSortValue(product: Product) {
   return product.dropOrder ?? product.order ?? Number.MAX_SAFE_INTEGER;
 }
 
-export function LatestDrop({ products, status, onAddToCart }: LatestDropProps) {
+export function LatestDrop({ products, status, onAddToCart, onViewAll }: LatestDropProps) {
   const latestProducts = useMemo(
     () =>
       products
@@ -34,7 +35,7 @@ export function LatestDrop({ products, status, onAddToCart }: LatestDropProps) {
     >
       <div className="absolute -right-24 -top-24 h-[320px] w-[320px] bg-metal-charcoal opacity-60 clip-pentagon sm:h-[440px] sm:w-[440px]" />
       <div className="relative mx-auto w-full max-w-shell">
-        <SectionHeader label="New Arrivals" title="Latest Drop" dark actionHref="#lookbook" />
+        <SectionHeader label="New Arrivals" title="Latest Drop" dark onAction={onViewAll} />
 
         {status === 'loading' && (
           <p className="text-sm uppercase tracking-[0.18em] text-metal-mid">Loading latest drop...</p>

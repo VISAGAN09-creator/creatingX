@@ -8,9 +8,10 @@ import { MagneticButton } from './Magnetic';
 type NavbarProps = {
   cartCount: number;
   onCartOpen: () => void;
+  onNavigate?: (href: string) => void;
 };
 
-export function Navbar({ cartCount, onCartOpen }: NavbarProps) {
+export function Navbar({ cartCount, onCartOpen, onNavigate }: NavbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -32,7 +33,11 @@ export function Navbar({ cartCount, onCartOpen }: NavbarProps) {
   }, []);
 
   const handleNavigate = (href: string) => {
-    scrollToHash(href);
+    if (onNavigate) {
+      onNavigate(href);
+    } else {
+      scrollToHash(href);
+    }
     setMenuOpen(false);
   };
 

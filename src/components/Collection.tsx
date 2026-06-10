@@ -12,6 +12,7 @@ type CollectionsProps = {
   products: Product[];
   status: DataStatus;
   onAddToCart: (product: Product) => void;
+  onViewAll: () => void;
 };
 
 function collectionName(product: Product) {
@@ -63,7 +64,7 @@ function buildCollections(products: Product[]): ProductCollection[] {
   );
 }
 
-export function Collections({ products, status, onAddToCart }: CollectionsProps) {
+export function Collections({ products, status, onAddToCart, onViewAll }: CollectionsProps) {
   const collections = useMemo(() => buildCollections(products), [products]);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
 
@@ -94,7 +95,7 @@ export function Collections({ products, status, onAddToCart }: CollectionsProps)
     >
       <div className="absolute -left-28 top-16 h-[300px] w-[300px] bg-metal-light opacity-70 clip-hex sm:h-[420px] sm:w-[420px]" />
       <div className="relative mx-auto w-full max-w-shell">
-        <SectionHeader label="Collections" title="Shop By Theme" actionHref="#lookbook" />
+        <SectionHeader label="Collections" title="Shop By Theme" onAction={onViewAll} />
 
         {status === 'loading' && (
           <p className="text-sm uppercase tracking-[0.18em] text-metal-text">Loading collections...</p>

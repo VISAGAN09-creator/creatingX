@@ -9,6 +9,20 @@ function text(value: unknown) {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 }
 
+function uniqueTexts(values: string[]) {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function textList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return uniqueTexts(value.flatMap((item) => textList(item)));
+  }
+
+  if (typeof value !== 'string') return [];
+
+  return uniqueTexts(value.split(/[,|/;]+/).map((item) => item.trim()));
+}
+
 function numericPrice(value: unknown) {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value !== 'string') return null;
@@ -63,6 +77,11 @@ function toProduct(id: string, data: DocumentData): Product {
   const tag = text(data.tag);
   const latestDrop =
     booleanValue(data.isLatestDrop) ?? booleanValue(data.latestDrop) ?? booleanValue(data.latest);
+  const filters = uniqueTexts([
+    ...textList(data.filter),
+    ...textList(data.filters),
+    ...textList(data.productFilter),
+  ]);
 
   return {
     id,
@@ -71,6 +90,7 @@ function toProduct(id: string, data: DocumentData): Product {
     image,
     alt: text(data.alt) ?? text(data.imageAlt) ?? name,
     tag: tag ?? undefined,
+    filters,
     theme: text(data.theme) ?? text(data.collection) ?? text(data.category) ?? undefined,
     collectionImage:
       text(data.collectionImage) ??
