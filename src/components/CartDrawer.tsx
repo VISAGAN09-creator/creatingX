@@ -14,6 +14,7 @@ type CartDrawerProps = {
   onIncrement: (id: string) => void;
   onDecrement: (id: string) => void;
   onRemove: (id: string) => void;
+  onCheckout: () => void;
 };
 
 export function CartDrawer({
@@ -24,6 +25,7 @@ export function CartDrawer({
   onIncrement,
   onDecrement,
   onRemove,
+  onCheckout,
 }: CartDrawerProps) {
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -167,9 +169,11 @@ export function CartDrawer({
               </div>
               <MagneticButton
                 type="button"
+                disabled={lines.length === 0}
+                onClick={onCheckout}
                 className="liquid-metal metal-sheen flex min-h-14 w-full items-center justify-center bg-black px-6 py-4 text-sm font-semibold uppercase tracking-[0.08em] text-white"
               >
-                Checkout Preview
+                Checkout
               </MagneticButton>
             </div>
           </motion.div>

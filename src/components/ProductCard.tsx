@@ -10,13 +10,19 @@ type ProductCardProps = {
   product: Product;
   index: number;
   onAdd: (product: Product) => void;
+  onOpen?: (product: Product) => void;
 };
 
-export function ProductCard({ product, index, onAdd }: ProductCardProps) {
+export function ProductCard({ product, index, onAdd, onOpen }: ProductCardProps) {
   const shouldReduceMotion = useReducedMotion();
   const rotateX = useMotionValue(0);
   const rotateY = useMotionValue(0);
   const isPurchasable = typeof product.price === 'number';
+  const actionLabel = onOpen
+    ? `View ${product.name} details`
+    : isPurchasable
+      ? `Add ${product.name} to cart`
+      : `${product.name} price unavailable`;
 
   const handleMouseMove = (event: React.MouseEvent<HTMLElement>) => {
     if (shouldReduceMotion || !window.matchMedia('(pointer: fine)').matches) return;
@@ -32,16 +38,28 @@ export function ProductCard({ product, index, onAdd }: ProductCardProps) {
     rotateY.set(0);
   };
 
+  const handleOpen = () => {
+    onOpen?.(product);
+  };
+
   return (
     <Reveal delay={index * 0.07}>
       <motion.article
         data-cursor="hover"
+        role={onOpen ? 'button' : undefined}
+        tabIndex={onOpen ? 0 : undefined}
         className="group relative flex h-full flex-col overflow-hidden bg-metal-charcoal"
         style={{ rotateX, rotateY, transformPerspective: 1000 }}
         whileHover={shouldReduceMotion ? undefined : { y: -8 }}
         transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
+        onClick={handleOpen}
+        onKeyDown={(event) => {
+          if (!onOpen || (event.key !== 'Enter' && event.key !== ' ')) return;
+          event.preventDefault();
+          handleOpen();
+        }}
       >
         <div className="relative aspect-[3/4] w-full overflow-hidden bg-metal-dark">
           <SmartImage
@@ -62,9 +80,14 @@ export function ProductCard({ product, index, onAdd }: ProductCardProps) {
         </div>
         <MagneticButton
           type="button"
-          aria-label={isPurchasable ? `Add ${product.name} to cart` : `${product.name} price unavailable`}
-          disabled={!isPurchasable}
-          onClick={() => {
+          aria-label={actionLabel}
+          disabled={!onOpen && !isPurchasable}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (onOpen) {
+              onOpen(product);
+              return;
+            }
             if (isPurchasable) onAdd(product);
           }}
           className="absolute bottom-5 right-5 flex h-12 w-12 items-center justify-center bg-white text-black opacity-100 transition duration-300 disabled:cursor-not-allowed disabled:opacity-45 sm:translate-y-2 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100"

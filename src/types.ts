@@ -9,10 +9,21 @@ export type Product = {
   id: string;
   name: string;
   price: number | null;
+  priceLabel?: string;
   image: string;
   alt: string;
   tag?: string;
   filters?: string[];
+  subtitle?: string;
+  model?: string;
+  description?: string;
+  details?: string[];
+  shippingReturns?: string[];
+  careInstructions?: string[];
+  galleryImages?: string[];
+  colors?: ProductColor[];
+  sizes?: ProductSize[];
+  sizeGuide?: ProductSizeGuideRow[];
   theme?: string;
   collectionImage?: string;
   isLatestDrop?: boolean;
@@ -27,6 +38,23 @@ export type CartLine = Product & {
 };
 
 export type DataStatus = 'loading' | 'ready' | 'error';
+
+export type ProductColor = {
+  name: string;
+  value: string;
+};
+
+export type ProductSize = {
+  name: string;
+  stock: number;
+};
+
+export type ProductSizeGuideRow = {
+  size: string;
+  chest: string;
+  length: string;
+  sleeve: string;
+};
 
 export type ProductCollection = {
   id: string;

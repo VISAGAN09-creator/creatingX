@@ -6,10 +6,11 @@ type LookbookProps = {
   products: Product[];
   status: DataStatus;
   onAddToCart: (product: Product) => void;
+  onOpenProduct: (product: Product) => void;
   onViewAll: () => void;
 };
 
-export function Lookbook({ products, status, onAddToCart, onViewAll }: LookbookProps) {
+export function Lookbook({ products, status, onAddToCart, onOpenProduct, onViewAll }: LookbookProps) {
   return (
     <section
       id="lookbook"
@@ -33,7 +34,13 @@ export function Lookbook({ products, status, onAddToCart, onViewAll }: LookbookP
         {products.length > 0 && (
           <div className="grid grid-cols-2 items-stretch gap-4 sm:gap-6 lg:grid-cols-4 lg:gap-7 xl:gap-[30px]">
             {products.map((product, index) => (
-              <ProductCard key={product.id} product={product} index={index} onAdd={onAddToCart} />
+              <ProductCard
+                key={product.id}
+                product={product}
+                index={index}
+                onAdd={onAddToCart}
+                onOpen={onOpenProduct}
+              />
             ))}
           </div>
         )}

@@ -7,6 +7,7 @@ type LatestDropProps = {
   products: Product[];
   status: DataStatus;
   onAddToCart: (product: Product) => void;
+  onOpenProduct: (product: Product) => void;
   onViewAll: () => void;
 };
 
@@ -14,7 +15,13 @@ function latestSortValue(product: Product) {
   return product.dropOrder ?? product.order ?? Number.MAX_SAFE_INTEGER;
 }
 
-export function LatestDrop({ products, status, onAddToCart, onViewAll }: LatestDropProps) {
+export function LatestDrop({
+  products,
+  status,
+  onAddToCart,
+  onOpenProduct,
+  onViewAll,
+}: LatestDropProps) {
   const latestProducts = useMemo(
     () =>
       products
@@ -53,7 +60,13 @@ export function LatestDrop({ products, status, onAddToCart, onViewAll }: LatestD
         {latestProducts.length > 0 && (
           <div className="grid grid-cols-2 items-stretch gap-4 sm:gap-6 lg:grid-cols-4 lg:gap-7 xl:gap-[30px]">
             {latestProducts.map((product, index) => (
-              <ProductCard key={product.id} product={product} index={index} onAdd={onAddToCart} />
+              <ProductCard
+                key={product.id}
+                product={product}
+                index={index}
+                onAdd={onAddToCart}
+                onOpen={onOpenProduct}
+              />
             ))}
           </div>
         )}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { About } from './components/About';
 import { CartDrawer } from './components/CartDrawer';
+import { CheckoutPage } from './components/CheckoutPage';
 import { Collections } from './components/Collection';
 import { CustomCursor } from './components/CustomCursor';
 import { Customize } from './components/Customize';
@@ -10,6 +11,7 @@ import { LatestDrop } from './components/LatestDrop';
 import { LiquidCanvas } from './components/LiquidCanvas';
 import { Lookbook } from './components/Lookbook';
 import { Navbar } from './components/Navbar';
+import { ProductDetailsPage } from './components/ProductDetailsPage';
 import { ProductViewingPage } from './components/ProductViewingPage';
 import { getProducts } from './data/firestoreContent';
 import { products, seedCartProductIds } from './data/siteData';
@@ -28,9 +30,17 @@ export default function App() {
   const [cartLines, setCartLines] = useState<CartLine[]>(createSeedCart);
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
   const [catalogStatus, setCatalogStatus] = useState<DataStatus>('loading');
-  const [activePage, setActivePage] = useState<'home' | 'products'>(() =>
-    window.location.hash === '#products' ? 'products' : 'home',
+  const [activePage, setActivePage] = useState<'home' | 'products' | 'productDetail' | 'checkout'>(() => {
+    if (window.location.hash === '#checkout') return 'checkout';
+    if (window.location.hash.startsWith('#product-')) return 'productDetail';
+    return window.location.hash === '#products' ? 'products' : 'home';
+  });
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(() =>
+    window.location.hash.startsWith('#product-')
+      ? decodeURIComponent(window.location.hash.replace('#product-', ''))
+      : null,
   );
+  const [productReturnPage, setProductReturnPage] = useState<'home' | 'products'>('home');
 
   useEffect(() => {
     let isMounted = true;
@@ -55,6 +65,19 @@ export default function App() {
 
   useEffect(() => {
     const syncPageFromHash = () => {
+      if (window.location.hash === '#checkout') {
+        setSelectedProductId(null);
+        setActivePage('checkout');
+        return;
+      }
+
+      if (window.location.hash.startsWith('#product-')) {
+        setSelectedProductId(decodeURIComponent(window.location.hash.replace('#product-', '')));
+        setActivePage('productDetail');
+        return;
+      }
+
+      setSelectedProductId(null);
       setActivePage(window.location.hash === '#products' ? 'products' : 'home');
     };
 
@@ -76,6 +99,11 @@ export default function App() {
   const subtotal = useMemo(
     () => cartLines.reduce((total, line) => total + (line.price ?? 0) * line.quantity, 0),
     [cartLines],
+  );
+
+  const selectedProduct = useMemo(
+    () => catalogProducts.find((product) => product.id === selectedProductId),
+    [catalogProducts, selectedProductId],
   );
 
   const addToCart = useCallback((product: Product) => {
@@ -114,31 +142,86 @@ export default function App() {
 
   const openProductPage = useCallback(() => {
     setActivePage('products');
+    setSelectedProductId(null);
     window.history.pushState(null, '', '#products');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
+  const openCheckoutPage = useCallback(() => {
+    setCartOpen(false);
+    setActivePage('checkout');
+    setSelectedProductId(null);
+    window.history.pushState(null, '', '#checkout');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const openProductDetail = useCallback(
+    (product: Product) => {
+      if (activePage !== 'productDetail') {
+        setProductReturnPage(activePage === 'products' ? 'products' : 'home');
+      }
+
+      setSelectedProductId(product.id);
+      setActivePage('productDetail');
+      window.history.pushState(null, '', `#product-${encodeURIComponent(product.id)}`);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    [activePage],
+  );
+
   const navigateToHomeSection = useCallback((href: string) => {
     setActivePage('home');
+    setSelectedProductId(null);
     window.history.pushState(null, '', href);
     window.setTimeout(() => scrollToHash(href), 0);
   }, []);
+
+  const closeProductDetail = useCallback(() => {
+    if (productReturnPage === 'products') {
+      openProductPage();
+      return;
+    }
+
+    navigateToHomeSection('#hero');
+  }, [navigateToHomeSection, openProductPage, productReturnPage]);
 
   return (
     <>
       <CustomCursor />
       <LiquidCanvas />
-      <Navbar
-        cartCount={cartCount}
-        onCartOpen={() => setCartOpen(true)}
-        onNavigate={navigateToHomeSection}
-      />
+      {activePage !== 'checkout' && (
+        <Navbar
+          cartCount={cartCount}
+          onCartOpen={() => setCartOpen(true)}
+          onNavigate={navigateToHomeSection}
+        />
+      )}
       <main className="relative z-[1] overflow-x-hidden">
-        {activePage === 'products' ? (
+        {activePage === 'checkout' ? (
+          <CheckoutPage
+            lines={cartLines}
+            subtotal={subtotal}
+            onBack={() => {
+              setActivePage('home');
+              window.history.pushState(null, '', '#hero');
+              window.setTimeout(() => scrollToHash('#hero'), 0);
+            }}
+          />
+        ) : activePage === 'productDetail' ? (
+          <ProductDetailsPage
+            product={selectedProduct}
+            products={catalogProducts}
+            status={catalogStatus}
+            onAddToCart={addToCart}
+            onOpenProduct={openProductDetail}
+            onBack={closeProductDetail}
+          />
+        ) : activePage === 'products' ? (
           <ProductViewingPage
             products={catalogProducts}
             status={catalogStatus}
             onAddToCart={addToCart}
+            onOpenProduct={openProductDetail}
             onBack={() => navigateToHomeSection('#hero')}
           />
         ) : (
@@ -148,18 +231,21 @@ export default function App() {
               products={catalogProducts}
               status={catalogStatus}
               onAddToCart={addToCart}
+              onOpenProduct={openProductDetail}
               onViewAll={openProductPage}
             />
             <Collections
               products={catalogProducts}
               status={catalogStatus}
               onAddToCart={addToCart}
+              onOpenProduct={openProductDetail}
               onViewAll={openProductPage}
             />
             <Lookbook
               products={catalogProducts}
               status={catalogStatus}
               onAddToCart={addToCart}
+              onOpenProduct={openProductDetail}
               onViewAll={openProductPage}
             />
             <Customize />
@@ -167,7 +253,7 @@ export default function App() {
           </>
         )}
       </main>
-      <Footer />
+      {activePage !== 'checkout' && <Footer />}
       <CartDrawer
         isOpen={cartOpen}
         lines={cartLines}
@@ -176,6 +262,7 @@ export default function App() {
         onIncrement={increment}
         onDecrement={decrement}
         onRemove={remove}
+        onCheckout={openCheckoutPage}
       />
     </>
   );

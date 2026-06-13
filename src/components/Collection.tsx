@@ -12,6 +12,7 @@ type CollectionsProps = {
   products: Product[];
   status: DataStatus;
   onAddToCart: (product: Product) => void;
+  onOpenProduct: (product: Product) => void;
   onViewAll: () => void;
 };
 
@@ -64,7 +65,13 @@ function buildCollections(products: Product[]): ProductCollection[] {
   );
 }
 
-export function Collections({ products, status, onAddToCart, onViewAll }: CollectionsProps) {
+export function Collections({
+  products,
+  status,
+  onAddToCart,
+  onOpenProduct,
+  onViewAll,
+}: CollectionsProps) {
   const collections = useMemo(() => buildCollections(products), [products]);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
 
@@ -174,7 +181,13 @@ export function Collections({ products, status, onAddToCart, onViewAll }: Collec
 
             <div className="grid grid-cols-2 items-stretch gap-4 sm:gap-6 lg:grid-cols-4 lg:gap-7 xl:gap-[30px]">
               {selectedProducts.map((product, index) => (
-                <ProductCard key={product.id} product={product} index={index} onAdd={onAddToCart} />
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  index={index}
+                  onAdd={onAddToCart}
+                  onOpen={onOpenProduct}
+                />
               ))}
             </div>
           </div>

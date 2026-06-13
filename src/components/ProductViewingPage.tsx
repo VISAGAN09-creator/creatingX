@@ -11,6 +11,7 @@ type ProductViewingPageProps = {
   products: Product[];
   status: DataStatus;
   onAddToCart: (product: Product) => void;
+  onOpenProduct: (product: Product) => void;
   onBack: () => void;
 };
 
@@ -37,6 +38,7 @@ export function ProductViewingPage({
   products,
   status,
   onAddToCart,
+  onOpenProduct,
   onBack,
 }: ProductViewingPageProps) {
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
@@ -188,7 +190,13 @@ export function ProductViewingPage({
           <>
             <div className="grid grid-cols-2 items-stretch gap-4 sm:gap-6 lg:grid-cols-4 lg:gap-7 xl:gap-[30px]">
               {visibleProducts.map((product, index) => (
-                <ProductCard key={product.id} product={product} index={index} onAdd={onAddToCart} />
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  index={index}
+                  onAdd={onAddToCart}
+                  onOpen={onOpenProduct}
+                />
               ))}
             </div>
 

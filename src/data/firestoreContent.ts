@@ -1,6 +1,6 @@
 import { collection, getDocs, type DocumentData } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import type { LookbookItem, Product } from '../types';
+import type { LookbookItem, Product, ProductColor, ProductSize, ProductSizeGuideRow } from '../types';
 
 const productsCollectionName = import.meta.env.VITE_FIRESTORE_PRODUCTS_COLLECTION || 'products';
 const lookbookCollectionName = import.meta.env.VITE_FIRESTORE_LOOKBOOK_COLLECTION || 'lookbook';
@@ -21,6 +21,144 @@ function textList(value: unknown): string[] {
   if (typeof value !== 'string') return [];
 
   return uniqueTexts(value.split(/[,|/;]+/).map((item) => item.trim()));
+}
+
+function lineList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return uniqueTexts(value.flatMap((item) => lineList(item)));
+  }
+
+  if (typeof value !== 'string') return [];
+
+  return uniqueTexts(value.split(/\r?\n|;/).map((item) => item.trim()));
+}
+
+function objectValue(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function imageList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return uniqueTexts(value.flatMap((item) => imageList(item)));
+  }
+
+  if (typeof value === 'string') {
+    return uniqueTexts(value.split(',').map((item) => item.trim()));
+  }
+
+  const record = objectValue(value);
+  if (!record) return [];
+
+  return uniqueTexts([
+    text(record.url) ?? '',
+    text(record.src) ?? '',
+    text(record.image) ?? '',
+    text(record.imageUrl) ?? '',
+  ]);
+}
+
+function colorFallback(value: string) {
+  const normalized = value.toLowerCase();
+  if (normalized.includes('white')) return '#f5f5f5';
+  if (normalized.includes('black')) return '#000000';
+  if (normalized.includes('silver')) return 'linear-gradient(135deg, #c0c0c0, #e8e8e8)';
+  if (normalized.includes('graphite')) return 'linear-gradient(135deg, #444444, #666666)';
+  return '#c0c0c0';
+}
+
+function colorList(value: unknown): ProductColor[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => colorList(item));
+  }
+
+  if (typeof value === 'string') {
+    return textList(value).map((name) => ({ name, value: colorFallback(name) }));
+  }
+
+  const record = objectValue(value);
+  if (!record) return [];
+
+  const name = text(record.name) ?? text(record.label);
+  const swatch = text(record.value) ?? text(record.hex) ?? text(record.color);
+  if (name) return [{ name, value: swatch ?? colorFallback(name) }];
+
+  return Object.entries(record)
+    .map(([entryName, entryValue]) => ({
+      name: entryName,
+      value: text(entryValue) ?? colorFallback(entryName),
+    }))
+    .filter((color) => color.name.trim().length > 0);
+}
+
+function stockValue(value: unknown, fallback = 0) {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.floor(value));
+  if (typeof value === 'boolean') return value ? 1 : 0;
+  if (typeof value !== 'string') return fallback;
+
+  const normalized = value.trim().toLowerCase();
+  if (['out', 'out of stock', 'sold out', 'unavailable'].includes(normalized)) return 0;
+
+  const parsed = Number(normalized.replace(/[^0-9.]/g, ''));
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : fallback;
+}
+
+function sizeList(value: unknown): ProductSize[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => sizeList(item));
+  }
+
+  if (typeof value === 'string') {
+    return textList(value).map((name) => ({ name, stock: 1 }));
+  }
+
+  const record = objectValue(value);
+  if (!record) return [];
+
+  const name = text(record.name) ?? text(record.size) ?? text(record.label);
+  if (name) {
+    return [
+      {
+        name,
+        stock: stockValue(record.stock ?? record.quantity ?? record.qty ?? record.available, 0),
+      },
+    ];
+  }
+
+  return Object.entries(record)
+    .map(([entryName, entryValue]) => {
+      const nested = objectValue(entryValue);
+
+      return {
+        name: entryName,
+        stock: nested
+          ? stockValue(nested.stock ?? nested.quantity ?? nested.qty ?? nested.available, 0)
+          : stockValue(entryValue, 0),
+      };
+    })
+    .filter((size) => size.name.trim().length > 0);
+}
+
+function sizeGuideList(value: unknown): ProductSizeGuideRow[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((item) => {
+    const record = objectValue(item);
+    if (!record) return [];
+
+    const size = text(record.size) ?? text(record.name);
+    if (!size) return [];
+
+    return [
+      {
+        size,
+        chest: text(record.chest) ?? '-',
+        length: text(record.length) ?? '-',
+        sleeve: text(record.sleeve) ?? '-',
+      },
+    ];
+  });
 }
 
 function numericPrice(value: unknown) {
@@ -82,15 +220,37 @@ function toProduct(id: string, data: DocumentData): Product {
     ...textList(data.filters),
     ...textList(data.productFilter),
   ]);
+  const galleryImages = uniqueTexts([
+    image,
+    ...imageList(data.galleryImages),
+    ...imageList(data.images),
+    ...imageList(data.productImages),
+    text(data.image2) ?? '',
+    text(data.image3) ?? '',
+    text(data.image4) ?? '',
+  ]);
+  const colors = colorList(data.colors ?? data.colorOptions ?? data.color);
+  const sizes = sizeList(data.sizes ?? data.sizeStock ?? data.stockBySize ?? data.stock);
 
   return {
     id,
     name,
     price: numericPrice(data.price),
+    priceLabel: text(data.priceLabel) ?? (typeof data.price === 'string' ? text(data.price) ?? undefined : undefined),
     image,
     alt: text(data.alt) ?? text(data.imageAlt) ?? name,
     tag: tag ?? undefined,
     filters,
+    subtitle: text(data.subtitle) ?? text(data.productSubtitle) ?? undefined,
+    model: text(data.model) ?? text(data.fit) ?? undefined,
+    description: text(data.description) ?? text(data.productDescription) ?? undefined,
+    details: uniqueTexts([...lineList(data.details), ...lineList(data.features), ...lineList(data.bullets)]),
+    shippingReturns: lineList(data.shippingReturns ?? data.shipping),
+    careInstructions: lineList(data.careInstructions ?? data.care),
+    galleryImages,
+    colors,
+    sizes,
+    sizeGuide: sizeGuideList(data.sizeGuide),
     theme: text(data.theme) ?? text(data.collection) ?? text(data.category) ?? undefined,
     collectionImage:
       text(data.collectionImage) ??
