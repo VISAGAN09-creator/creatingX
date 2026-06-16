@@ -14,11 +14,11 @@ export function Lookbook({ products, status, onAddToCart, onOpenProduct, onViewA
   return (
     <section
       id="lookbook"
-      className="relative z-[1] overflow-hidden bg-metal-off px-5 py-20 sm:px-8 sm:py-24 lg:min-h-screen lg:px-12 lg:py-32"
+      className="relative z-[1] overflow-hidden bg-black text-white px-5 py-20 sm:px-8 sm:py-24 lg:min-h-screen lg:px-12 lg:py-32"
     >
-      <div className="absolute -bottom-36 -right-36 h-[380px] w-[380px] bg-metal-light opacity-60 clip-pentagon sm:h-[500px] sm:w-[500px]" />
+      <div className="absolute -bottom-36 -right-36 h-[380px] w-[380px] bg-metal-charcoal opacity-60 clip-pentagon sm:h-[500px] sm:w-[500px]" />
       <div className="relative mx-auto w-full max-w-shell">
-        <SectionHeader label="Lookbook" title="All Product Looks" onAction={onViewAll} />
+        <SectionHeader label="Lookbook" title="All Product Looks" dark onAction={onViewAll} />
 
         {status === 'loading' && (
           <p className="text-sm uppercase tracking-[0.18em] text-metal-text">Loading products...</p>

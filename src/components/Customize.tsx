@@ -8,17 +8,17 @@ export function Customize() {
   return (
     <section
       id="customize"
-      className="relative z-[1] bg-black px-5 py-20 text-white sm:px-8 sm:py-24 lg:min-h-screen lg:px-12 lg:py-32"
+      className="relative z-[1] bg-white px-5 py-20 text-black sm:px-8 sm:py-24 lg:min-h-screen lg:px-12 lg:py-32"
     >
       <div className="mx-auto grid w-full max-w-shell items-center gap-14 lg:grid-cols-2 lg:gap-20">
         <Reveal className="lg:pl-12">
           <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-metal-text">Make It Yours</p>
-          <h2 className="mb-8 font-display text-4xl font-bold leading-[1.05] tracking-normal text-white sm:text-5xl lg:text-6xl">
+          <h2 className="mb-8 font-display text-4xl font-bold leading-[1.05] tracking-normal text-black sm:text-5xl lg:text-6xl">
             Custom
             <br />
             Prints
           </h2>
-          <p className="mb-8 max-w-[560px] text-base font-light leading-7 text-metal-text sm:text-lg">
+          <p className="mb-8 max-w-[560px] text-base font-light leading-7 text-metal-dark sm:text-lg">
             Turn your vision into wearable art. Our advanced printing technology brings your designs to
             life with liquid metal precision and unmatched durability.
           </p>
@@ -30,13 +30,13 @@ export function Customize() {
                 <div
                   key={feature.title}
                   data-cursor="hover"
-                  className="flex gap-5 border-l-[3px] border-white bg-metal-charcoal p-5 transition duration-300 hover:translate-x-2 hover:bg-metal-dark sm:p-6"
+                  className="flex gap-5 border-l-[3px] border-black bg-metal-light p-5 transition duration-300 hover:translate-x-2 hover:bg-metal-mid sm:p-6"
                 >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center bg-white text-black">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center bg-black text-white">
                     <Icon size={24} strokeWidth={2} />
                   </div>
                   <div>
-                    <h3 className="mb-1.5 font-display text-lg font-semibold text-white">{feature.title}</h3>
+                    <h3 className="mb-1.5 font-display text-lg font-semibold text-black">{feature.title}</h3>
                     <p className="text-sm leading-6 text-metal-text">{feature.description}</p>
                   </div>
                 </div>
@@ -46,7 +46,7 @@ export function Customize() {
 
           <MagneticAnchor
             href="#"
-            className="liquid-metal metal-sheen mt-10 inline-flex min-h-14 items-center gap-4 bg-white px-8 py-4 text-sm font-semibold uppercase tracking-[0.05em] text-black transition-shadow duration-300 hover:shadow-metal sm:px-10"
+            className="liquid-metal metal-sheen mt-10 inline-flex min-h-14 items-center gap-4 bg-black px-8 py-4 text-sm font-semibold uppercase tracking-[0.05em] text-white transition-shadow duration-300 hover:shadow-metal sm:px-10"
           >
             Start Designing
             <ArrowRight size={20} strokeWidth={2} />
@@ -56,7 +56,7 @@ export function Customize() {
         <Reveal className="relative flex h-[430px] items-center justify-center sm:h-[540px] lg:h-[600px]">
           <div
             data-cursor="hover"
-            className="clip-octagon relative h-[410px] w-[310px] overflow-hidden bg-gradient-to-br from-metal-charcoal to-metal-dark sm:h-[500px] sm:w-[400px]"
+            className="clip-octagon relative h-[410px] w-[310px] overflow-hidden bg-gradient-to-br from-metal-light to-metal-mid sm:h-[500px] sm:w-[400px]"
           >
             <SmartImage
               src="https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=600&h=800&fit=crop"
