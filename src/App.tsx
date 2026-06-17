@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { About } from './components/About';
 import { CartDrawer } from './components/CartDrawer';
 import { CheckoutPage } from './components/CheckoutPage';
@@ -13,21 +13,13 @@ import { Lookbook } from './components/Lookbook';
 import { Navbar } from './components/Navbar';
 import { ProductDetailsPage } from './components/ProductDetailsPage';
 import { ProductViewingPage } from './components/ProductViewingPage';
-import { getProducts } from './data/firestoreContent';
-import { products, seedCartProductIds } from './data/siteData';
+import { subscribeToProducts } from './data/firestoreContent';
 import type { CartLine, DataStatus, Product } from './types';
 import { scrollToHash } from './utils/scroll';
 
-function createSeedCart(): CartLine[] {
-  return seedCartProductIds
-    .map((id) => products.find((product) => product.id === id))
-    .filter((product): product is Product => Boolean(product))
-    .map((product) => ({ ...product, quantity: 1 }));
-}
-
 export default function App() {
   const [cartOpen, setCartOpen] = useState(false);
-  const [cartLines, setCartLines] = useState<CartLine[]>(createSeedCart);
+  const [cartLines, setCartLines] = useState<CartLine[]>([]);
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
   const [catalogStatus, setCatalogStatus] = useState<DataStatus>('loading');
   const [activePage, setActivePage] = useState<'home' | 'products' | 'productDetail' | 'checkout'>(() => {
@@ -40,33 +32,38 @@ export default function App() {
       ? decodeURIComponent(window.location.hash.replace('#product-', ''))
       : null,
   );
+  const [selectedCatalogFilter, setSelectedCatalogFilter] = useState<string | null>(null);
   const [productReturnPage, setProductReturnPage] = useState<'home' | 'products'>('home');
 
-  useEffect(() => {
-    let isMounted = true;
+  // Track whether we've received at least one snapshot
+  const hasReceivedFirstSnapshot = useRef(false);
 
-    getProducts()
-      .then((items) => {
-        if (!isMounted) return;
+  // Real-time subscription: products auto-update when Firestore changes
+  useEffect(() => {
+    const unsubscribe = subscribeToProducts(
+      (items) => {
         setCatalogProducts(items);
         setCatalogStatus('ready');
-      })
-      .catch((error) => {
+        hasReceivedFirstSnapshot.current = true;
+      },
+      (error) => {
         console.error('Unable to load products from Firestore', error);
-        if (!isMounted) return;
-        setCatalogProducts([]);
-        setCatalogStatus('error');
-      });
+        // Only set error if we never got a successful snapshot
+        if (!hasReceivedFirstSnapshot.current) {
+          setCatalogProducts([]);
+          setCatalogStatus('error');
+        }
+      },
+    );
 
-    return () => {
-      isMounted = false;
-    };
+    return unsubscribe;
   }, []);
 
   useEffect(() => {
     const syncPageFromHash = () => {
       if (window.location.hash === '#checkout') {
         setSelectedProductId(null);
+        setSelectedCatalogFilter(null);
         setActivePage('checkout');
         return;
       }
@@ -78,6 +75,7 @@ export default function App() {
       }
 
       setSelectedProductId(null);
+      if (window.location.hash !== '#products') setSelectedCatalogFilter(null);
       setActivePage(window.location.hash === '#products' ? 'products' : 'home');
     };
 
@@ -140,9 +138,10 @@ export default function App() {
     setCartLines((currentLines) => currentLines.filter((line) => line.id !== id));
   }, []);
 
-  const openProductPage = useCallback(() => {
+  const openProductPage = useCallback((filter?: string) => {
     setActivePage('products');
     setSelectedProductId(null);
+    setSelectedCatalogFilter(filter ?? null);
     window.history.pushState(null, '', '#products');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
@@ -172,6 +171,7 @@ export default function App() {
   const navigateToHomeSection = useCallback((href: string) => {
     setActivePage('home');
     setSelectedProductId(null);
+    setSelectedCatalogFilter(null);
     window.history.pushState(null, '', href);
     window.setTimeout(() => scrollToHash(href), 0);
   }, []);
@@ -220,6 +220,7 @@ export default function App() {
           <ProductViewingPage
             products={catalogProducts}
             status={catalogStatus}
+            initialFilter={selectedCatalogFilter}
             onAddToCart={addToCart}
             onOpenProduct={openProductDetail}
             onBack={() => navigateToHomeSection('#hero')}
@@ -232,7 +233,7 @@ export default function App() {
               status={catalogStatus}
               onAddToCart={addToCart}
               onOpenProduct={openProductDetail}
-              onViewAll={openProductPage}
+              onViewAll={() => openProductPage()}
             />
             <Collections
               products={catalogProducts}
@@ -246,7 +247,7 @@ export default function App() {
               status={catalogStatus}
               onAddToCart={addToCart}
               onOpenProduct={openProductDetail}
-              onViewAll={openProductPage}
+              onViewAll={() => openProductPage()}
             />
             <Customize />
             <About />

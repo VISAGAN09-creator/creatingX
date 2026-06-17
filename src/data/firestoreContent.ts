@@ -1,9 +1,55 @@
-import { collection, getDocs, type DocumentData } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  type DocumentData,
+  type Unsubscribe,
+} from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { LookbookItem, Product, ProductColor, ProductSize, ProductSizeGuideRow } from '../types';
 
 const productsCollectionName = import.meta.env.VITE_FIRESTORE_PRODUCTS_COLLECTION || 'products';
 const lookbookCollectionName = import.meta.env.VITE_FIRESTORE_LOOKBOOK_COLLECTION || 'lookbook';
+
+/**
+ * Dynamically discover product collection names.
+ *
+ * Strategy:
+ * Try reading a Firestore metadata document at `_config/collections` that
+ * holds a `productCollections` array of collection name strings.
+ *
+ * This means you can add a new collection in Firestore by simply updating the
+ * `_config/collections` doc — no code change or redeployment needed.
+ */
+async function discoverCollectionNames(): Promise<string[]> {
+  const discovered: string[] = [];
+
+  try {
+    const configRef = doc(db, '_config', 'collections');
+    const configSnap = await getDoc(configRef);
+
+    if (configSnap.exists()) {
+      const data = configSnap.data();
+      const names: unknown = data.productCollections ?? data.collections ?? data.names;
+
+      if (Array.isArray(names)) {
+        names
+          .map((n) => (typeof n === 'string' ? n.trim() : ''))
+          .filter(Boolean)
+          .forEach((n) => discovered.push(n));
+      }
+    }
+  } catch (error) {
+    console.error('Error discovering collection names from Firestore:', error);
+  }
+
+  // Always ensure the base products collection name is included,
+  // or fall back to it if no other collections are discovered.
+  return [...new Set([...discovered, productsCollectionName])];
+}
+const sizeFieldNames = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 
 function text(value: unknown) {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
@@ -11,6 +57,18 @@ function text(value: unknown) {
 
 function uniqueTexts(values: string[]) {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function collectionLabel(collectionName: string) {
+  return collectionName.replace(/\s+collection$/i, '').trim() || collectionName;
+}
+
+function slugify(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 function textList(value: unknown): string[] {
@@ -140,6 +198,10 @@ function sizeList(value: unknown): ProductSize[] {
     .filter((size) => size.name.trim().length > 0);
 }
 
+function sizeFields(data: DocumentData): ProductSize[] {
+  return sizeFieldNames.map((name) => ({ name, stock: stockValue(data[name], 0) }));
+}
+
 function sizeGuideList(value: unknown): ProductSizeGuideRow[] {
   if (!Array.isArray(value)) return [];
 
@@ -209,19 +271,31 @@ function sortByOrder<T extends { order?: number; id: string }>(items: T[]) {
   );
 }
 
-function toProduct(id: string, data: DocumentData): Product {
+function toProduct(id: string, data: DocumentData, sourceCollectionName = productsCollectionName): Product {
+  const sourceLabel = collectionLabel(sourceCollectionName);
   const name = text(data.name) ?? text(data.title) ?? 'Product info unavailable';
-  const image = text(data.image) ?? text(data.imageUrl) ?? text(data.imageAddress) ?? '';
+  const image =
+    text(data.img1) ??
+    text(data.image) ??
+    text(data.imageUrl) ??
+    text(data.imageAddress) ??
+    '';
   const tag = text(data.tag);
   const latestDrop =
-    booleanValue(data.isLatestDrop) ?? booleanValue(data.latestDrop) ?? booleanValue(data.latest);
+    booleanValue(data.isLatestDrop) ??
+    booleanValue(data.latestDrop) ??
+    booleanValue(data.latest) ??
+    booleanValue(data.lastest);
   const filters = uniqueTexts([
+    sourceLabel,
     ...textList(data.filter),
     ...textList(data.filters),
     ...textList(data.productFilter),
   ]);
   const galleryImages = uniqueTexts([
     image,
+    text(data.img1) ?? '',
+    text(data.img2) ?? '',
     ...imageList(data.galleryImages),
     ...imageList(data.images),
     ...imageList(data.productImages),
@@ -231,15 +305,16 @@ function toProduct(id: string, data: DocumentData): Product {
   ]);
   const colors = colorList(data.colors ?? data.colorOptions ?? data.color);
   const sizes = sizeList(data.sizes ?? data.sizeStock ?? data.stockBySize ?? data.stock);
+  const mappedSizes = sizes.length > 0 ? sizes : sizeFields(data);
 
   return {
-    id,
+    id: `${slugify(sourceCollectionName)}-${id}`,
     name,
     price: numericPrice(data.price),
     priceLabel: text(data.priceLabel) ?? (typeof data.price === 'string' ? text(data.price) ?? undefined : undefined),
     image,
     alt: text(data.alt) ?? text(data.imageAlt) ?? name,
-    tag: tag ?? undefined,
+    tag: latestDrop ? 'NEW' : tag ?? undefined,
     filters,
     subtitle: text(data.subtitle) ?? text(data.productSubtitle) ?? undefined,
     model: text(data.model) ?? text(data.fit) ?? undefined,
@@ -249,10 +324,11 @@ function toProduct(id: string, data: DocumentData): Product {
     careInstructions: lineList(data.careInstructions ?? data.care),
     galleryImages,
     colors,
-    sizes,
+    sizes: mappedSizes,
     sizeGuide: sizeGuideList(data.sizeGuide),
-    theme: text(data.theme) ?? text(data.collection) ?? text(data.category) ?? undefined,
+    theme: sourceLabel,
     collectionImage:
+      text(data.img1) ??
       text(data.collectionImage) ??
       text(data.collectionImageUrl) ??
       text(data.themeImage) ??
@@ -281,11 +357,144 @@ function toLookbookItem(id: string, data: DocumentData): LookbookItem {
 }
 
 export async function getProducts() {
-  const snapshot = await getDocs(collection(db, productsCollectionName));
-  return sortByOrder(snapshot.docs.map((doc) => toProduct(doc.id, doc.data())));
+  const productCollectionNames = await discoverCollectionNames();
+
+  const snapshots = await Promise.all(
+    productCollectionNames.map(async (collectionName) => ({
+      collectionName,
+      snapshot: await getDocs(collection(db, collectionName)),
+    })),
+  );
+
+  return sortByOrder(
+    snapshots.flatMap(({ collectionName, snapshot }) =>
+      snapshot.docs.map((doc) => toProduct(doc.id, doc.data(), collectionName)),
+    ),
+  );
 }
 
 export async function getLookbookItems() {
   const snapshot = await getDocs(collection(db, lookbookCollectionName));
   return sortByOrder(snapshot.docs.map((doc) => toLookbookItem(doc.id, doc.data())));
+}
+
+/**
+ * Subscribe to real-time product updates across all discovered collections.
+ *
+ * This sets up onSnapshot listeners on every product collection so any
+ * additions, deletions, or modifications in Firestore are immediately
+ * reflected in the UI without a page reload.
+ *
+ * Returns an unsubscribe function to tear down all listeners.
+ */
+export function subscribeToProducts(
+  onUpdate: (products: Product[]) => void,
+  onError?: (error: Error) => void,
+): Unsubscribe {
+  let productUnsubscribes: Unsubscribe[] = [];
+  let configUnsub: Unsubscribe | null = null;
+  let destroyed = false;
+
+  // Accumulator: stores the latest snapshot per collection
+  const snapshotsByCollection = new Map<string, Product[]>();
+
+  function emitMerged() {
+    const merged: Product[] = [];
+    snapshotsByCollection.forEach((products) => merged.push(...products));
+    onUpdate(sortByOrder(merged));
+  }
+
+  function teardownProductListeners() {
+    productUnsubscribes.forEach((u) => u());
+    productUnsubscribes = [];
+    snapshotsByCollection.clear();
+  }
+
+  function setupProductListeners(collectionNames: string[]) {
+    // Teardown any existing product listeners before attaching new ones
+    teardownProductListeners();
+
+    if (destroyed) return;
+
+    collectionNames.forEach((collectionName) => {
+      const colRef = collection(db, collectionName);
+      const unsub = onSnapshot(
+        colRef,
+        (snapshot) => {
+          const products = snapshot.docs.map((d) =>
+            toProduct(d.id, d.data(), collectionName),
+          );
+          snapshotsByCollection.set(collectionName, products);
+          emitMerged();
+        },
+        (error) => {
+          console.error(`Firestore snapshot error for "${collectionName}":`, error);
+          onError?.(error);
+        },
+      );
+      productUnsubscribes.push(unsub);
+    });
+  }
+
+  // Initial setup
+  discoverCollectionNames()
+    .then((collectionNames) => {
+      if (destroyed) return;
+
+      setupProductListeners(collectionNames);
+
+      // Listen for config doc changes to pick up new collections dynamically.
+      // Use a flag to skip the initial snapshot (which fires immediately) to
+      // avoid tearing down the listeners we just set up.
+      let isInitialConfigSnapshot = true;
+      configUnsub = onSnapshot(
+        doc(db, '_config', 'collections'),
+        () => {
+          if (isInitialConfigSnapshot) {
+            isInitialConfigSnapshot = false;
+            return;
+          }
+
+          // Config changed — re-discover and re-subscribe to product collections
+          discoverCollectionNames().then((newNames) => {
+            if (destroyed) return;
+            setupProductListeners(newNames);
+          });
+        },
+        () => {
+          // Config doc doesn't exist or permissions error — ignore silently
+        },
+      );
+    })
+    .catch((error) => {
+      console.error('Failed to discover collection names:', error);
+      onError?.(error instanceof Error ? error : new Error(String(error)));
+    });
+
+  return () => {
+    destroyed = true;
+    teardownProductListeners();
+    configUnsub?.();
+    configUnsub = null;
+  };
+}
+
+/**
+ * Subscribe to real-time lookbook updates.
+ * Returns an unsubscribe function.
+ */
+export function subscribeToLookbook(
+  onUpdate: (items: LookbookItem[]) => void,
+  onError?: (error: Error) => void,
+): Unsubscribe {
+  return onSnapshot(
+    collection(db, lookbookCollectionName),
+    (snapshot) => {
+      onUpdate(sortByOrder(snapshot.docs.map((d) => toLookbookItem(d.id, d.data()))));
+    },
+    (error) => {
+      console.error('Firestore lookbook snapshot error:', error);
+      onError?.(error);
+    },
+  );
 }

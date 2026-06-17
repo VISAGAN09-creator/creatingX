@@ -9,9 +9,9 @@ export function scrollToHash(hash: string) {
 export function formatPrice(value: number | null | undefined) {
   if (typeof value !== 'number') return 'Price unavailable';
 
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('en-IN', {
     style: 'currency',
-    currency: 'USD',
+    currency: 'INR',
     minimumFractionDigits: 2,
   }).format(value);
 }

@@ -159,6 +159,16 @@ input {
   clip-path: polygon(20% 0%, 80% 0%, 100% 20%, 100% 80%, 80% 100%, 20% 100%, 0% 80%, 0% 20%);
 }
 
+.collection-marquee-track {
+  animation: collectionMarquee 38s linear infinite;
+  will-change: transform;
+}
+
+.collection-marquee:hover .collection-marquee-track,
+.collection-marquee:focus-within .collection-marquee-track {
+  animation-play-state: paused;
+}
+
 @keyframes liquidGradient {
   0%,
   100% {
@@ -166,5 +176,14 @@ input {
   }
   50% {
     background-position: 100% 50%;
+  }
+}
+
+@keyframes collectionMarquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-33.333%);
   }
 }

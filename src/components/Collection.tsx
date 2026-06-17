@@ -1,9 +1,7 @@
 import { motion } from 'framer-motion';
-import { ArrowRight, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { ArrowRight } from 'lucide-react';
+import { useMemo } from 'react';
 import type { DataStatus, Product, ProductCollection } from '../types';
-import { scrollToHash } from '../utils/scroll';
-import { ProductCard } from './ProductCard';
 import { Reveal } from './Reveal';
 import { SectionHeader } from './SectionHeader';
 import { SmartImage } from './SmartImage';
@@ -13,11 +11,11 @@ type CollectionsProps = {
   status: DataStatus;
   onAddToCart: (product: Product) => void;
   onOpenProduct: (product: Product) => void;
-  onViewAll: () => void;
+  onViewAll: (filter?: string) => void;
 };
 
 function collectionName(product: Product) {
-  return product.theme?.trim() || 'Core Collection';
+  return product.theme?.trim() || product.filters?.[0]?.trim() || 'Core';
 }
 
 function slugify(value: string) {
@@ -28,8 +26,8 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, '');
 }
 
-function countLabel(count: number, singular: string, plural: string) {
-  return `${count} ${count === 1 ? singular : plural}`;
+function countLabel(count: number) {
+  return `${count} ${count === 1 ? 'Product' : 'Products'}`;
 }
 
 function buildCollections(products: Product[]): ProductCollection[] {
@@ -37,7 +35,7 @@ function buildCollections(products: Product[]): ProductCollection[] {
 
   products.forEach((product) => {
     const name = collectionName(product);
-    const id = slugify(name) || 'core-collection';
+    const id = slugify(name) || 'core';
     const current = collections.get(id);
 
     if (!current) {
@@ -60,40 +58,16 @@ function buildCollections(products: Product[]): ProductCollection[] {
     });
   });
 
-  return [...collections.values()].sort(
-    (a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER),
-  );
+  return [...collections.values()].sort((a, b) => {
+    const orderDifference = (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER);
+    if (orderDifference !== 0) return orderDifference;
+    return a.name.localeCompare(b.name);
+  });
 }
 
-export function Collections({
-  products,
-  status,
-  onAddToCart,
-  onOpenProduct,
-  onViewAll,
-}: CollectionsProps) {
+export function Collections({ products, status, onViewAll }: CollectionsProps) {
   const collections = useMemo(() => buildCollections(products), [products]);
-  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (collections.length === 0 || !window.location.hash.startsWith('#collection-')) return;
-
-    const id = window.location.hash.replace('#collection-', '');
-    if (collections.some((collection) => collection.id === id)) {
-      setSelectedCollectionId(id);
-    }
-  }, [collections]);
-
-  const selectedCollection = collections.find((collection) => collection.id === selectedCollectionId);
-  const selectedProducts = selectedCollection
-    ? products.filter((product) => slugify(collectionName(product)) === selectedCollection.id)
-    : [];
-
-  const handleCollectionClick = (collection: ProductCollection) => {
-    setSelectedCollectionId(collection.id);
-    window.history.pushState(null, '', `#collection-${collection.id}`);
-    window.setTimeout(() => scrollToHash(`#collection-${collection.id}`), 0);
-  };
+  const carouselCollections = collections.length > 0 ? [...collections, ...collections, ...collections] : [];
 
   return (
     <section
@@ -102,7 +76,7 @@ export function Collections({
     >
       <div className="absolute -left-28 top-16 h-[300px] w-[300px] bg-metal-light opacity-70 clip-hex sm:h-[420px] sm:w-[420px]" />
       <div className="relative mx-auto w-full max-w-shell">
-        <SectionHeader label="Collections" title="Shop By Theme" onAction={onViewAll} />
+        <SectionHeader label="Collections" title="Shop By Collection" onAction={() => onViewAll()} />
 
         {status === 'loading' && (
           <p className="text-sm uppercase tracking-[0.18em] text-metal-text">Loading collections...</p>
@@ -117,80 +91,44 @@ export function Collections({
         )}
 
         {collections.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 lg:gap-7">
-            {collections.map((collection, index) => (
-              <Reveal key={collection.id} delay={index * 0.06}>
-                <motion.button
-                  type="button"
-                  data-cursor="hover"
-                  className="group relative block aspect-[4/5] w-full overflow-hidden bg-metal-light text-left"
-                  whileHover={{ y: -6 }}
-                  transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-                  onClick={() => handleCollectionClick(collection)}
-                >
-                  <SmartImage
-                    src={collection.image}
-                    alt={collection.alt}
-                    fallbackLabel="Collection image unavailable"
-                    className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
-                  <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-5 p-6 text-white sm:p-8">
-                    <div className="min-w-0">
-                      <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-metal-mid">
-                        {countLabel(collection.productCount, 'Look', 'Looks')}
-                      </p>
-                      <h3 className="font-display text-3xl font-bold leading-none tracking-normal sm:text-4xl">
-                        {collection.name}
-                      </h3>
+          <Reveal>
+            <div className="collection-marquee -mx-5 overflow-hidden py-4 sm:-mx-8 lg:-mx-12">
+              <div className="collection-marquee-track flex w-max gap-4 px-5 sm:gap-5 sm:px-8 lg:gap-7 lg:px-12">
+                {carouselCollections.map((collection, index) => (
+                  <motion.button
+                    key={`${collection.id}-${index}`}
+                    type="button"
+                    data-cursor="hover"
+                    className="group relative block h-[260px] w-[220px] shrink-0 overflow-hidden bg-metal-light text-left shadow-none outline-none transition-shadow duration-300 hover:z-10 hover:shadow-metal sm:h-[320px] sm:w-[280px] lg:h-[380px] lg:w-[330px]"
+                    whileHover={{ scale: 1.08, y: -8 }}
+                    transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                    onClick={() => onViewAll(collection.name)}
+                  >
+                    <SmartImage
+                      src={collection.image}
+                      alt={collection.alt}
+                      fallbackLabel="Collection image unavailable"
+                      className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/15 to-transparent" />
+                    <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-4 p-5 text-white sm:p-6">
+                      <div className="min-w-0">
+                        <p className="mb-2 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-metal-mid">
+                          {countLabel(collection.productCount)}
+                        </p>
+                        <h3 className="font-display text-3xl font-bold leading-none tracking-normal sm:text-4xl">
+                          {collection.name}
+                        </h3>
+                      </div>
+                      <span className="flex h-11 w-11 shrink-0 items-center justify-center bg-white text-black transition group-hover:translate-x-1 sm:h-12 sm:w-12">
+                        <ArrowRight size={19} strokeWidth={2} />
+                      </span>
                     </div>
-                    <span className="flex h-12 w-12 shrink-0 items-center justify-center bg-white text-black transition group-hover:translate-x-1">
-                      <ArrowRight size={20} strokeWidth={2} />
-                    </span>
-                  </div>
-                </motion.button>
-              </Reveal>
-            ))}
-          </div>
-        )}
-
-        {selectedCollection && (
-          <div id={`collection-${selectedCollection.id}`} className="mt-16 sm:mt-20 lg:mt-24">
-            <div className="mb-8 flex flex-col gap-5 border-t border-metal-light pt-8 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-metal-text">
-                  {countLabel(selectedCollection.productCount, 'Product', 'Products')}
-                </p>
-                <h3 className="font-display text-3xl font-bold leading-none tracking-normal sm:text-5xl">
-                  {selectedCollection.name}
-                </h3>
+                  </motion.button>
+                ))}
               </div>
-              <button
-                type="button"
-                data-cursor="hover"
-                className="inline-flex h-11 w-11 items-center justify-center border border-metal-mid text-black transition hover:bg-black hover:text-white"
-                aria-label="Clear selected collection"
-                onClick={() => {
-                  setSelectedCollectionId(null);
-                  window.history.pushState(null, '', '#collections');
-                }}
-              >
-                <X size={18} strokeWidth={2} />
-              </button>
             </div>
-
-            <div className="grid grid-cols-2 items-stretch gap-4 sm:gap-6 lg:grid-cols-4 lg:gap-7 xl:gap-[30px]">
-              {selectedProducts.map((product, index) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  index={index}
-                  onAdd={onAddToCart}
-                  onOpen={onOpenProduct}
-                />
-              ))}
-            </div>
-          </div>
+          </Reveal>
         )}
       </div>
     </section>

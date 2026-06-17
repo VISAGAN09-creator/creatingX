@@ -10,6 +10,7 @@ const MOBILE_PRODUCTS_PER_PAGE = 8;
 type ProductViewingPageProps = {
   products: Product[];
   status: DataStatus;
+  initialFilter?: string | null;
   onAddToCart: (product: Product) => void;
   onOpenProduct: (product: Product) => void;
   onBack: () => void;
@@ -37,11 +38,12 @@ function productMatchesFilters(product: Product, selectedFilters: string[]) {
 export function ProductViewingPage({
   products,
   status,
+  initialFilter,
   onAddToCart,
   onOpenProduct,
   onBack,
 }: ProductViewingPageProps) {
-  const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
+  const [selectedFilters, setSelectedFilters] = useState<string[]>(initialFilter ? [initialFilter] : []);
   const [page, setPage] = useState(1);
   const [productsPerPage, setProductsPerPage] = useState(() =>
     typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
@@ -74,6 +76,10 @@ export function ProductViewingPage({
   useEffect(() => {
     setPage(1);
   }, [selectedFilters, products.length, productsPerPage]);
+
+  useEffect(() => {
+    setSelectedFilters(initialFilter ? [initialFilter] : []);
+  }, [initialFilter]);
 
   const toggleFilter = (filter: string) => {
     setSelectedFilters((currentFilters) =>
