@@ -2,10 +2,13 @@ import { HelpCircle, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { CartLine } from '../types';
 import { SmartImage } from './SmartImage';
+import { addDoc, collection } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 type CheckoutPageProps = {
   lines: CartLine[];
   subtotal: number;
+  onClearCart: () => void;
   onBack: () => void;
 };
 
@@ -15,6 +18,7 @@ type RazorpayOptions = {
   currency: string;
   name: string;
   description: string;
+  order_id?: string;
   prefill?: {
     email?: string;
     contact?: string;
@@ -23,6 +27,14 @@ type RazorpayOptions = {
   notes?: Record<string, string>;
   theme?: {
     color?: string;
+  };
+  handler?: (response: {
+    razorpay_payment_id: string;
+    razorpay_order_id: string;
+    razorpay_signature: string;
+  }) => void;
+  modal?: {
+    ondismiss?: () => void;
   };
 };
 
@@ -62,7 +74,7 @@ function loadRazorpayScript() {
   });
 }
 
-export function CheckoutPage({ lines, subtotal, onBack }: CheckoutPageProps) {
+export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutPageProps) {
   const [email, setEmail] = useState('');
   const [marketingOptIn, setMarketingOptIn] = useState(true);
   const [country, setCountry] = useState('IN');
@@ -81,6 +93,7 @@ export function CheckoutPage({ lines, subtotal, onBack }: CheckoutPageProps) {
   const [errors, setErrors] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<ToastState>(null);
   const [isPaying, setIsPaying] = useState(false);
+  const [successOrderId, setSuccessOrderId] = useState<string | null>(null);
 
   const itemCount = useMemo(() => lines.reduce((total, line) => total + line.quantity, 0), [lines]);
   const taxable = Math.max(0, subtotal - discount);
@@ -193,34 +206,237 @@ export function CheckoutPage({ lines, subtotal, onBack }: CheckoutPageProps) {
       return;
     }
 
-    const Razorpay = window.Razorpay as RazorpayConstructor;
-    new Razorpay({
-      key,
-      amount: Math.round(total * 100),
-      currency: 'INR',
-      name: 'METALFLUX',
-      description: `${itemCount} ${itemCount === 1 ? 'item' : 'items'}`,
-      prefill: {
-        email,
-        contact: phone,
-        name: [firstName, lastName].filter(Boolean).join(' '),
-      },
-      notes: {
-        country,
-        address,
-        apartment,
-        city,
-        state,
-        pinCode,
-        discountCode,
-      },
-      theme: {
-        color: '#1a1a1a',
-      },
-    }).open();
+    try {
+      // Create Razorpay Order via Backend Server API
+      const createResponse = await fetch('/api/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: Math.round(total * 100), // paise
+          currency: 'INR',
+        }),
+      });
 
-    window.setTimeout(() => setIsPaying(false), 1200);
+      if (!createResponse.ok) {
+        const errorData = await createResponse.json();
+        throw new Error(errorData.message || 'Failed to create payment order on server.');
+      }
+
+      const orderData = await createResponse.json();
+
+      const Razorpay = window.Razorpay as any;
+      const rzp = new Razorpay({
+        key,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: 'METALFLUX',
+        description: `${itemCount} ${itemCount === 1 ? 'item' : 'items'}`,
+        order_id: orderData.order_id,
+        prefill: {
+          email,
+          contact: phone,
+          name: [firstName, lastName].filter(Boolean).join(' '),
+        },
+        notes: {
+          country,
+          address,
+          apartment,
+          city,
+          state,
+          pinCode,
+          discountCode,
+        },
+        theme: {
+          color: '#1a1a1a',
+        },
+        handler: async (response: any) => {
+          setIsPaying(true);
+          try {
+            // Verify payment signature on Backend Server API
+            const verifyResponse = await fetch('/api/verify-payment', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+              }),
+            });
+
+            if (!verifyResponse.ok) {
+              const errorData = await verifyResponse.json();
+              throw new Error(errorData.message || 'Signature mismatch: payment verification failed.');
+            }
+
+            // 1. Create order document in Firestore
+            const orderRef = await addDoc(collection(db, 'orders'), {
+              customer: {
+                email,
+                firstName,
+                lastName,
+                phone,
+              },
+              shipping: {
+                country,
+                address,
+                apartment,
+                city,
+                state,
+                pinCode,
+              },
+              items: lines.map((line) => ({
+                id: line.id,
+                name: line.name,
+                price: line.price,
+                quantity: line.quantity,
+                image: line.image,
+              })),
+              pricing: {
+                subtotal,
+                discount,
+                discountCode,
+                tax,
+                shipping,
+                total,
+              },
+              payment: {
+                gateway: 'Razorpay',
+                paymentId: response.razorpay_payment_id,
+                orderId: response.razorpay_order_id,
+                signature: response.razorpay_signature,
+              },
+              status: 'paid',
+              createdAt: new Date().toISOString(),
+            });
+
+            // 2. Create email document to trigger Firebase trigger-email extension
+            const itemsListHtml = lines
+              .map(
+                (line) =>
+                  `<li>${line.name} x ${line.quantity} - ${formatINR((line.price ?? 0) * line.quantity)}</li>`
+              )
+              .join('');
+
+            await addDoc(collection(db, 'mail'), {
+              to: email,
+              message: {
+                subject: `Order Confirmation - Order #${orderRef.id.slice(0, 8).toUpperCase()}`,
+                html: `
+                  <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #1a1a1a;">
+                    <h2 style="font-size: 24px; font-weight: bold; border-bottom: 2px solid #1a1a1a; padding-bottom: 15px; margin-bottom: 20px;">
+                      Order Confirmed!
+                    </h2>
+                    <p>Hi ${firstName},</p>
+                    <p>Thank you for shopping with us! Your payment was successful, and we are preparing your order.</p>
+                    
+                    <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                      <h3 style="margin-top: 0; font-size: 16px;">Order Summary</h3>
+                      <ul>
+                        ${itemsListHtml}
+                      </ul>
+                      <p style="margin-bottom: 0; font-weight: bold;">Total Paid: ${formatINR(total)}</p>
+                    </div>
+
+                    <div style="margin: 20px 0;">
+                      <h3 style="font-size: 16px;">Delivery Details</h3>
+                      <p style="margin: 0; color: #555555;">
+                        ${address}${apartment ? `, ${apartment}` : ''}<br>
+                        ${city}, ${state} ${pinCode}<br>
+                        ${country}
+                      </p>
+                    </div>
+
+                    <p style="font-size: 12px; color: #888888; margin-top: 40px; border-top: 1px solid #e0e0e0; padding-top: 15px;">
+                      If you have any questions, reply to this email or contact customer support.
+                    </p>
+                  </div>
+                `,
+              },
+            });
+
+            // 3. Clear cart and show success state
+            onClearCart();
+            setSuccessOrderId(orderRef.id);
+            setIsPaying(false);
+          } catch (err) {
+            console.error('Error processing order or verifying payment:', err);
+            showToast(err instanceof Error ? err.message : 'Signature verification failed', 'error');
+            setIsPaying(false);
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setIsPaying(false);
+          },
+        },
+      });
+
+      rzp.on('payment.failed', (response: any) => {
+        console.error('[Razorpay Payment Failed]:', response.error);
+        setIsPaying(false);
+        showToast(response.error.description || 'Payment failed. Please try again.', 'error');
+      });
+
+      rzp.open();
+    } catch (err) {
+      console.error('Error initiating checkout flow:', err);
+      showToast(err instanceof Error ? err.message : 'Error preparing order checkout.', 'error');
+      setIsPaying(false);
+    }
   };
+
+  if (successOrderId) {
+    return (
+      <section className="relative z-[1] min-h-screen bg-white font-sans text-sm leading-normal text-[#1a1a1a] flex flex-col justify-between">
+        <header className="border-b border-[#e0e0e0] px-4 py-5 text-center">
+          <button
+            type="button"
+            data-cursor="hover"
+            className="font-display text-[22px] font-bold tracking-[0.18em] text-[#1a1a1a]"
+            onClick={onBack}
+          >
+            METALFLUX
+          </button>
+        </header>
+
+        <div className="flex-1 flex flex-col items-center justify-center px-5 py-16 text-center max-w-md mx-auto">
+          <div className="h-16 w-16 bg-[#27ae60]/10 text-[#27ae60] rounded-full flex items-center justify-center mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="w-8 h-8">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+          </div>
+          
+          <h1 className="font-display text-3xl font-bold mb-3">Thank You!</h1>
+          <p className="text-[#666666] mb-1">Your order has been placed successfully.</p>
+          <p className="text-xs font-mono text-[#999999] mb-8 bg-[#f5f5f5] px-3 py-1.5 rounded-md">Order ID: #{successOrderId.slice(0, 8).toUpperCase()}</p>
+          
+          <div className="w-full border-t border-b border-[#e0e0e0] py-5 mb-8 text-left space-y-3">
+            <div className="flex justify-between text-[13px]">
+              <span className="text-[#666666]">Confirmation Email</span>
+              <span className="font-semibold">{email}</span>
+            </div>
+            <div className="flex justify-between text-[13px]">
+              <span className="text-[#666666]">Shipping To</span>
+              <span className="font-semibold">{firstName} {lastName}</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            data-cursor="hover"
+            className="w-full h-14 bg-black text-white text-xs font-bold uppercase tracking-[0.16em] hover:bg-[#333333] transition flex items-center justify-center"
+            onClick={onBack}
+          >
+            Continue Shopping
+          </button>
+        </div>
+
+        <footer className="border-t border-[#e0e0e0] py-6 text-center text-xs text-[#999999]">
+          &copy; {new Date().getFullYear()} METALFLUX. All rights reserved.
+        </footer>
+      </section>
+    );
+  }
 
   const inputClass = (field: string) =>
     `h-12 w-full rounded-lg border bg-white px-3.5 text-sm text-[#1a1a1a] outline-none transition focus:border-[#1a1a1a] focus:shadow-[0_0_0_3px_rgba(0,0,0,0.04)] ${

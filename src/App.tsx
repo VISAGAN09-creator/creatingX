@@ -138,6 +138,11 @@ export default function App() {
     setCartLines((currentLines) => currentLines.filter((line) => line.id !== id));
   }, []);
 
+  const clearCart = useCallback(() => {
+    setCartLines([]);
+    setCartOpen(false);
+  }, []);
+
   const openProductPage = useCallback((filter?: string) => {
     setActivePage('products');
     setSelectedProductId(null);
@@ -201,6 +206,7 @@ export default function App() {
           <CheckoutPage
             lines={cartLines}
             subtotal={subtotal}
+            onClearCart={clearCart}
             onBack={() => {
               setActivePage('home');
               window.history.pushState(null, '', '#hero');
