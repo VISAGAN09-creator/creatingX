@@ -97,7 +97,6 @@ export function ProductDetailsPage({
 }: ProductDetailsPageProps) {
   const [currentImage, setCurrentImage] = useState(0);
   const [isZoomed, setIsZoomed] = useState(false);
-  const [selectedColor, setSelectedColor] = useState('');
   const [selectedSize, setSelectedSize] = useState('');
   const [openAccordion, setOpenAccordion] = useState('description');
   const [sizeGuideOpen, setSizeGuideOpen] = useState(false);
@@ -114,7 +113,6 @@ export function ProductDetailsPage({
     if (!product) return;
     setCurrentImage(0);
     setIsZoomed(false);
-    setSelectedColor(colors[0]?.name ?? '');
     setSelectedSize(sizes.find((size) => size.stock > 0)?.name ?? sizes[0]?.name ?? '');
     setOpenAccordion('description');
   }, [product, colors, sizes]);
@@ -141,8 +139,8 @@ export function ProductDetailsPage({
 
     onAddToCart({
       ...product,
-      id: `${product.id}-${selectedColor || 'color'}-${selectedSizeData.name}`,
-      name: `${product.name} (${selectedColor || 'Color'}, ${selectedSizeData.name})`,
+      id: `${product.id}-${selectedSizeData.name}`,
+      name: `${product.name} (${selectedSizeData.name})`,
       image: images[currentImage] ?? product.image,
     });
   };
@@ -323,28 +321,6 @@ export function ProductDetailsPage({
             <div className="my-7 h-px w-full bg-metal-light" />
 
             <div className="mb-7">
-              <p className="mb-3.5 text-[11px] font-bold uppercase tracking-[0.16em] text-black">
-                Color - <span className="text-metal-text">{selectedColor || 'Select'}</span>
-              </p>
-              <div className="flex gap-3">
-                {colors.map((color) => (
-                  <button
-                    key={color.name}
-                    type="button"
-                    data-cursor="hover"
-                    aria-label={`Select ${color.name}`}
-                    aria-pressed={selectedColor === color.name}
-                    className={`h-9 w-9 rounded-full transition hover:scale-110 ${
-                      selectedColor === color.name ? 'ring-2 ring-black ring-offset-2' : 'ring-1 ring-metal-mid'
-                    }`}
-                    style={{ background: color.value }}
-                    onClick={() => setSelectedColor(color.name)}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="mb-7">
               <div className="mb-3.5 flex items-center justify-between gap-4">
                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-black">
                   Size - <span className="text-metal-text">{selectedSize || 'Select'}</span>
@@ -385,11 +361,11 @@ export function ProductDetailsPage({
               </div>
             </div>
 
-            <div className="mb-8 grid gap-3">
+            <div className="mb-8 grid grid-cols-2 gap-3">
               <MagneticButton
                 type="button"
                 disabled={!canAddToCart}
-                className="flex h-14 items-center justify-center gap-3 bg-black px-6 text-xs font-bold uppercase tracking-[0.16em] text-white transition disabled:cursor-not-allowed disabled:opacity-45 enabled:hover:bg-metal-dark"
+                className="flex h-14 items-center justify-center gap-3 bg-black px-4 text-xs font-bold uppercase tracking-[0.16em] text-white transition disabled:cursor-not-allowed disabled:opacity-45 enabled:hover:bg-metal-dark"
                 onClick={addSelectedProduct}
               >
                 <ShoppingBag size={18} strokeWidth={2} />
@@ -399,7 +375,7 @@ export function ProductDetailsPage({
                 type="button"
                 data-cursor="hover"
                 disabled={!canAddToCart}
-                className="flex h-14 items-center justify-center border border-black bg-transparent px-6 text-xs font-bold uppercase tracking-[0.16em] text-black transition disabled:cursor-not-allowed disabled:opacity-45 enabled:hover:bg-black enabled:hover:text-white"
+                className="flex h-14 items-center justify-center border border-black bg-transparent px-4 text-xs font-bold uppercase tracking-[0.16em] text-black transition disabled:cursor-not-allowed disabled:opacity-45 enabled:hover:bg-black enabled:hover:text-white"
                 onClick={addSelectedProduct}
               >
                 Buy Now
