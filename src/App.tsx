@@ -14,6 +14,7 @@ import { Lookbook } from './components/Lookbook';
 import { Navbar } from './components/Navbar';
 import { ProductDetailsPage } from './components/ProductDetailsPage';
 import { ProductViewingPage } from './components/ProductViewingPage';
+import { SearchDrawer } from './components/SearchDrawer';
 import { subscribeToProducts } from './data/firestoreContent';
 import type { CartLine, DataStatus, Product } from './types';
 import { scrollToHash } from './utils/scroll';
@@ -23,6 +24,7 @@ import { getCookie, setCookie } from './utils/cookies';
 
 export default function App() {
   const [cartOpen, setCartOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [cartLines, setCartLines] = useState<CartLine[]>(() => {
     try {
       const saved = getCookie('cart');
@@ -271,6 +273,7 @@ export default function App() {
         <Navbar
           cartCount={cartCount}
           onCartOpen={() => setCartOpen(true)}
+          onSearchOpen={() => setSearchOpen(true)}
           onNavigate={navigateToHomeSection}
         />
       )}
@@ -343,6 +346,12 @@ export default function App() {
         onDecrement={decrement}
         onRemove={remove}
         onCheckout={openCheckoutPage}
+      />
+      <SearchDrawer
+        isOpen={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        products={catalogProducts}
+        onOpenProduct={openProductDetail}
       />
       <CookieConsent />
     </>

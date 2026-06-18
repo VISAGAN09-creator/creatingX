@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { Menu, ShoppingBag, X } from 'lucide-react';
+import { Menu, ShoppingBag, X, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { navLinks } from '../data/siteData';
 import { scrollToHash } from '../utils/scroll';
@@ -9,10 +9,11 @@ import logo from '../assets/logo.png';
 type NavbarProps = {
   cartCount: number;
   onCartOpen: () => void;
+  onSearchOpen: () => void;
   onNavigate?: (href: string) => void;
 };
 
-export function Navbar({ cartCount, onCartOpen, onNavigate }: NavbarProps) {
+export function Navbar({ cartCount, onCartOpen, onSearchOpen, onNavigate }: NavbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -71,6 +72,16 @@ export function Navbar({ cartCount, onCartOpen, onNavigate }: NavbarProps) {
         </ul>
 
         <div className="flex items-center gap-2 sm:gap-4">
+          <MagneticButton
+            type="button"
+            aria-label="Open search"
+            onClick={onSearchOpen}
+            className="relative inline-flex items-center gap-2 px-2 py-1 text-[0.85rem] font-medium uppercase tracking-[0.05em] text-black"
+          >
+            <span className="hidden sm:inline">Search</span>
+            <Search size={18} strokeWidth={2} />
+          </MagneticButton>
+
           <MagneticButton
             type="button"
             aria-label={`Open cart with ${cartCount} items`}

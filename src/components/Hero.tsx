@@ -4,12 +4,14 @@ import { useState, type MouseEvent } from 'react';
 import { scrollToHash } from '../utils/scroll';
 import { MagneticAnchor } from './Magnetic';
 import { SmartImage } from './SmartImage';
+import heroVideo from '../assets/hero video.mp4';
+import concernedDandy from '../assets/Concerned Dandy black.png';
 
 const heroPosterUrl =
   (import.meta.env.VITE_HERO_POSTER_URL as string | undefined)?.trim() ||
   'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=1600&h=1100&fit=crop';
 
-const heroVideoUrl = (import.meta.env.VITE_HERO_VIDEO_URL as string | undefined)?.trim() || '/hero-video.mp4';
+const heroVideoUrl = (import.meta.env.VITE_HERO_VIDEO_URL as string | undefined)?.trim() || heroVideo;
 
 export function Hero() {
   const shouldReduceMotion = useReducedMotion();
@@ -69,23 +71,27 @@ export function Hero() {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.22),transparent_28%),linear-gradient(90deg,rgba(0,0,0,0.25),rgba(0,0,0,0.78))]" />
       </div>
 
-      <div className="relative z-[1] mx-auto grid w-full max-w-shell items-center gap-12 lg:grid-cols-2 lg:gap-16">
+      <div className="relative z-[1] mx-auto flex w-full max-w-shell flex-col items-center justify-center text-center">
         <motion.div
           initial={{ opacity: 0, y: 36 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-          className="pt-4 lg:pl-12"
+          className="flex flex-col items-center pt-4"
         >
-          <div className="mb-6 flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.2em] text-metal-mid">
+          <div className="mb-6 flex items-center justify-center gap-3 text-xs font-semibold uppercase tracking-[0.2em] text-metal-mid">
             <span className="h-px w-10 bg-metal-mid" />
             New Collection 2026
+            <span className="h-px w-10 bg-metal-mid" />
           </div>
-          <h1 className="mb-8 font-display text-5xl font-extrabold leading-[0.95] tracking-normal text-white sm:text-7xl lg:text-8xl xl:text-[7rem]">
-            <span className="block">WEAR</span>
-            <span className="block text-metal-mid">YOUR</span>
-            <span className="block">METAL</span>
-          </h1>
-          <p className="mb-10 max-w-[480px] text-base font-light leading-7 text-metal-light sm:text-lg">
+          
+          <div className="mb-8 w-full max-w-[320px] sm:max-w-[500px] md:max-w-[650px] lg:max-w-[780px] xl:max-w-[900px] mx-auto select-none pointer-events-none">
+            <img
+              src={concernedDandy}
+              alt="Concerned Dandy"
+              className="h-auto w-full object-contain mx-auto invert drop-shadow-[0_4px_16px_rgba(0,0,0,0.85)]"
+            />
+          </div>
+          <p className="mb-10 max-w-[600px] text-base font-light leading-7 text-metal-light sm:text-lg">
             Custom print t-shirts crafted for the bold. Unconventional shapes, liquid metal aesthetics,
             and dopamine-inducing designs that redefine streetwear.
           </p>
@@ -100,44 +106,6 @@ export function Hero() {
             Explore Latest Drop
             <ArrowRight size={20} strokeWidth={2} />
           </MagneticAnchor>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, scale: 0.96 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 1, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
-          className="relative h-[420px] min-w-0 sm:h-[520px] lg:h-[600px]"
-        >
-          <div className="absolute left-1/2 top-1/2 z-[2] h-[340px] w-[250px] -translate-x-1/2 -translate-y-1/2 bg-gradient-to-br from-metal-light to-metal-mid clip-hero-main sm:h-[400px] sm:w-[300px]" />
-          <motion.div
-            className="absolute right-[5%] top-[12%] z-[3] h-[150px] w-[150px] bg-gradient-to-br from-metal-mid to-metal-text clip-pentagon sm:right-[10%] sm:top-[20%] sm:h-[200px] sm:w-[200px]"
-            style={{ x: shape2X, y: shape2Y }}
-            animate={shouldReduceMotion ? undefined : { y: [0, -20, 0], rotate: [0, 5, 0] }}
-            transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
-          />
-          <motion.div
-            className="absolute bottom-[10%] left-[2%] z-[1] h-[210px] w-[120px] bg-gradient-to-b from-metal-text to-metal-dark clip-hex sm:left-[5%] sm:h-[250px] sm:w-[150px]"
-            style={{ x: shape3X, y: shape3Y }}
-            animate={shouldReduceMotion ? undefined : { y: [0, 20, 0], rotate: [0, -5, 0] }}
-            transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
-          />
-          <motion.div
-            className="absolute left-[18%] top-[12%] z-[4] h-16 w-16 bg-black clip-star sm:h-20 sm:w-20"
-            style={{ x: starX, y: starY }}
-            animate={shouldReduceMotion ? undefined : { rotate: 360 }}
-            transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
-          />
-          <div
-            data-cursor="hover"
-            className="absolute left-1/2 top-1/2 z-[5] h-[340px] w-[250px] -translate-x-1/2 -translate-y-1/2 overflow-hidden bg-metal-light sm:h-[380px] sm:w-[280px]"
-          >
-            <SmartImage
-              src="https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=600&h=800&fit=crop"
-              alt="MetalFlux T-Shirt"
-              className="h-full w-full object-cover transition duration-500 hover:contrast-125"
-            />
-            <div className="pointer-events-none absolute inset-0 animate-liquidFlow bg-[linear-gradient(135deg,rgba(192,192,192,0.15)_0%,rgba(128,128,128,0.1)_50%,rgba(192,192,192,0.15)_100%)] bg-[length:400%_400%]" />
-          </div>
         </motion.div>
       </div>
     </section>

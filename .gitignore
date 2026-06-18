@@ -7,3 +7,4 @@ vite.config.js
 vite.config.d.ts
 tailwind.config.js
 tailwind.config.d.ts
+src/assets/
