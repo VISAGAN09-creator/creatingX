@@ -4,6 +4,7 @@ import type { CartLine } from '../types';
 import { SmartImage } from './SmartImage';
 import { addDoc, collection } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import logo from '../assets/logo.png';
 
 type CheckoutPageProps = {
   lines: CartLine[];
@@ -388,14 +389,14 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
   if (successOrderId) {
     return (
       <section className="relative z-[1] min-h-screen bg-white font-sans text-sm leading-normal text-[#1a1a1a] flex flex-col justify-between">
-        <header className="border-b border-[#e0e0e0] px-4 py-5 text-center">
+        <header className="border-b border-[#e0e0e0] px-4 py-5 text-center flex justify-center">
           <button
             type="button"
             data-cursor="hover"
-            className="font-display text-[22px] font-bold tracking-[0.18em] text-[#1a1a1a]"
+            className="flex items-center justify-center"
             onClick={onBack}
           >
-            METALFLUX
+            <img src={logo} alt="METALFLUX" className="h-8 sm:h-9 w-auto object-contain" />
           </button>
         </header>
 
@@ -457,14 +458,14 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
         </div>
       )}
 
-      <header className="border-b border-[#e0e0e0] px-4 py-5 text-center">
+      <header className="border-b border-[#e0e0e0] px-4 py-5 text-center flex justify-center">
         <button
           type="button"
           data-cursor="hover"
-          className="font-display text-[22px] font-bold tracking-[0.18em] text-[#1a1a1a]"
+          className="flex items-center justify-center"
           onClick={onBack}
         >
-          METALFLUX
+          <img src={logo} alt="METALFLUX" className="h-8 sm:h-9 w-auto object-contain" />
         </button>
       </header>
 

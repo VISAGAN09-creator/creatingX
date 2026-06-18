@@ -2,6 +2,7 @@ import { Instagram, Music2, Twitter } from 'lucide-react';
 import { useState } from 'react';
 import { footerColumns } from '../data/siteData';
 import { MagneticButton } from './Magnetic';
+import logo from '../assets/logo.png';
 
 export function Footer() {
   const [email, setEmail] = useState('');
@@ -19,7 +20,9 @@ export function Footer() {
       <div className="mx-auto w-full max-w-shell">
         <div className="grid gap-10 border-b border-metal-light pb-12 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr] lg:gap-14 lg:pb-20">
           <div>
-            <h2 className="mb-5 font-display text-3xl font-extrabold tracking-normal text-black">METALFLUX</h2>
+            <div className="mb-5">
+              <img src={logo} alt="METALFLUX" className="h-10 w-auto object-contain" />
+            </div>
             <p className="max-w-[300px] text-[0.95rem] leading-7 text-metal-dark">
               Custom print t-shirts for the bold. Unconventional shapes, liquid metal aesthetics, and
               dopamine-inducing designs.

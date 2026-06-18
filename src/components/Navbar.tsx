@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { navLinks } from '../data/siteData';
 import { scrollToHash } from '../utils/scroll';
 import { MagneticButton } from './Magnetic';
+import logo from '../assets/logo.png';
 
 type NavbarProps = {
   cartCount: number;
@@ -47,10 +48,10 @@ export function Navbar({ cartCount, onCartOpen, onNavigate }: NavbarProps) {
         <button
           type="button"
           data-cursor="hover"
-          className="font-display text-xl font-extrabold tracking-normal text-black sm:text-2xl"
+          className="flex items-center"
           onClick={() => handleNavigate('#hero')}
         >
-          METALFLUX
+          <img src={logo} alt="METALFLUX" className="h-9 sm:h-11 w-auto object-contain" />
         </button>
 
         <ul className="hidden list-none items-center gap-8 lg:flex xl:gap-10">
