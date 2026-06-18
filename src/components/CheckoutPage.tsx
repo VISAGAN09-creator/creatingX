@@ -405,11 +405,11 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
               <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
             </svg>
           </div>
-          
+
           <h1 className="font-display text-3xl font-bold mb-3">Thank You!</h1>
           <p className="text-[#666666] mb-1">Your order has been placed successfully.</p>
           <p className="text-xs font-mono text-[#999999] mb-8 bg-[#f5f5f5] px-3 py-1.5 rounded-md">Order ID: #{successOrderId.slice(0, 8).toUpperCase()}</p>
-          
+
           <div className="w-full border-t border-b border-[#e0e0e0] py-5 mb-8 text-left space-y-3">
             <div className="flex justify-between text-[13px]">
               <span className="text-[#666666]">Confirmation Email</span>
@@ -439,21 +439,19 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
   }
 
   const inputClass = (field: string) =>
-    `h-12 w-full rounded-lg border bg-white px-3.5 text-sm text-[#1a1a1a] outline-none transition focus:border-[#1a1a1a] focus:shadow-[0_0_0_3px_rgba(0,0,0,0.04)] ${
-      errors.has(field) ? 'border-[#c0392b]' : 'border-[#e0e0e0]'
+    `h-12 w-full rounded-lg border bg-white px-3.5 text-sm text-[#1a1a1a] outline-none transition focus:border-[#1a1a1a] focus:shadow-[0_0_0_3px_rgba(0,0,0,0.04)] ${errors.has(field) ? 'border-[#c0392b]' : 'border-[#e0e0e0]'
     }`;
 
   return (
     <section className="relative z-[1] min-h-screen bg-white font-sans text-sm leading-normal text-[#1a1a1a]">
       {toast && (
         <div
-          className={`fixed bottom-8 left-1/2 z-[2000] -translate-x-1/2 rounded-lg px-7 py-3.5 text-[13px] font-medium text-white shadow-[0_8px_32px_rgba(0,0,0,0.15)] ${
-            toast.type === 'success'
+          className={`fixed bottom-8 left-1/2 z-[2000] -translate-x-1/2 rounded-lg px-7 py-3.5 text-[13px] font-medium text-white shadow-[0_8px_32px_rgba(0,0,0,0.15)] ${toast.type === 'success'
               ? 'bg-[#27ae60]'
               : toast.type === 'error'
                 ? 'bg-[#c0392b]'
                 : 'bg-[#1a1a1a]'
-          }`}
+            }`}
         >
           {toast.message}
         </div>
@@ -689,18 +687,16 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
                 onFocus={() => clearError('discountCode')}
                 onChange={(event) => setDiscountCode(event.target.value)}
                 placeholder="Discount code or gift card"
-                className={`h-12 min-w-0 flex-1 rounded-lg border px-3.5 text-sm outline-none transition focus:border-[#1a1a1a] ${
-                  errors.has('discountCode') ? 'border-[#c0392b]' : 'border-[#e0e0e0]'
-                } ${discountApplied ? 'bg-white/60 text-[#999999]' : 'bg-white'}`}
+                className={`h-12 min-w-0 flex-1 rounded-lg border px-3.5 text-sm outline-none transition focus:border-[#1a1a1a] ${errors.has('discountCode') ? 'border-[#c0392b]' : 'border-[#e0e0e0]'
+                  } ${discountApplied ? 'bg-white/60 text-[#999999]' : 'bg-white'}`}
               />
               <button
                 type="button"
                 data-cursor="hover"
-                className={`h-12 rounded-lg border px-6 text-[13px] font-semibold transition ${
-                  discountApplied
+                className={`h-12 rounded-lg border px-6 text-[13px] font-semibold transition ${discountApplied
                     ? 'border-[#27ae60] bg-[#27ae60] text-white'
                     : 'border-[#e0e0e0] bg-transparent text-[#666666] hover:border-[#1a1a1a] hover:text-[#1a1a1a]'
-                }`}
+                  }`}
                 onClick={applyDiscount}
               >
                 {discountApplied ? 'Applied' : 'Apply'}
@@ -753,9 +749,8 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
               type="button"
               data-cursor="hover"
               disabled={isPaying || lines.length === 0}
-              className={`flex h-14 w-full items-center justify-center gap-2.5 rounded-lg bg-[#1a1a1a] text-sm font-bold uppercase tracking-[0.08em] text-white transition disabled:cursor-not-allowed disabled:opacity-50 enabled:hover:-translate-y-px enabled:hover:bg-[#333333] enabled:hover:shadow-[0_6px_20px_rgba(0,0,0,0.15)] ${
-                isPaying ? 'pointer-events-none' : ''
-              }`}
+              className={`flex h-14 w-full items-center justify-center gap-2.5 rounded-lg bg-[#1a1a1a] text-sm font-bold uppercase tracking-[0.08em] text-white transition disabled:cursor-not-allowed disabled:opacity-50 enabled:hover:-translate-y-px enabled:hover:bg-[#333333] enabled:hover:shadow-[0_6px_20px_rgba(0,0,0,0.15)] ${isPaying ? 'pointer-events-none' : ''
+                }`}
               onClick={handlePayNow}
             >
               {isPaying && (

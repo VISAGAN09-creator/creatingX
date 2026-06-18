@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { About } from './components/About';
 import { CartDrawer } from './components/CartDrawer';
 import { CheckoutPage } from './components/CheckoutPage';
+import { CookieConsent } from './components/CookieConsent';
 import { Collections } from './components/Collection';
 import { CustomCursor } from './components/CustomCursor';
 import { Customize } from './components/Customize';
@@ -16,10 +17,20 @@ import { ProductViewingPage } from './components/ProductViewingPage';
 import { subscribeToProducts } from './data/firestoreContent';
 import type { CartLine, DataStatus, Product } from './types';
 import { scrollToHash } from './utils/scroll';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db } from './lib/firebase';
+import { getCookie, setCookie } from './utils/cookies';
 
 export default function App() {
   const [cartOpen, setCartOpen] = useState(false);
-  const [cartLines, setCartLines] = useState<CartLine[]>([]);
+  const [cartLines, setCartLines] = useState<CartLine[]>(() => {
+    try {
+      const saved = getCookie('cart');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
   const [catalogStatus, setCatalogStatus] = useState<DataStatus>('loading');
   const [activePage, setActivePage] = useState<'home' | 'products' | 'productDetail' | 'checkout'>(() => {
@@ -34,6 +45,68 @@ export default function App() {
   );
   const [selectedCatalogFilter, setSelectedCatalogFilter] = useState<string | null>(null);
   const [productReturnPage, setProductReturnPage] = useState<'home' | 'products'>('home');
+
+  const [cartId, setCartId] = useState<string | null>(null);
+  const isCartSyncInitialized = useRef(false);
+
+  useEffect(() => {
+    const initCart = async () => {
+      let currentCartId = getCookie('cart_id');
+      if (!currentCartId) {
+        currentCartId = typeof crypto?.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        setCookie('cart_id', currentCartId, 30);
+      }
+      setCartId(currentCartId);
+
+      try {
+        const cartDocRef = doc(db, 'carts', currentCartId);
+        const cartSnapshot = await getDoc(cartDocRef);
+        if (cartSnapshot.exists()) {
+          const data = cartSnapshot.data();
+          if (data && Array.isArray(data.items)) {
+            setCartLines((current) => {
+              if (current.length === 0) {
+                return data.items;
+              }
+              return current;
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Error loading cart from Firestore:', err);
+      } finally {
+        isCartSyncInitialized.current = true;
+      }
+    };
+
+    initCart();
+  }, []);
+
+  useEffect(() => {
+    try {
+      setCookie('cart', JSON.stringify(cartLines), 30);
+    } catch (e) {
+      console.error('Error saving cart cookie:', e);
+    }
+
+    if (!cartId || !isCartSyncInitialized.current) return;
+
+    const saveCart = async () => {
+      try {
+        const cartDocRef = doc(db, 'carts', cartId);
+        await setDoc(cartDocRef, {
+          items: cartLines,
+          lastUpdated: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.error('Error saving cart to Firestore:', err);
+      }
+    };
+
+    saveCart();
+  }, [cartLines, cartId]);
 
   // Track whether we've received at least one snapshot
   const hasReceivedFirstSnapshot = useRef(false);
@@ -271,6 +344,7 @@ export default function App() {
         onRemove={remove}
         onCheckout={openCheckoutPage}
       />
+      <CookieConsent />
     </>
   );
 }

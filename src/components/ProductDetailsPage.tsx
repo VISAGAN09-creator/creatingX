@@ -4,6 +4,7 @@ import type { DataStatus, Product } from '../types';
 import { formatPrice } from '../utils/scroll';
 import { MagneticButton } from './Magnetic';
 import { SmartImage } from './SmartImage';
+import { getCookie, setCookie } from '../utils/cookies';
 
 type ProductDetailsPageProps = {
   product?: Product;
@@ -77,9 +78,29 @@ function productImages(product: Product) {
 }
 
 function relatedProducts(products: Product[], product: Product) {
+  let preferences: Record<string, number> = {};
+  try {
+    const prefsStr = getCookie('you_may_also_like');
+    if (prefsStr) {
+      preferences = JSON.parse(prefsStr);
+      if (typeof preferences !== 'object' || preferences === null) preferences = {};
+    }
+  } catch (e) {
+    // ignore
+  }
+
   return products
     .filter((item) => item.id !== product.id)
     .sort((a, b) => {
+      const aCat = a.tag || a.theme || 'default';
+      const bCat = b.tag || b.theme || 'default';
+      const aPrefScore = preferences[aCat] || 0;
+      const bPrefScore = preferences[bCat] || 0;
+
+      if (aPrefScore !== bPrefScore) {
+        return bPrefScore - aPrefScore;
+      }
+
       const aThemeMatch = a.theme && product.theme && a.theme === product.theme ? 0 : 1;
       const bThemeMatch = b.theme && product.theme && b.theme === product.theme ? 0 : 1;
       return aThemeMatch - bThemeMatch;
@@ -116,6 +137,44 @@ export function ProductDetailsPage({
     setSelectedSize(sizes.find((size) => size.stock > 0)?.name ?? sizes[0]?.name ?? '');
     setOpenAccordion('description');
   }, [product, colors, sizes]);
+
+  useEffect(() => {
+    if (!product || !product.id) return;
+
+    const consent = getCookie('cookie_consent');
+    if (consent !== 'accepted') return;
+
+    // 1. Update recently_viewed cookie
+    try {
+      const recentlyViewedStr = getCookie('recently_viewed');
+      let recentlyViewed: string[] = [];
+      if (recentlyViewedStr) {
+        recentlyViewed = JSON.parse(recentlyViewedStr);
+        if (!Array.isArray(recentlyViewed)) recentlyViewed = [];
+      }
+
+      const updatedList = [product.id, ...recentlyViewed.filter((id) => id !== product.id)].slice(0, 10);
+      setCookie('recently_viewed', JSON.stringify(updatedList), 30);
+    } catch (e) {
+      console.error('Error updating recently_viewed cookie:', e);
+    }
+
+    // 2. Update you_may_also_like (category preference score) cookie
+    try {
+      const category = product.tag || product.theme || 'default';
+      const prefsStr = getCookie('you_may_also_like');
+      let prefs: Record<string, number> = {};
+      if (prefsStr) {
+        prefs = JSON.parse(prefsStr);
+        if (typeof prefs !== 'object' || prefs === null) prefs = {};
+      }
+
+      prefs[category] = (prefs[category] || 0) + 1;
+      setCookie('you_may_also_like', JSON.stringify(prefs), 30);
+    } catch (e) {
+      console.error('Error updating you_may_also_like preference cookie:', e);
+    }
+  }, [product]);
 
   useEffect(() => {
     if (!sizeGuideOpen) return undefined;
