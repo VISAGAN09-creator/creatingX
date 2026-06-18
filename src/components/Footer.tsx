@@ -79,7 +79,7 @@ export function Footer() {
         </div>
 
         <div className="flex flex-col gap-6 pt-8 sm:flex-row sm:items-center sm:justify-between sm:pt-10">
-          <p className="text-xs text-metal-text">© 2026 MetalFlux. All rights reserved.</p>
+          <p className="text-xs text-metal-text">© {new Date().getFullYear()} Varataaa. All rights reserved.</p>
           <div className="flex gap-4 sm:gap-5">
             {[
               { label: 'Instagram', icon: Instagram },
@@ -101,6 +101,11 @@ export function Footer() {
             })}
           </div>
         </div>
+      </div>
+      <div className="relative -mx-5 sm:-mx-8 lg:-mx-12 overflow-hidden select-none pointer-events-none mt-4 sm:mt-6 lg:mt-8 -mb-6 sm:-mb-8 lg:-mb-10">
+        <h1 className="text-[11vw] font-display font-black text-center leading-none tracking-normal uppercase select-none bg-gradient-to-b from-[#ff2c2c]/[0.12] to-[#ff2c2c]/[0.01] bg-clip-text text-transparent transform -translate-x-[1vw]">
+          Varataaa
+        </h1>
       </div>
     </footer>
   );
