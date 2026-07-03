@@ -5,6 +5,7 @@ export const navLinks: NavLink[] = [
   { label: 'Latest Drop', href: '#latest-drop' },
   { label: 'Collections', href: '#collections' },
   { label: 'Lookbook', href: '#lookbook' },
+  { label: 'TOTD', href: '#totd' },
   { label: 'Customize', href: '#customize' },
   { label: 'About', href: '#about' },
   { label: 'Contact', href: '#contact' },

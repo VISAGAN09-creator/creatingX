@@ -4,7 +4,11 @@ import { footerColumns } from '../data/siteData';
 import { MagneticButton } from './Magnetic';
 import logo from '../assets/logo.png';
 
-export function Footer() {
+type FooterProps = {
+  activePage?: string;
+};
+
+export function Footer({ activePage }: FooterProps) {
   const [email, setEmail] = useState('');
   const [joined, setJoined] = useState(false);
 
@@ -21,7 +25,13 @@ export function Footer() {
         <div className="grid gap-10 border-b border-metal-light pb-12 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr] lg:gap-14 lg:pb-20">
           <div>
             <div className="mb-5">
-              <img src={logo} alt="METALFLUX" className="h-10 w-auto object-contain" />
+              {activePage === 'totd' ? (
+                <span className="font-display text-lg font-bold tracking-wider text-black uppercase">
+                  Thoughts Of The Day
+                </span>
+              ) : (
+                <img src={logo} alt="METALFLUX" className="h-10 w-auto object-contain" />
+              )}
             </div>
             <p className="max-w-[300px] text-[0.95rem] leading-7 text-metal-dark">
               Custom print t-shirts for the bold. Unconventional shapes, liquid metal aesthetics, and
@@ -102,11 +112,13 @@ export function Footer() {
           </div>
         </div>
       </div>
-      <div className="relative -mx-5 sm:-mx-8 lg:-mx-12 overflow-hidden select-none pointer-events-none mt-4 sm:mt-6 lg:mt-8 -mb-6 sm:-mb-8 lg:-mb-10">
-        <h1 className="text-[11vw] font-display font-black text-center leading-none tracking-normal uppercase select-none bg-gradient-to-b from-[#ff2c2c]/[0.12] to-[#ff2c2c]/[0.01] bg-clip-text text-transparent transform -translate-x-[1vw]">
-          Varataaa
-        </h1>
-      </div>
+      {activePage !== 'totd' && (
+        <div className="relative -mx-5 sm:-mx-8 lg:-mx-12 overflow-hidden select-none pointer-events-none mt-4 sm:mt-6 lg:mt-8 -mb-6 sm:-mb-8 lg:-mb-10">
+          <h1 className="text-[11vw] font-display font-black text-center leading-none tracking-normal uppercase select-none bg-gradient-to-b from-[#ff2c2c]/[0.12] to-[#ff2c2c]/[0.01] bg-clip-text text-transparent transform -translate-x-[1vw]">
+            Varataaa
+          </h1>
+        </div>
+      )}
     </footer>
   );
 }

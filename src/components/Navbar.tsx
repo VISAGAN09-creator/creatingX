@@ -11,9 +11,10 @@ type NavbarProps = {
   onCartOpen: () => void;
   onSearchOpen: () => void;
   onNavigate?: (href: string) => void;
+  activePage?: string;
 };
 
-export function Navbar({ cartCount, onCartOpen, onSearchOpen, onNavigate }: NavbarProps) {
+export function Navbar({ cartCount, onCartOpen, onSearchOpen, onNavigate, activePage }: NavbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -52,7 +53,13 @@ export function Navbar({ cartCount, onCartOpen, onSearchOpen, onNavigate }: Navb
           className="flex items-center"
           onClick={() => handleNavigate('#hero')}
         >
-          <img src={logo} alt="METALFLUX" className="h-9 sm:h-11 w-auto object-contain" />
+          {activePage === 'totd' ? (
+            <span className="font-display text-lg sm:text-xl font-bold tracking-wider text-black uppercase">
+              Thoughts Of The Day
+            </span>
+          ) : (
+            <img src={logo} alt="METALFLUX" className="h-9 sm:h-11 w-auto object-contain" />
+          )}
         </button>
 
         <ul className="hidden list-none items-center gap-8 lg:flex xl:gap-10">

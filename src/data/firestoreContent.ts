@@ -498,3 +498,24 @@ export function subscribeToLookbook(
     },
   );
 }
+
+/**
+ * Subscribe to real-time TOTD updates.
+ * Returns an unsubscribe function.
+ */
+export function subscribeToTOTD(
+  onUpdate: (products: Product[]) => void,
+  onError?: (error: Error) => void,
+): Unsubscribe {
+  return onSnapshot(
+    collection(db, 'TOTD'),
+    (snapshot) => {
+      const items = snapshot.docs.map((d) => toProduct(d.id, d.data(), 'TOTD'));
+      onUpdate(sortByOrder(items));
+    },
+    (error) => {
+      console.error('Firestore TOTD snapshot error:', error);
+      onError?.(error);
+    },
+  );
+}

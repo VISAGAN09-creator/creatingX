@@ -15,12 +15,13 @@ import { Navbar } from './components/Navbar';
 import { ProductDetailsPage } from './components/ProductDetailsPage';
 import { ProductViewingPage } from './components/ProductViewingPage';
 import { SearchDrawer } from './components/SearchDrawer';
-import { subscribeToProducts } from './data/firestoreContent';
+import { subscribeToProducts, subscribeToTOTD } from './data/firestoreContent';
 import type { CartLine, DataStatus, Product } from './types';
 import { scrollToHash } from './utils/scroll';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from './lib/firebase';
 import { getCookie, setCookie } from './utils/cookies';
+import { TOTD } from './components/TOTD';
 
 export default function App() {
   const [cartOpen, setCartOpen] = useState(false);
@@ -35,9 +36,12 @@ export default function App() {
   });
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
   const [catalogStatus, setCatalogStatus] = useState<DataStatus>('loading');
-  const [activePage, setActivePage] = useState<'home' | 'products' | 'productDetail' | 'checkout'>(() => {
+  const [totdProducts, setTotdProducts] = useState<Product[]>([]);
+  const [totdStatus, setTotdStatus] = useState<DataStatus>('loading');
+  const [activePage, setActivePage] = useState<'home' | 'products' | 'productDetail' | 'checkout' | 'totd'>(() => {
     if (window.location.hash === '#checkout') return 'checkout';
     if (window.location.hash.startsWith('#product-')) return 'productDetail';
+    if (window.location.hash === '#totd') return 'totd';
     return window.location.hash === '#products' ? 'products' : 'home';
   });
   const [selectedProductId, setSelectedProductId] = useState<string | null>(() =>
@@ -46,7 +50,7 @@ export default function App() {
       : null,
   );
   const [selectedCatalogFilter, setSelectedCatalogFilter] = useState<string | null>(null);
-  const [productReturnPage, setProductReturnPage] = useState<'home' | 'products'>('home');
+  const [productReturnPage, setProductReturnPage] = useState<'home' | 'products' | 'totd'>('home');
 
   const [cartId, setCartId] = useState<string | null>(null);
   const isCartSyncInitialized = useRef(false);
@@ -112,6 +116,7 @@ export default function App() {
 
   // Track whether we've received at least one snapshot
   const hasReceivedFirstSnapshot = useRef(false);
+  const hasReceivedFirstTotdSnapshot = useRef(false);
 
   // Real-time subscription: products auto-update when Firestore changes
   useEffect(() => {
@@ -134,6 +139,26 @@ export default function App() {
     return unsubscribe;
   }, []);
 
+  // Real-time subscription: TOTD products auto-update when Firestore changes
+  useEffect(() => {
+    const unsubscribe = subscribeToTOTD(
+      (items) => {
+        setTotdProducts(items);
+        setTotdStatus('ready');
+        hasReceivedFirstTotdSnapshot.current = true;
+      },
+      (error) => {
+        console.error('Unable to load TOTD products from Firestore', error);
+        if (!hasReceivedFirstTotdSnapshot.current) {
+          setTotdProducts([]);
+          setTotdStatus('error');
+        }
+      },
+    );
+
+    return unsubscribe;
+  }, []);
+
   useEffect(() => {
     const syncPageFromHash = () => {
       if (window.location.hash === '#checkout') {
@@ -146,6 +171,13 @@ export default function App() {
       if (window.location.hash.startsWith('#product-')) {
         setSelectedProductId(decodeURIComponent(window.location.hash.replace('#product-', '')));
         setActivePage('productDetail');
+        return;
+      }
+
+      if (window.location.hash === '#totd') {
+        setSelectedProductId(null);
+        setSelectedCatalogFilter(null);
+        setActivePage('totd');
         return;
       }
 
@@ -175,8 +207,10 @@ export default function App() {
   );
 
   const selectedProduct = useMemo(
-    () => catalogProducts.find((product) => product.id === selectedProductId),
-    [catalogProducts, selectedProductId],
+    () =>
+      catalogProducts.find((product) => product.id === selectedProductId) ||
+      totdProducts.find((product) => product.id === selectedProductId),
+    [catalogProducts, totdProducts, selectedProductId],
   );
 
   const addToCart = useCallback((product: Product) => {
@@ -236,8 +270,8 @@ export default function App() {
 
   const openProductDetail = useCallback(
     (product: Product) => {
-      if (activePage !== 'productDetail') {
-        setProductReturnPage(activePage === 'products' ? 'products' : 'home');
+      if (activePage !== 'productDetail' && activePage !== 'checkout') {
+        setProductReturnPage(activePage);
       }
 
       setSelectedProductId(product.id);
@@ -249,6 +283,14 @@ export default function App() {
   );
 
   const navigateToHomeSection = useCallback((href: string) => {
+    if (href === '#totd') {
+      setActivePage('totd');
+      setSelectedProductId(null);
+      setSelectedCatalogFilter(null);
+      window.history.pushState(null, '', '#totd');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     setActivePage('home');
     setSelectedProductId(null);
     setSelectedCatalogFilter(null);
@@ -259,6 +301,12 @@ export default function App() {
   const closeProductDetail = useCallback(() => {
     if (productReturnPage === 'products') {
       openProductPage();
+      return;
+    }
+    if (productReturnPage === 'totd') {
+      setActivePage('totd');
+      window.history.pushState(null, '', '#totd');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
@@ -275,6 +323,7 @@ export default function App() {
           onCartOpen={() => setCartOpen(true)}
           onSearchOpen={() => setSearchOpen(true)}
           onNavigate={navigateToHomeSection}
+          activePage={activePage}
         />
       )}
       <main className="relative z-[1] overflow-x-hidden">
@@ -292,8 +341,8 @@ export default function App() {
         ) : activePage === 'productDetail' ? (
           <ProductDetailsPage
             product={selectedProduct}
-            products={catalogProducts}
-            status={catalogStatus}
+            products={productReturnPage === 'totd' ? totdProducts : catalogProducts}
+            status={productReturnPage === 'totd' ? totdStatus : catalogStatus}
             onAddToCart={addToCart}
             onOpenProduct={openProductDetail}
             onBack={closeProductDetail}
@@ -303,6 +352,14 @@ export default function App() {
             products={catalogProducts}
             status={catalogStatus}
             initialFilter={selectedCatalogFilter}
+            onAddToCart={addToCart}
+            onOpenProduct={openProductDetail}
+            onBack={() => navigateToHomeSection('#hero')}
+          />
+        ) : activePage === 'totd' ? (
+          <TOTD
+            products={totdProducts}
+            status={totdStatus}
             onAddToCart={addToCart}
             onOpenProduct={openProductDetail}
             onBack={() => navigateToHomeSection('#hero')}
@@ -336,7 +393,7 @@ export default function App() {
           </>
         )}
       </main>
-      {activePage !== 'checkout' && <Footer />}
+      {activePage !== 'checkout' && <Footer activePage={activePage} />}
       <CartDrawer
         isOpen={cartOpen}
         lines={cartLines}
