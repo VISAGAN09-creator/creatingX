@@ -8,3 +8,6 @@ vite.config.d.ts
 tailwind.config.js
 tailwind.config.d.ts
 src/assets/
+firebase-service-account.json
+*.log
+firebase-debug.log

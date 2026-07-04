@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Allow public read access to catalog collections (products, lookbook, TOTD, etc.)
+    // Direct client-side write access to these collections is strictly blocked.
+    match /{collectionName}/{document} {
+      allow read: if collectionName != 'orders' && collectionName != 'mail';
+      allow write: if false;
+    }
+
+    // Allow read access to the _config collection for dynamic collection discovery
+    match /_config/{document} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Secure orders collection.
+    // Clients can never read or write directly.
+    // Read and write operations must go through the secure backend server via Admin SDK.
+    match /orders/{document} {
+      allow read, write: if false;
+    }
+
+    // Secure mail trigger collection.
+    // Clients can never read or write directly, protecting the system from spam/abuse.
+    // Mail creation is handled strictly by the server.
+    match /mail/{document} {
+      allow read, write: if false;
+    }
+  }
+}

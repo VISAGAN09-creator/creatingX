@@ -2,8 +2,7 @@ import { HelpCircle, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { CartLine } from '../types';
 import { SmartImage } from './SmartImage';
-import { addDoc, collection } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+
 import logo from '../assets/logo.png';
 
 type CheckoutPageProps = {
@@ -253,24 +252,8 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
         handler: async (response: any) => {
           setIsPaying(true);
           try {
-            // Verify payment signature on Backend Server API
-            const verifyResponse = await fetch('/api/verify-payment', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-              }),
-            });
-
-            if (!verifyResponse.ok) {
-              const errorData = await verifyResponse.json();
-              throw new Error(errorData.message || 'Signature mismatch: payment verification failed.');
-            }
-
-            // 1. Create order document in Firestore
-            const orderRef = await addDoc(collection(db, 'orders'), {
+            // Prepare order details to be written securely by the server
+            const orderDetails = {
               customer: {
                 email,
                 firstName,
@@ -300,64 +283,30 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
                 shipping,
                 total,
               },
-              payment: {
-                gateway: 'Razorpay',
-                paymentId: response.razorpay_payment_id,
-                orderId: response.razorpay_order_id,
-                signature: response.razorpay_signature,
-              },
-              status: 'paid',
-              createdAt: new Date().toISOString(),
+            };
+
+            // Verify payment signature and store order on Backend Server API
+            const verifyResponse = await fetch('/api/verify-payment', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                orderDetails,
+              }),
             });
 
-            // 2. Create email document to trigger Firebase trigger-email extension
-            const itemsListHtml = lines
-              .map(
-                (line) =>
-                  `<li>${line.name} x ${line.quantity} - ${formatINR((line.price ?? 0) * line.quantity)}</li>`
-              )
-              .join('');
+            if (!verifyResponse.ok) {
+              const errorData = await verifyResponse.json();
+              throw new Error(errorData.message || 'Signature mismatch: payment verification failed.');
+            }
 
-            await addDoc(collection(db, 'mail'), {
-              to: email,
-              message: {
-                subject: `Order Confirmation - Order #${orderRef.id.slice(0, 8).toUpperCase()}`,
-                html: `
-                  <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #1a1a1a;">
-                    <h2 style="font-size: 24px; font-weight: bold; border-bottom: 2px solid #1a1a1a; padding-bottom: 15px; margin-bottom: 20px;">
-                      Order Confirmed!
-                    </h2>
-                    <p>Hi ${firstName},</p>
-                    <p>Thank you for shopping with us! Your payment was successful, and we are preparing your order.</p>
-                    
-                    <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                      <h3 style="margin-top: 0; font-size: 16px;">Order Summary</h3>
-                      <ul>
-                        ${itemsListHtml}
-                      </ul>
-                      <p style="margin-bottom: 0; font-weight: bold;">Total Paid: ${formatINR(total)}</p>
-                    </div>
+            const result = await verifyResponse.json();
 
-                    <div style="margin: 20px 0;">
-                      <h3 style="font-size: 16px;">Delivery Details</h3>
-                      <p style="margin: 0; color: #555555;">
-                        ${address}${apartment ? `, ${apartment}` : ''}<br>
-                        ${city}, ${state} ${pinCode}<br>
-                        ${country}
-                      </p>
-                    </div>
-
-                    <p style="font-size: 12px; color: #888888; margin-top: 40px; border-top: 1px solid #e0e0e0; padding-top: 15px;">
-                      If you have any questions, reply to this email or contact customer support.
-                    </p>
-                  </div>
-                `,
-              },
-            });
-
-            // 3. Clear cart and show success state
+            // Clear cart and show success state using server-returned orderId
             onClearCart();
-            setSuccessOrderId(orderRef.id);
+            setSuccessOrderId(result.orderId);
             setIsPaying(false);
           } catch (err) {
             console.error('Error processing order or verifying payment:', err);
