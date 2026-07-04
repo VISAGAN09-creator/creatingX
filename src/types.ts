@@ -31,6 +31,7 @@ export type Product = {
   dropOrder?: number;
   collectionOrder?: number;
   createdAt?: number;
+  hero?: string;
 };
 
 export type CartLine = Product & {

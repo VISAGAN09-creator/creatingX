@@ -366,7 +366,7 @@ export default function App() {
           />
         ) : (
           <>
-            <Hero />
+            <Hero products={catalogProducts} onOpenProduct={openProductDetail} />
             <LatestDrop
               products={catalogProducts}
               status={catalogStatus}

@@ -339,6 +339,7 @@ function toProduct(id: string, data: DocumentData, sourceCollectionName = produc
     dropOrder: optionalOrder(data.dropOrder) ?? optionalOrder(data.latestDropOrder),
     collectionOrder: optionalOrder(data.collectionOrder) ?? optionalOrder(data.themeOrder),
     createdAt: timestampValue(data.createdAt) ?? timestampValue(data.updatedAt),
+    hero: text(data.hero) ?? undefined,
   };
 }
 
