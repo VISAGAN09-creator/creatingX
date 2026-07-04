@@ -11,3 +11,4 @@ src/assets/
 firebase-service-account.json
 *.log
 firebase-debug.log
+codex.html

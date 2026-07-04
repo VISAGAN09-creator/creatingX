@@ -187,7 +187,9 @@ export function Hero({
               event.preventDefault();
               scrollToHash('#latest-drop');
             }}
-            className="liquid-metal metal-sheen inline-flex min-h-14 items-center gap-4 bg-white px-8 py-4 text-sm font-semibold uppercase tracking-[0.05em] text-black shadow-none transition-shadow duration-300 hover:shadow-metal sm:px-10"
+            className={`liquid-metal metal-sheen min-h-14 items-center gap-4 bg-white px-8 py-4 text-sm font-semibold uppercase tracking-[0.05em] text-black shadow-none transition-shadow duration-300 hover:shadow-metal sm:px-10 ${
+              heroProducts.length > 0 ? 'hidden sm:inline-flex' : 'inline-flex'
+            }`}
           >
             Explore Latest Drop
             <ArrowRight size={20} strokeWidth={2} />

@@ -5,7 +5,7 @@ service cloud.firestore {
     // Allow public read access to catalog collections (products, lookbook, TOTD, etc.)
     // Direct client-side write access to these collections is strictly blocked.
     match /{collectionName}/{document} {
-      allow read: if collectionName != 'orders' && collectionName != 'mail';
+      allow read: if collectionName != 'orders' && collectionName != 'mail' && collectionName != 'carts';
       allow write: if false;
     }
 
@@ -27,6 +27,13 @@ service cloud.firestore {
     // Mail creation is handled strictly by the server.
     match /mail/{document} {
       allow read, write: if false;
+    }
+
+    // Allow users to sync and load their individual carts using the cart ID,
+    // but prevent listing all active carts for privacy.
+    match /carts/{cartId} {
+      allow get, write: if true;
+      allow list: if false;
     }
   }
 }
