@@ -1,7 +1,7 @@
 import { motion, useMotionValue, useReducedMotion } from 'framer-motion';
 import { Plus } from 'lucide-react';
 import type { Product } from '../types';
-import { formatPrice } from '../utils/scroll';
+import { formatPrice } from '../utils/format';
 import { MagneticButton } from './Magnetic';
 import { Reveal } from './Reveal';
 import { SmartImage } from './SmartImage';

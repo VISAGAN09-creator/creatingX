@@ -2,12 +2,12 @@ import {
   collection,
   doc,
   getDoc,
-  getDocs,
   onSnapshot,
   type DocumentData,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { slugify } from '../utils/string';
 import type { LookbookItem, Product, ProductColor, ProductSize, ProductSizeGuideRow } from '../types';
 
 const productsCollectionName = import.meta.env.VITE_FIRESTORE_PRODUCTS_COLLECTION || 'products';
@@ -63,13 +63,7 @@ function collectionLabel(collectionName: string) {
   return collectionName.replace(/\s+collection$/i, '').trim() || collectionName;
 }
 
-function slugify(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
+
 
 function textList(value: unknown): string[] {
   if (Array.isArray(value)) {
@@ -357,27 +351,7 @@ function toLookbookItem(id: string, data: DocumentData): LookbookItem {
   };
 }
 
-export async function getProducts() {
-  const productCollectionNames = await discoverCollectionNames();
 
-  const snapshots = await Promise.all(
-    productCollectionNames.map(async (collectionName) => ({
-      collectionName,
-      snapshot: await getDocs(collection(db, collectionName)),
-    })),
-  );
-
-  return sortByOrder(
-    snapshots.flatMap(({ collectionName, snapshot }) =>
-      snapshot.docs.map((doc) => toProduct(doc.id, doc.data(), collectionName)),
-    ),
-  );
-}
-
-export async function getLookbookItems() {
-  const snapshot = await getDocs(collection(db, lookbookCollectionName));
-  return sortByOrder(snapshot.docs.map((doc) => toLookbookItem(doc.id, doc.data())));
-}
 
 /**
  * Subscribe to real-time product updates across all discovered collections.
@@ -480,25 +454,7 @@ export function subscribeToProducts(
   };
 }
 
-/**
- * Subscribe to real-time lookbook updates.
- * Returns an unsubscribe function.
- */
-export function subscribeToLookbook(
-  onUpdate: (items: LookbookItem[]) => void,
-  onError?: (error: Error) => void,
-): Unsubscribe {
-  return onSnapshot(
-    collection(db, lookbookCollectionName),
-    (snapshot) => {
-      onUpdate(sortByOrder(snapshot.docs.map((d) => toLookbookItem(d.id, d.data()))));
-    },
-    (error) => {
-      console.error('Firestore lookbook snapshot error:', error);
-      onError?.(error);
-    },
-  );
-}
+
 
 /**
  * Subscribe to real-time TOTD updates.

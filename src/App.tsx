@@ -99,7 +99,9 @@ export default function App() {
 
     if (!cartId || !isCartSyncInitialized.current) return;
 
-    const saveCart = async () => {
+    // Debounce Firestore sync — waits 800ms after the last cart change before
+    // writing, so rapid +/- clicks don't each trigger a separate setDoc call.
+    const timeout = setTimeout(async () => {
       try {
         const cartDocRef = doc(db, 'carts', cartId);
         await setDoc(cartDocRef, {
@@ -109,9 +111,9 @@ export default function App() {
       } catch (err) {
         console.error('Error saving cart to Firestore:', err);
       }
-    };
+    }, 800);
 
-    saveCart();
+    return () => clearTimeout(timeout);
   }, [cartLines, cartId]);
 
   // Track whether we've received at least one snapshot
@@ -377,8 +379,6 @@ export default function App() {
             <Collections
               products={catalogProducts}
               status={catalogStatus}
-              onAddToCart={addToCart}
-              onOpenProduct={openProductDetail}
               onViewAll={openProductPage}
             />
             <Lookbook

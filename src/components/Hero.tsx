@@ -1,7 +1,8 @@
-import { motion, useMotionValue, useReducedMotion, useTransform } from 'framer-motion';
+import { motion, useMotionValue, useReducedMotion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import { useState, type MouseEvent } from 'react';
-import { scrollToHash, formatPrice } from '../utils/scroll';
+import { scrollToHash } from '../utils/scroll';
+import { formatPrice } from '../utils/format';
 import { MagneticAnchor } from './Magnetic';
 import { SmartImage } from './SmartImage';
 import heroVideo from '../assets/hero video.mp4';
@@ -25,12 +26,6 @@ export function Hero({
   const [videoFailed, setVideoFailed] = useState(false);
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
-  const shape2X = useTransform(mouseX, (value) => value * -0.4);
-  const shape2Y = useTransform(mouseY, (value) => value * -0.4);
-  const shape3X = useTransform(mouseX, (value) => value * 0.35);
-  const shape3Y = useTransform(mouseY, (value) => value * 0.35);
-  const starX = useTransform(mouseX, (value) => value * 0.22);
-  const starY = useTransform(mouseY, (value) => value * 0.22);
 
   const heroProducts = (products ?? [])
     .filter((p) => p.hero?.toLowerCase() === 'yes')

@@ -1,6 +1,7 @@
 import { HelpCircle, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { CartLine } from '../types';
+import { formatPrice } from '../utils/format';
 import { SmartImage } from './SmartImage';
 
 import logo from '../assets/logo.png';
@@ -42,22 +43,8 @@ type RazorpayConstructor = new (options: RazorpayOptions) => { open: () => void 
 type ToastState = { message: string; type?: 'success' | 'error' } | null;
 
 const RAZORPAY_SCRIPT_URL = 'https://checkout.razorpay.com/v1/checkout.js';
-const DISCOUNT_CODES: Record<string, number> = {
-  METAL10: 0.1,
-  SAVE20: 0.2,
-  FLUX50: 0.5,
-  WELCOME: 0.15,
-};
 
-function formatINR(value: number | null | undefined) {
-  if (typeof value !== 'number') return 'Price unavailable';
 
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    minimumFractionDigits: 2,
-  }).format(value);
-}
 
 function loadRazorpayScript() {
   return new Promise<boolean>((resolve) => {
@@ -86,9 +73,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
   const [state, setState] = useState('TN');
   const [pinCode, setPinCode] = useState('');
   const [phone, setPhone] = useState('');
-  const [discountCode, setDiscountCode] = useState('');
-  const [discount, setDiscount] = useState(0);
-  const [discountApplied, setDiscountApplied] = useState(false);
+
   const [freeShipping, setFreeShipping] = useState(false);
   const [errors, setErrors] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<ToastState>(null);
@@ -96,9 +81,9 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
   const [successOrderId, setSuccessOrderId] = useState<string | null>(null);
 
   const itemCount = useMemo(() => lines.reduce((total, line) => total + line.quantity, 0), [lines]);
-  const taxable = Math.max(0, subtotal - discount);
+  const taxable = subtotal;
   const tax = Math.round(taxable * 0.18 * 100) / 100;
-  const shipping = freeShipping ? 0 : 0;
+  const shipping = freeShipping ? 0 : 150;
   const total = taxable + shipping + tax;
 
   const showToast = (message: string, type?: 'success' | 'error') => {
@@ -130,29 +115,12 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
   const checkAddress = (nextAddress = address, nextPinCode = pinCode) => {
     if (nextAddress.length > 5 && nextPinCode.length === 6) {
       setFreeShipping(true);
+    } else {
+      setFreeShipping(false);
     }
   };
 
-  const applyDiscount = () => {
-    const code = discountCode.trim().toUpperCase();
-    if (!code) {
-      showToast('Please enter a discount code', 'error');
-      return;
-    }
 
-    const discountRate = DISCOUNT_CODES[code];
-    if (!discountRate) {
-      setErrors((current) => new Set(current).add('discountCode'));
-      showToast('Invalid discount code', 'error');
-      window.setTimeout(() => clearError('discountCode'), 2000);
-      return;
-    }
-
-    const nextDiscount = Math.round(subtotal * discountRate);
-    setDiscount(nextDiscount);
-    setDiscountApplied(true);
-    showToast(`Discount applied: ${code} (-${formatINR(nextDiscount)})`, 'success');
-  };
 
   const validateRequiredFields = () => {
     const requiredFields = [
@@ -192,12 +160,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
       return;
     }
 
-    const key = (import.meta.env.VITE_RAZORPAY_KEY_ID as string | undefined)?.trim();
-    if (!key) {
-      setIsPaying(false);
-      showToast('Add Razorpay details in .env to enable payments', 'error');
-      return;
-    }
+    const clientKey = (import.meta.env.VITE_RAZORPAY_KEY_ID as string | undefined)?.trim();
 
     const isLoaded = await loadRazorpayScript();
     if (!isLoaded || !('Razorpay' in window)) {
@@ -223,6 +186,11 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
       }
 
       const orderData = await createResponse.json();
+      const key = orderData.key_id || clientKey;
+
+      if (!key) {
+        throw new Error('Razorpay public key is missing.');
+      }
 
       const Razorpay = window.Razorpay as any;
       const rzp = new Razorpay({
@@ -244,7 +212,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
           city,
           state,
           pinCode,
-          discountCode,
+
         },
         theme: {
           color: '#1a1a1a',
@@ -277,8 +245,6 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
               })),
               pricing: {
                 subtotal,
-                discount,
-                discountCode,
                 tax,
                 shipping,
                 total,
@@ -623,49 +589,23 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
                       <p className="text-xs text-[#666666]">{line.model ?? line.theme ?? line.tag ?? 'Selected item'}</p>
                     </div>
                     <p className="whitespace-nowrap text-right text-sm font-semibold">
-                      {formatINR((line.price ?? 0) * line.quantity)}
+                      {formatPrice((line.price ?? 0) * line.quantity)}
                     </p>
                   </article>
                 ))
               )}
             </div>
 
-            <div className="mb-6 flex gap-2.5">
-              <input
-                value={discountCode}
-                disabled={discountApplied}
-                onFocus={() => clearError('discountCode')}
-                onChange={(event) => setDiscountCode(event.target.value)}
-                placeholder="Discount code or gift card"
-                className={`h-12 min-w-0 flex-1 rounded-lg border px-3.5 text-sm outline-none transition focus:border-[#1a1a1a] ${errors.has('discountCode') ? 'border-[#c0392b]' : 'border-[#e0e0e0]'
-                  } ${discountApplied ? 'bg-white/60 text-[#999999]' : 'bg-white'}`}
-              />
-              <button
-                type="button"
-                data-cursor="hover"
-                className={`h-12 rounded-lg border px-6 text-[13px] font-semibold transition ${discountApplied
-                    ? 'border-[#27ae60] bg-[#27ae60] text-white'
-                    : 'border-[#e0e0e0] bg-transparent text-[#666666] hover:border-[#1a1a1a] hover:text-[#1a1a1a]'
-                  }`}
-                onClick={applyDiscount}
-              >
-                {discountApplied ? 'Applied' : 'Apply'}
-              </button>
-            </div>
+
 
             <div className="flex items-center justify-between py-2 text-sm">
               <span className="text-[#666666]">
                 Subtotal - {itemCount} {itemCount === 1 ? 'item' : 'items'}
               </span>
-              <span className="font-medium">{formatINR(subtotal)}</span>
+              <span className="font-medium">{formatPrice(subtotal)}</span>
             </div>
 
-            {discount > 0 && (
-              <div className="flex items-center justify-between py-2 text-sm">
-                <span className="text-[#666666]">Discount</span>
-                <span className="font-medium text-[#27ae60]">-{formatINR(discount)}</span>
-              </div>
-            )}
+
 
             <div className="flex items-center justify-between py-2 text-sm">
               <span className="flex items-center gap-1.5 text-[#666666]">
@@ -679,8 +619,8 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
                   <HelpCircle size={14} strokeWidth={1.5} className="opacity-50 transition hover:opacity-100" />
                 </button>
               </span>
-              <span className={`font-medium ${freeShipping ? 'text-[#27ae60]' : 'text-[#666666]'}`}>
-                {freeShipping ? 'FREE' : 'Enter shipping address'}
+              <span className={`font-medium ${freeShipping ? 'text-[#27ae60]' : 'text-black'}`}>
+                {freeShipping ? 'FREE' : formatPrice(150)}
               </span>
             </div>
 
@@ -690,10 +630,10 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
               <span className="font-display text-lg font-bold">Total</span>
               <div className="flex items-baseline gap-2">
                 <span className="text-xs font-medium text-[#666666]">INR</span>
-                <span className="font-display text-[22px] font-bold tracking-normal">{formatINR(total)}</span>
+                <span className="font-display text-[22px] font-bold tracking-normal">{formatPrice(total)}</span>
               </div>
             </div>
-            <p className="mb-6 text-right text-xs text-[#666666]">Including {formatINR(tax)} in taxes</p>
+            <p className="mb-6 text-right text-xs text-[#666666]">Including {formatPrice(tax)} in taxes</p>
 
             <button
               type="button"

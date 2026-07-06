@@ -32,8 +32,13 @@ service cloud.firestore {
     // Allow users to sync and load their individual carts using the cart ID,
     // but prevent listing all active carts for privacy.
     match /carts/{cartId} {
-      allow get, write: if true;
+      allow get: if true;
+      allow create, update: if request.resource.data.keys().hasOnly(['items', 'lastUpdated'])
+                            && request.resource.data.items is list
+                            && request.resource.size() < 50000;
+      allow delete: if true;
       allow list: if false;
     }
+
   }
 }

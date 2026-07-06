@@ -12,11 +12,24 @@ export function Footer({ activePage }: FooterProps) {
   const [email, setEmail] = useState('');
   const [joined, setJoined] = useState(false);
 
-  const handleJoin = () => {
-    if (!email.trim()) return;
-    setJoined(true);
-    setEmail('');
-    window.setTimeout(() => setJoined(false), 2000);
+  const handleJoin = async () => {
+    const trimmed = email.trim();
+    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return;
+
+    try {
+      const response = await fetch('/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: trimmed }),
+      });
+      if (response.ok) {
+        setJoined(true);
+        setEmail('');
+        window.setTimeout(() => setJoined(false), 2000);
+      }
+    } catch (err) {
+      console.error('Subscription error:', err);
+    }
   };
 
   return (

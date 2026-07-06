@@ -26,7 +26,20 @@ export function LiquidCanvas() {
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
     };
 
-    const draw = () => {
+    let lastTime = 0;
+    const fpsInterval = 1000 / 30; // Cap at 30 FPS
+
+    const draw = (timestamp?: number) => {
+      if (!shouldReduceMotion) {
+        animationFrame = window.requestAnimationFrame(draw);
+      }
+
+      const now = timestamp || performance.now();
+      const elapsed = now - lastTime;
+
+      if (elapsed < fpsInterval) return;
+      lastTime = now - (elapsed % fpsInterval);
+
       context.clearRect(0, 0, width, height);
 
       const gradient = context.createRadialGradient(
@@ -50,7 +63,8 @@ export function LiquidCanvas() {
         context.strokeStyle = `rgba(180, 180, 180, ${0.02 + i * 0.005})`;
         context.lineWidth = 1;
 
-        for (let x = 0; x < width; x += 5) {
+        // Increased step size from 5 to 15 to significantly reduce drawing operations
+        for (let x = 0; x < width; x += 15) {
           const y =
             height * 0.3 +
             i * 80 +
@@ -65,8 +79,7 @@ export function LiquidCanvas() {
       }
 
       if (!shouldReduceMotion) {
-        time += 0.01;
-        animationFrame = window.requestAnimationFrame(draw);
+        time += 0.02; // Adjusted speed to compensate for 30 FPS cap
       }
     };
 

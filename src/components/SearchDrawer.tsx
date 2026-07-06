@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Search, X, ShoppingBag } from 'lucide-react';
 import { useEffect, useState, useMemo } from 'react';
 import type { Product } from '../types';
-import { formatPrice } from '../utils/scroll';
+import { formatPrice } from '../utils/format';
 import { SmartImage } from './SmartImage';
 
 type SearchDrawerProps = {

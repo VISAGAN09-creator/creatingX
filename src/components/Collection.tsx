@@ -5,12 +5,11 @@ import type { DataStatus, Product, ProductCollection } from '../types';
 import { Reveal } from './Reveal';
 import { SectionHeader } from './SectionHeader';
 import { SmartImage } from './SmartImage';
+import { slugify } from '../utils/string';
 
 type CollectionsProps = {
   products: Product[];
   status: DataStatus;
-  onAddToCart: (product: Product) => void;
-  onOpenProduct: (product: Product) => void;
   onViewAll: (filter?: string) => void;
 };
 
@@ -18,13 +17,7 @@ function collectionName(product: Product) {
   return product.theme?.trim() || product.filters?.[0]?.trim() || 'Core';
 }
 
-function slugify(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
+
 
 function countLabel(count: number) {
   return `${count} ${count === 1 ? 'Product' : 'Products'}`;

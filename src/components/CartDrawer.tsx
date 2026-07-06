@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
 import { useEffect } from 'react';
 import type { CartLine } from '../types';
-import { formatPrice } from '../utils/scroll';
+import { formatPrice } from '../utils/format';
 import { MagneticButton } from './Magnetic';
 import { SmartImage } from './SmartImage';
 

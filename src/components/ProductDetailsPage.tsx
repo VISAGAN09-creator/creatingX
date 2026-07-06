@@ -1,7 +1,7 @@
 import { ArrowLeft, Plus, Ruler, ShoppingBag, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { DataStatus, Product } from '../types';
-import { formatPrice } from '../utils/scroll';
+import { formatPrice } from '../utils/format';
 import { MagneticButton } from './Magnetic';
 import { SmartImage } from './SmartImage';
 import { getCookie, setCookie } from '../utils/cookies';
