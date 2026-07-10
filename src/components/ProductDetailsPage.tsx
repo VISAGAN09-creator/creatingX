@@ -405,7 +405,7 @@ export function ProductDetailsPage({
                       data-cursor={isOutOfStock ? undefined : 'hover'}
                       disabled={isOutOfStock}
                       aria-pressed={selectedSize === size.name}
-                      title={isOutOfStock ? `${size.name} out of stock` : `${size.stock} in stock`}
+                      title={isOutOfStock ? `${size.name} out of stock` : undefined}
                       className={`min-h-11 min-w-[52px] border px-4 text-xs font-semibold tracking-[0.04em] transition ${
                         selectedSize === size.name
                           ? 'border-black bg-black text-white'

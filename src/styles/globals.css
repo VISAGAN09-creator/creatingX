@@ -48,6 +48,7 @@ input {
 }
 
 @media (pointer: fine) {
+
   body,
   a,
   button,
@@ -61,6 +62,7 @@ input {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {
@@ -94,17 +96,15 @@ input {
   position: absolute;
   inset: -2px;
   z-index: -1;
-  background: linear-gradient(
-    45deg,
-    var(--liquid-1),
-    var(--liquid-2),
-    var(--liquid-3),
-    var(--liquid-4),
-    var(--liquid-1),
-    var(--liquid-2),
-    var(--liquid-3),
-    var(--liquid-4)
-  );
+  background: linear-gradient(45deg,
+      var(--liquid-1),
+      var(--liquid-2),
+      var(--liquid-3),
+      var(--liquid-4),
+      var(--liquid-1),
+      var(--liquid-2),
+      var(--liquid-3),
+      var(--liquid-4));
   background-size: 400% 400%;
   content: '';
   opacity: 0;
@@ -170,10 +170,12 @@ input {
 }
 
 @keyframes liquidGradient {
+
   0%,
   100% {
     background-position: 0% 50%;
   }
+
   50% {
     background-position: 100% 50%;
   }
@@ -183,6 +185,7 @@ input {
   from {
     transform: translateX(0);
   }
+
   to {
     transform: translateX(-33.333%);
   }
