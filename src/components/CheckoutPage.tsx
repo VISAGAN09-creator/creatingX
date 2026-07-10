@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import type { CartLine } from '../types';
 import { formatPrice } from '../utils/format';
 import { SmartImage } from './SmartImage';
+import { loadGatewayScript, openCheckout } from '../lib/paymentGateway';
 
 import logo from '../assets/logo.png';
 
@@ -13,53 +14,7 @@ type CheckoutPageProps = {
   onBack: () => void;
 };
 
-type RazorpayOptions = {
-  key: string;
-  amount: number;
-  currency: string;
-  name: string;
-  description: string;
-  order_id?: string;
-  prefill?: {
-    email?: string;
-    contact?: string;
-    name?: string;
-  };
-  notes?: Record<string, string>;
-  theme?: {
-    color?: string;
-  };
-  handler?: (response: {
-    razorpay_payment_id: string;
-    razorpay_order_id: string;
-    razorpay_signature: string;
-  }) => void;
-  modal?: {
-    ondismiss?: () => void;
-  };
-};
-
-type RazorpayConstructor = new (options: RazorpayOptions) => { open: () => void };
 type ToastState = { message: string; type?: 'success' | 'error' } | null;
-
-const RAZORPAY_SCRIPT_URL = 'https://checkout.razorpay.com/v1/checkout.js';
-
-
-
-function loadRazorpayScript() {
-  return new Promise<boolean>((resolve) => {
-    if ('Razorpay' in window) {
-      resolve(true);
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = RAZORPAY_SCRIPT_URL;
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.body.appendChild(script);
-  });
-}
 
 export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutPageProps) {
   const [email, setEmail] = useState('');
@@ -154,28 +109,21 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
 
     setIsPaying(true);
 
-    const paymentLink = import.meta.env.VITE_RAZORPAY_PAYMENT_LINK as string | undefined;
-    if (paymentLink?.trim()) {
-      window.location.href = paymentLink.trim();
-      return;
-    }
-
-    const clientKey = (import.meta.env.VITE_RAZORPAY_KEY_ID as string | undefined)?.trim();
-
-    const isLoaded = await loadRazorpayScript();
-    if (!isLoaded || !('Razorpay' in window)) {
+    // Load the gateway's client-side SDK/script
+    const isLoaded = await loadGatewayScript();
+    if (!isLoaded) {
       setIsPaying(false);
-      showToast('Unable to load Razorpay right now. Please try again.', 'error');
+      showToast('Unable to load payment gateway. Please try again.', 'error');
       return;
     }
 
     try {
-      // Create Razorpay Order via Backend Server API
+      // Step 1: Create order via backend server API
       const createResponse = await fetch('/api/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: Math.round(total * 100), // paise
+          amount: Math.round(total * 100), // smallest currency unit
           currency: 'INR',
         }),
       });
@@ -186,114 +134,67 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
       }
 
       const orderData = await createResponse.json();
-      const key = orderData.key_id || clientKey;
 
-      if (!key) {
-        throw new Error('Razorpay public key is missing.');
-      }
-
-      const Razorpay = window.Razorpay as any;
-      const rzp = new Razorpay({
-        key,
-        amount: orderData.amount,
-        currency: orderData.currency,
-        name: 'METALFLUX',
-        description: `${itemCount} ${itemCount === 1 ? 'item' : 'items'}`,
-        order_id: orderData.order_id,
-        prefill: {
+      // Step 2: Open the gateway's checkout UI
+      openCheckout(
+        {
           email,
-          contact: phone,
+          phone,
           name: [firstName, lastName].filter(Boolean).join(' '),
+          itemCount,
+          orderData,
         },
-        notes: {
-          country,
-          address,
-          apartment,
-          city,
-          state,
-          pinCode,
+        {
+          // Step 3: On success — verify payment and store order
+          onSuccess: async (paymentData) => {
+            setIsPaying(true);
+            try {
+              const orderDetails = {
+                customer: { email, firstName, lastName, phone },
+                shipping: { country, address, apartment, city, state, pinCode },
+                items: lines.map((line) => ({
+                  id: line.id,
+                  name: line.name,
+                  price: line.price,
+                  quantity: line.quantity,
+                  image: line.image,
+                })),
+                pricing: { subtotal, tax, shipping, total },
+              };
 
-        },
-        theme: {
-          color: '#1a1a1a',
-        },
-        handler: async (response: any) => {
-          setIsPaying(true);
-          try {
-            // Prepare order details to be written securely by the server
-            const orderDetails = {
-              customer: {
-                email,
-                firstName,
-                lastName,
-                phone,
-              },
-              shipping: {
-                country,
-                address,
-                apartment,
-                city,
-                state,
-                pinCode,
-              },
-              items: lines.map((line) => ({
-                id: line.id,
-                name: line.name,
-                price: line.price,
-                quantity: line.quantity,
-                image: line.image,
-              })),
-              pricing: {
-                subtotal,
-                tax,
-                shipping,
-                total,
-              },
-            };
+              const verifyResponse = await fetch('/api/verify-payment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ paymentData, orderDetails }),
+              });
 
-            // Verify payment signature and store order on Backend Server API
-            const verifyResponse = await fetch('/api/verify-payment', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                orderDetails,
-              }),
-            });
+              if (!verifyResponse.ok) {
+                const errorData = await verifyResponse.json();
+                throw new Error(errorData.message || 'Payment verification failed.');
+              }
 
-            if (!verifyResponse.ok) {
-              const errorData = await verifyResponse.json();
-              throw new Error(errorData.message || 'Signature mismatch: payment verification failed.');
+              const result = await verifyResponse.json();
+              onClearCart();
+              setSuccessOrderId(result.orderId);
+              setIsPaying(false);
+            } catch (err) {
+              console.error('Error verifying payment:', err);
+              showToast(err instanceof Error ? err.message : 'Payment verification failed', 'error');
+              setIsPaying(false);
             }
+          },
 
-            const result = await verifyResponse.json();
-
-            // Clear cart and show success state using server-returned orderId
-            onClearCart();
-            setSuccessOrderId(result.orderId);
-            setIsPaying(false);
-          } catch (err) {
-            console.error('Error processing order or verifying payment:', err);
-            showToast(err instanceof Error ? err.message : 'Signature verification failed', 'error');
-            setIsPaying(false);
-          }
-        },
-        modal: {
-          ondismiss: () => {
+          onDismiss: () => {
             setIsPaying(false);
           },
+
+          onError: (message) => {
+            console.error('[Payment Error]:', message);
+            setIsPaying(false);
+            showToast(message || 'Payment failed. Please try again.', 'error');
+          },
         },
-      });
-
-      rzp.on('payment.failed', (response: any) => {
-        console.error('[Razorpay Payment Failed]:', response.error);
-        setIsPaying(false);
-        showToast(response.error.description || 'Payment failed. Please try again.', 'error');
-      });
-
-      rzp.open();
+      );
     } catch (err) {
       console.error('Error initiating checkout flow:', err);
       showToast(err instanceof Error ? err.message : 'Error preparing order checkout.', 'error');
@@ -669,8 +570,3 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
   );
 }
 
-declare global {
-  interface Window {
-    Razorpay?: RazorpayConstructor;
-  }
-}

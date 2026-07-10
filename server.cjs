@@ -2,12 +2,11 @@ const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
-const crypto = require('crypto');
-const Razorpay = require('razorpay');
 require('dotenv').config();
 const admin = require('firebase-admin');
 const fs = require('fs');
 const path = require('path');
+const gateway = require('./gateway/index.cjs');
 
 let db = null;
 
@@ -103,8 +102,8 @@ app.use(express.json({ limit: '100kb' }));
 // RATE LIMITING — ABUSE PREVENTION
 // ============================================================================
 // Prevents:
-//  • Spamming Razorpay order creations (exhausts API quota / incurs costs)
-//  • Brute-forcing payment verification signatures
+//  • Spamming order creations (exhausts API quota / incurs costs)
+//  • Brute-forcing payment verification
 //  • Firestore write-cost spikes from repeated verify calls
 // ============================================================================
 
@@ -141,85 +140,69 @@ app.use('/api/', apiLimiter);
 app.use('/api/create-order', paymentLimiter);
 app.use('/api/verify-payment', paymentLimiter);
 
-const keyId = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID;
-const keySecret = process.env.RAZORPAY_KEY_SECRET;
-
-if (!keyId || !keySecret) {
-  console.error('CRITICAL ERROR: Razorpay keys are missing from environment variables!');
-}
-
-const razorpay = new Razorpay({
-  key_id: keyId,
-  key_secret: keySecret,
-});
+console.log(`[Payment Gateway] Active gateway: ${gateway.gatewayName}`);
 
 /**
  * STEP 1: CREATE ORDER ENDPOINT
  * POST /api/create-order
- * Receives: { amount (paise), currency, receipt }
- * Returns: { order_id, amount, currency }
+ * Receives: { amount (smallest currency unit), currency, receipt }
+ * Returns: { success, orderId, amount, currency, gatewayData }
+ *
+ * This endpoint is gateway-agnostic. The actual order creation is
+ * delegated to the gateway adapter in gateway/index.cjs.
  */
 app.post('/api/create-order', async (req, res) => {
   const { amount, currency = 'INR', receipt = 'receipt_order_' + Date.now() } = req.body;
 
-  // Error handling: Validate amount >= 100 paise
+  // Error handling: Validate amount >= 100 (smallest currency unit)
   if (!amount || typeof amount !== 'number' || amount < 100) {
     return res.status(400).json({
       success: false,
-      message: 'Validation Error: Amount must be a number and at least 100 paise (1 INR).',
+      message: 'Validation Error: Amount must be a number and at least 100 (smallest currency unit).',
     });
   }
 
   try {
-    const options = {
-      amount, // amount in paise
-      currency,
-      receipt,
-    };
-
-    console.log(`[Razorpay] Creating order for amount: ${amount} paise (${amount / 100} INR)`);
-    const order = await razorpay.orders.create(options);
+    console.log(`[Payment] Creating order for amount: ${amount} (${amount / 100} ${currency})`);
+    const order = await gateway.createOrder({ amount, currency, receipt });
 
     return res.status(200).json({
       success: true,
-      order_id: order.id,
+      orderId: order.orderId,
       amount: order.amount,
       currency: order.currency,
-      key_id: keyId,
+      gatewayData: order.gatewayData || {},
     });
   } catch (error) {
-    console.error('[Razorpay Error] Failed to create order:', error);
-    
-    // Check if it is an authentication failure
-    if (error.statusCode === 401) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication Failure: Invalid Razorpay Key ID or Key Secret.',
-      });
-    }
+    console.error('[Payment Error] Failed to create order:', error);
 
     return res.status(500).json({
       success: false,
-      message: 'Razorpay API Error: Failed to generate checkout order.',
-      error: error.message || error,
+      message: error.message || 'Failed to create payment order.',
     });
   }
 });
 
 /**
- * STEP 3: VERIFY SIGNATURE ENDPOINT
+ * STEP 2: VERIFY PAYMENT ENDPOINT
  * POST /api/verify-payment
- * Receives: { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderDetails }
+ * Receives: { paymentData, orderDetails }
+ *   - paymentData:   Gateway-specific data from the client checkout callback
+ *   - orderDetails:  Customer, shipping, items, pricing from the checkout form
  * Returns: { success: true/false, orderId }
+ *
+ * This endpoint is gateway-agnostic. Signature/hash verification is delegated
+ * to the gateway adapter. All validation, Firestore writes, and email logic
+ * remain here in the server.
  */
 app.post('/api/verify-payment', async (req, res) => {
-  const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderDetails } = req.body;
+  const { paymentData, orderDetails } = req.body;
 
   // Error handling: Missing top-level fields
-  if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !orderDetails) {
+  if (!paymentData || !orderDetails) {
     return res.status(400).json({
       success: false,
-      message: 'Validation Error: Missing order_id, payment_id, signature, or orderDetails.',
+      message: 'Validation Error: Missing paymentData or orderDetails.',
     });
   }
 
@@ -247,10 +230,6 @@ app.post('/api/verify-payment', async (req, res) => {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
-  }
-
-  function isNonEmptyString(value) {
-    return typeof value === 'string' && value.trim().length > 0;
   }
 
   function isPositiveNumber(value) {
@@ -345,23 +324,14 @@ app.post('/api/verify-payment', async (req, res) => {
   };
 
   // ============================================================================
-  // SIGNATURE VERIFICATION
+  // PAYMENT VERIFICATION — delegated to gateway adapter
   // ============================================================================
 
   try {
-    const body = razorpay_order_id + '|' + razorpay_payment_id;
-    const expectedSignature = crypto
-      .createHmac('sha256', keySecret)
-      .update(body.toString())
-      .digest('hex');
+    const verification = await gateway.verifyPayment({ paymentData, orderDetails });
 
-    const isAuthentic = crypto.timingSafeEqual(
-      Buffer.from(expectedSignature),
-      Buffer.from(razorpay_signature)
-    );
-
-    if (isAuthentic) {
-      console.log(`[Razorpay] Signature verification successful for order: ${razorpay_order_id}`);
+    if (verification.verified) {
+      console.log(`[Payment] Verification successful for gateway order: ${verification.gatewayOrderId}`);
 
       let orderId = '';
 
@@ -376,10 +346,9 @@ app.post('/api/verify-payment', async (req, res) => {
           items:    validatedItems,
           pricing:  validatedPricing,
           payment: {
-            gateway:   'Razorpay',
-            paymentId: razorpay_payment_id,
-            orderId:   razorpay_order_id,
-            signature: razorpay_signature,
+            gateway:   gateway.gatewayName,
+            paymentId: verification.gatewayPaymentId,
+            orderId:   verification.gatewayOrderId,
           },
           status:    'paid',
           createdAt: new Date().toISOString(),
@@ -452,18 +421,18 @@ app.post('/api/verify-payment', async (req, res) => {
 
       return res.status(200).json({
         success: true,
-        message: 'Payment signature verified and order stored successfully.',
+        message: 'Payment verified and order stored successfully.',
         orderId,
       });
     } else {
-      console.warn(`[Razorpay Warn] Signature mismatch for order: ${razorpay_order_id}`);
+      console.warn(`[Payment Warn] Verification failed for gateway order: ${verification.gatewayOrderId}`);
       return res.status(400).json({
         success: false,
-        message: 'Signature Mismatch: Payment verification failed.',
+        message: 'Payment verification failed.',
       });
     }
   } catch (error) {
-    console.error('[Verification Error] Signature processing failed:', error);
+    console.error('[Verification Error] Payment verification failed:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Internal verification process error.',
