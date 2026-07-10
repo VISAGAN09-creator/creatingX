@@ -4,39 +4,35 @@ const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 require('dotenv').config();
 const admin = require('firebase-admin');
-const fs = require('fs');
-const path = require('path');
 const gateway = require('./gateway/index.cjs');
 
 let db = null;
 
 try {
-  const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_JSON || path.join(__dirname, 'firebase-service-account.json');
-  if (fs.existsSync(serviceAccountPath)) {
-    console.log(`[Firebase] Initializing Admin SDK using service account at: ${serviceAccountPath}`);
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const projectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
+
+  if (privateKey && clientEmail && projectId) {
+    console.log('[Firebase] Initializing Admin SDK using environment variables.');
     admin.initializeApp({
-      credential: admin.credential.cert(require(serviceAccountPath))
+      credential: admin.credential.cert({
+        projectId,
+        clientEmail,
+        // .env files encode literal "\n" as two characters; convert to real newlines.
+        privateKey: privateKey.replace(/\\n/g, '\n'),
+      })
     });
     db = admin.firestore();
   } else {
-    const privateKey = process.env.FIREBASE_PRIVATE_KEY;
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    const projectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
-
-    if (privateKey && clientEmail && projectId) {
-      console.log('[Firebase] Initializing Admin SDK using environment variables.');
-      admin.initializeApp({
-        credential: admin.credential.cert({
-          projectId,
-          clientEmail,
-          privateKey: privateKey.replace(/\\n/g, '\n'),
-        })
-      });
-      db = admin.firestore();
-    } else {
-      console.warn('[Firebase Warning] No service account JSON found at firebase-service-account.json and credentials are not in environment variables.');
-      console.warn('[Firebase Warning] Direct database writes from server will fail. Please place your service account file in the project root.');
-    }
+    const missing = [
+      !privateKey && 'FIREBASE_PRIVATE_KEY',
+      !clientEmail && 'FIREBASE_CLIENT_EMAIL',
+      !projectId && 'FIREBASE_PROJECT_ID',
+    ].filter(Boolean);
+    console.warn(`[Firebase Warning] Missing environment variables: ${missing.join(', ')}`);
+    console.warn('[Firebase Warning] Server-side database writes (orders, emails) will fail.');
+    console.warn('[Firebase Warning] Add these variables to your .env file. See .env for instructions.');
   }
 } catch (error) {
   console.error('[Firebase Error] Failed to initialize Firebase Admin SDK:', error);
