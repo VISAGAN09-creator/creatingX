@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { About } from './components/About';
 import { CartDrawer } from './components/CartDrawer';
 import { CheckoutPage } from './components/CheckoutPage';
@@ -15,400 +15,148 @@ import { Navbar } from './components/Navbar';
 import { ProductDetailsPage } from './components/ProductDetailsPage';
 import { ProductViewingPage } from './components/ProductViewingPage';
 import { SearchDrawer } from './components/SearchDrawer';
-import { subscribeToProducts, subscribeToTOTD } from './data/firestoreContent';
-import type { CartLine, DataStatus, Product } from './types';
-import { scrollToHash } from './utils/scroll';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from './lib/firebase';
-import { getCookie, setCookie } from './utils/cookies';
 import { TOTD } from './components/TOTD';
+import { useCart } from './hooks/useCart';
+import { useCatalog } from './hooks/useCatalog';
+import { useRouter } from './hooks/useRouter';
+import { scrollToHash } from './utils/scroll';
+
+// ============================================================================
+// App — thin composition shell
+// ============================================================================
+// All business logic lives in focused custom hooks:
+//   • useCart()    — cart state, cookie persistence, Firestore sync
+//   • useCatalog() — real-time product subscriptions
+//   • useRouter()  — hash-based routing and navigation
+//
+// This component is purely a composition layer that wires hooks to UI.
+// ============================================================================
 
 export default function App() {
-  const [cartOpen, setCartOpen] = useState(false);
+  const cart = useCart();
+  const catalog = useCatalog();
+  const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
-  const [cartLines, setCartLines] = useState<CartLine[]>(() => {
-    try {
-      const saved = getCookie('cart');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-  const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
-  const [catalogStatus, setCatalogStatus] = useState<DataStatus>('loading');
-  const [totdProducts, setTotdProducts] = useState<Product[]>([]);
-  const [totdStatus, setTotdStatus] = useState<DataStatus>('loading');
-  const [activePage, setActivePage] = useState<'home' | 'products' | 'productDetail' | 'checkout' | 'totd'>(() => {
-    if (window.location.hash === '#checkout') return 'checkout';
-    if (window.location.hash.startsWith('#product-')) return 'productDetail';
-    if (window.location.hash === '#totd') return 'totd';
-    return window.location.hash === '#products' ? 'products' : 'home';
-  });
-  const [selectedProductId, setSelectedProductId] = useState<string | null>(() =>
-    window.location.hash.startsWith('#product-')
-      ? decodeURIComponent(window.location.hash.replace('#product-', ''))
-      : null,
-  );
-  const [selectedCatalogFilter, setSelectedCatalogFilter] = useState<string | null>(null);
-  const [productReturnPage, setProductReturnPage] = useState<'home' | 'products' | 'totd'>('home');
 
-  const [cartId, setCartId] = useState<string | null>(null);
-  const isCartSyncInitialized = useRef(false);
-
-  useEffect(() => {
-    const initCart = async () => {
-      let currentCartId = getCookie('cart_id');
-      if (!currentCartId) {
-        currentCartId = typeof crypto?.randomUUID === 'function'
-          ? crypto.randomUUID()
-          : Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-        setCookie('cart_id', currentCartId, 30);
-      }
-      setCartId(currentCartId);
-
-      try {
-        const cartDocRef = doc(db, 'carts', currentCartId);
-        const cartSnapshot = await getDoc(cartDocRef);
-        if (cartSnapshot.exists()) {
-          const data = cartSnapshot.data();
-          if (data && Array.isArray(data.items)) {
-            setCartLines((current) => {
-              if (current.length === 0) {
-                return data.items;
-              }
-              return current;
-            });
-          }
-        }
-      } catch (err) {
-        console.error('Error loading cart from Firestore:', err);
-      } finally {
-        isCartSyncInitialized.current = true;
-      }
-    };
-
-    initCart();
-  }, []);
-
-  useEffect(() => {
-    try {
-      setCookie('cart', JSON.stringify(cartLines), 30);
-    } catch (e) {
-      console.error('Error saving cart cookie:', e);
-    }
-
-    if (!cartId || !isCartSyncInitialized.current) return;
-
-    // Debounce Firestore sync — waits 800ms after the last cart change before
-    // writing, so rapid +/- clicks don't each trigger a separate setDoc call.
-    const timeout = setTimeout(async () => {
-      try {
-        const cartDocRef = doc(db, 'carts', cartId);
-        await setDoc(cartDocRef, {
-          items: cartLines,
-          lastUpdated: new Date().toISOString(),
-        });
-      } catch (err) {
-        console.error('Error saving cart to Firestore:', err);
-      }
-    }, 800);
-
-    return () => clearTimeout(timeout);
-  }, [cartLines, cartId]);
-
-  // Track whether we've received at least one snapshot
-  const hasReceivedFirstSnapshot = useRef(false);
-  const hasReceivedFirstTotdSnapshot = useRef(false);
-
-  // Real-time subscription: products auto-update when Firestore changes
-  useEffect(() => {
-    const unsubscribe = subscribeToProducts(
-      (items) => {
-        setCatalogProducts(items);
-        setCatalogStatus('ready');
-        hasReceivedFirstSnapshot.current = true;
-      },
-      (error) => {
-        console.error('Unable to load products from Firestore', error);
-        // Only set error if we never got a successful snapshot
-        if (!hasReceivedFirstSnapshot.current) {
-          setCatalogProducts([]);
-          setCatalogStatus('error');
-        }
-      },
-    );
-
-    return unsubscribe;
-  }, []);
-
-  // Real-time subscription: TOTD products auto-update when Firestore changes
-  useEffect(() => {
-    const unsubscribe = subscribeToTOTD(
-      (items) => {
-        setTotdProducts(items);
-        setTotdStatus('ready');
-        hasReceivedFirstTotdSnapshot.current = true;
-      },
-      (error) => {
-        console.error('Unable to load TOTD products from Firestore', error);
-        if (!hasReceivedFirstTotdSnapshot.current) {
-          setTotdProducts([]);
-          setTotdStatus('error');
-        }
-      },
-    );
-
-    return unsubscribe;
-  }, []);
-
-  useEffect(() => {
-    const syncPageFromHash = () => {
-      if (window.location.hash === '#checkout') {
-        setSelectedProductId(null);
-        setSelectedCatalogFilter(null);
-        setActivePage('checkout');
-        return;
-      }
-
-      if (window.location.hash.startsWith('#product-')) {
-        setSelectedProductId(decodeURIComponent(window.location.hash.replace('#product-', '')));
-        setActivePage('productDetail');
-        return;
-      }
-
-      if (window.location.hash === '#totd') {
-        setSelectedProductId(null);
-        setSelectedCatalogFilter(null);
-        setActivePage('totd');
-        return;
-      }
-
-      setSelectedProductId(null);
-      if (window.location.hash !== '#products') setSelectedCatalogFilter(null);
-      setActivePage(window.location.hash === '#products' ? 'products' : 'home');
-    };
-
-    syncPageFromHash();
-    window.addEventListener('hashchange', syncPageFromHash);
-    window.addEventListener('popstate', syncPageFromHash);
-
-    return () => {
-      window.removeEventListener('hashchange', syncPageFromHash);
-      window.removeEventListener('popstate', syncPageFromHash);
-    };
-  }, []);
-
-  const cartCount = useMemo(
-    () => cartLines.reduce((total, line) => total + line.quantity, 0),
-    [cartLines],
-  );
-
-  const subtotal = useMemo(
-    () => cartLines.reduce((total, line) => total + (line.price ?? 0) * line.quantity, 0),
-    [cartLines],
-  );
-
+  // ---- Cross-concern derived value: selected product from both catalogs ----
   const selectedProduct = useMemo(
     () =>
-      catalogProducts.find((product) => product.id === selectedProductId) ||
-      totdProducts.find((product) => product.id === selectedProductId),
-    [catalogProducts, totdProducts, selectedProductId],
+      catalog.catalogProducts.find((p) => p.id === router.selectedProductId) ||
+      catalog.totdProducts.find((p) => p.id === router.selectedProductId),
+    [catalog.catalogProducts, catalog.totdProducts, router.selectedProductId],
   );
 
-  const addToCart = useCallback((product: Product) => {
-    setCartLines((currentLines) => {
-      const existing = currentLines.find((line) => line.id === product.id);
-      if (existing) {
-        return currentLines.map((line) =>
-          line.id === product.id ? { ...line, quantity: line.quantity + 1 } : line,
-        );
-      }
+  // ---- Cross-concern handler: checkout closes cart drawer, then navigates --
+  const handleOpenCheckout = () => {
+    cart.setCartOpen(false);
+    router.openCheckoutPage();
+  };
 
-      return [...currentLines, { ...product, quantity: 1 }];
-    });
-    setCartOpen(true);
-  }, []);
-
-  const increment = useCallback((id: string) => {
-    setCartLines((currentLines) =>
-      currentLines.map((line) => (line.id === id ? { ...line, quantity: line.quantity + 1 } : line)),
-    );
-  }, []);
-
-  const decrement = useCallback((id: string) => {
-    setCartLines((currentLines) =>
-      currentLines.flatMap((line) => {
-        if (line.id !== id) return [line];
-        if (line.quantity <= 1) return [];
-        return [{ ...line, quantity: line.quantity - 1 }];
-      }),
-    );
-  }, []);
-
-  const remove = useCallback((id: string) => {
-    setCartLines((currentLines) => currentLines.filter((line) => line.id !== id));
-  }, []);
-
-  const clearCart = useCallback(() => {
-    setCartLines([]);
-    setCartOpen(false);
-  }, []);
-
-  const openProductPage = useCallback((filter?: string) => {
-    setActivePage('products');
-    setSelectedProductId(null);
-    setSelectedCatalogFilter(filter ?? null);
-    window.history.pushState(null, '', '#products');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
-
-  const openCheckoutPage = useCallback(() => {
-    setCartOpen(false);
-    setActivePage('checkout');
-    setSelectedProductId(null);
-    window.history.pushState(null, '', '#checkout');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
-
-  const openProductDetail = useCallback(
-    (product: Product) => {
-      if (activePage !== 'productDetail' && activePage !== 'checkout') {
-        setProductReturnPage(activePage);
-      }
-
-      setSelectedProductId(product.id);
-      setActivePage('productDetail');
-      window.history.pushState(null, '', `#product-${encodeURIComponent(product.id)}`);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    },
-    [activePage],
-  );
-
-  const navigateToHomeSection = useCallback((href: string) => {
-    if (href === '#totd') {
-      setActivePage('totd');
-      setSelectedProductId(null);
-      setSelectedCatalogFilter(null);
-      window.history.pushState(null, '', '#totd');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-    setActivePage('home');
-    setSelectedProductId(null);
-    setSelectedCatalogFilter(null);
-    window.history.pushState(null, '', href);
-    window.setTimeout(() => scrollToHash(href), 0);
-  }, []);
-
-  const closeProductDetail = useCallback(() => {
-    if (productReturnPage === 'products') {
-      openProductPage();
-      return;
-    }
-    if (productReturnPage === 'totd') {
-      setActivePage('totd');
-      window.history.pushState(null, '', '#totd');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-
-    navigateToHomeSection('#hero');
-  }, [navigateToHomeSection, openProductPage, productReturnPage]);
-
+  // ---- Render --------------------------------------------------------------
   return (
     <>
       <CustomCursor />
       <LiquidCanvas />
-      {activePage !== 'checkout' && (
+
+      {router.activePage !== 'checkout' && (
         <Navbar
-          cartCount={cartCount}
-          onCartOpen={() => setCartOpen(true)}
+          cartCount={cart.cartCount}
+          onCartOpen={() => cart.setCartOpen(true)}
           onSearchOpen={() => setSearchOpen(true)}
-          onNavigate={navigateToHomeSection}
-          activePage={activePage}
+          onNavigate={router.navigateToHomeSection}
+          activePage={router.activePage}
         />
       )}
+
       <main className="relative z-[1] overflow-x-hidden">
-        {activePage === 'checkout' ? (
+        {router.activePage === 'checkout' ? (
           <CheckoutPage
-            lines={cartLines}
-            subtotal={subtotal}
-            onClearCart={clearCart}
+            lines={cart.cartLines}
+            subtotal={cart.subtotal}
+            onClearCart={cart.clearCart}
             onBack={() => {
-              setActivePage('home');
-              window.history.pushState(null, '', '#hero');
-              window.setTimeout(() => scrollToHash('#hero'), 0);
+              router.navigateToHomeSection('#hero');
             }}
           />
-        ) : activePage === 'productDetail' ? (
+        ) : router.activePage === 'productDetail' ? (
           <ProductDetailsPage
             product={selectedProduct}
-            products={productReturnPage === 'totd' ? totdProducts : catalogProducts}
-            status={productReturnPage === 'totd' ? totdStatus : catalogStatus}
-            onAddToCart={addToCart}
-            onOpenProduct={openProductDetail}
-            onBack={closeProductDetail}
+            products={
+              router.productReturnPage === 'totd'
+                ? catalog.totdProducts
+                : catalog.catalogProducts
+            }
+            status={
+              router.productReturnPage === 'totd'
+                ? catalog.totdStatus
+                : catalog.catalogStatus
+            }
+            onAddToCart={cart.addToCart}
+            onOpenProduct={router.openProductDetail}
+            onBack={router.closeProductDetail}
           />
-        ) : activePage === 'products' ? (
+        ) : router.activePage === 'products' ? (
           <ProductViewingPage
-            products={catalogProducts}
-            status={catalogStatus}
-            initialFilter={selectedCatalogFilter}
-            onAddToCart={addToCart}
-            onOpenProduct={openProductDetail}
-            onBack={() => navigateToHomeSection('#hero')}
+            products={catalog.catalogProducts}
+            status={catalog.catalogStatus}
+            initialFilter={router.selectedCatalogFilter}
+            onAddToCart={cart.addToCart}
+            onOpenProduct={router.openProductDetail}
+            onBack={() => router.navigateToHomeSection('#hero')}
           />
-        ) : activePage === 'totd' ? (
+        ) : router.activePage === 'totd' ? (
           <TOTD
-            products={totdProducts}
-            status={totdStatus}
-            onAddToCart={addToCart}
-            onOpenProduct={openProductDetail}
-            onBack={() => navigateToHomeSection('#hero')}
+            products={catalog.totdProducts}
+            status={catalog.totdStatus}
+            onAddToCart={cart.addToCart}
+            onOpenProduct={router.openProductDetail}
+            onBack={() => router.navigateToHomeSection('#hero')}
           />
         ) : (
           <>
-            <Hero products={catalogProducts} onOpenProduct={openProductDetail} />
+            <Hero products={catalog.catalogProducts} onOpenProduct={router.openProductDetail} />
             <LatestDrop
-              products={catalogProducts}
-              status={catalogStatus}
-              onAddToCart={addToCart}
-              onOpenProduct={openProductDetail}
-              onViewAll={() => openProductPage()}
+              products={catalog.catalogProducts}
+              status={catalog.catalogStatus}
+              onAddToCart={cart.addToCart}
+              onOpenProduct={router.openProductDetail}
+              onViewAll={() => router.openProductPage()}
             />
             <Collections
-              products={catalogProducts}
-              status={catalogStatus}
-              onViewAll={openProductPage}
+              products={catalog.catalogProducts}
+              status={catalog.catalogStatus}
+              onViewAll={router.openProductPage}
             />
             <Lookbook
-              products={catalogProducts}
-              status={catalogStatus}
-              onAddToCart={addToCart}
-              onOpenProduct={openProductDetail}
-              onViewAll={() => openProductPage()}
+              products={catalog.catalogProducts}
+              status={catalog.catalogStatus}
+              onAddToCart={cart.addToCart}
+              onOpenProduct={router.openProductDetail}
+              onViewAll={() => router.openProductPage()}
             />
             <Customize />
             <About />
           </>
         )}
       </main>
-      {activePage !== 'checkout' && <Footer activePage={activePage} />}
+
+      {router.activePage !== 'checkout' && <Footer activePage={router.activePage} />}
+
       <CartDrawer
-        isOpen={cartOpen}
-        lines={cartLines}
-        subtotal={subtotal}
-        onClose={() => setCartOpen(false)}
-        onIncrement={increment}
-        onDecrement={decrement}
-        onRemove={remove}
-        onCheckout={openCheckoutPage}
+        isOpen={cart.cartOpen}
+        lines={cart.cartLines}
+        subtotal={cart.subtotal}
+        onClose={() => cart.setCartOpen(false)}
+        onIncrement={cart.increment}
+        onDecrement={cart.decrement}
+        onRemove={cart.remove}
+        onCheckout={handleOpenCheckout}
       />
       <SearchDrawer
         isOpen={searchOpen}
         onClose={() => setSearchOpen(false)}
-        products={catalogProducts}
-        onOpenProduct={openProductDetail}
+        products={catalog.catalogProducts}
+        onOpenProduct={router.openProductDetail}
       />
       <CookieConsent />
     </>
