@@ -286,44 +286,17 @@ function toProduct(id: string, data: DocumentData, sourceCollectionName = produc
     ...textList(data.filters),
     ...textList(data.productFilter),
   ]);
-  // ---- Gallery images: collect ALL images the admin has uploaded ----------
-  // Scans every field in the Firestore document for image URLs so that
-  // admins can upload any number of images using any field naming convention
-  // (img1, img2, img3 ... imgN, image1 ... imageN, images array, etc.)
-  // and every one will appear on the product detail page automatically.
-  const galleryImages = (() => {
-    const collected: string[] = [];
-
-    // 1. Primary image always comes first
-    if (image) collected.push(image);
-
-    // 2. Explicit gallery/images array fields (highest priority bulk source)
-    for (const field of ['galleryImages', 'images', 'productImages', 'gallery', 'photos']) {
-      if (data[field] != null) {
-        collected.push(...imageList(data[field]));
-      }
-    }
-
-    // 3. Auto-detect ALL numbered img* and image* fields (img1…imgN, image1…imageN)
-    //    Scans the entire document so admins can add any number without code changes.
-    for (const key of Object.keys(data)) {
-      const lower = key.toLowerCase();
-      // Match: img1, img2 ... imgN  OR  image1, image2 ... imageN
-      if (/^img\d+$/.test(lower) || /^image\d+$/.test(lower)) {
-        const val = text(data[key]);
-        if (val) collected.push(val);
-      }
-    }
-
-    // 4. Explicit well-known single-image fallback fields (img2, img3, img4
-    //    kept for backward compat with older Firestore docs)
-    for (const field of ['img2', 'img3', 'img4', 'image2', 'image3', 'image4']) {
-      const val = text(data[field]);
-      if (val) collected.push(val);
-    }
-
-    return uniqueTexts(collected);
-  })();
+  const galleryImages = uniqueTexts([
+    image,
+    text(data.img1) ?? '',
+    text(data.img2) ?? '',
+    ...imageList(data.galleryImages),
+    ...imageList(data.images),
+    ...imageList(data.productImages),
+    text(data.image2) ?? '',
+    text(data.image3) ?? '',
+    text(data.image4) ?? '',
+  ]);
   const colors = colorList(data.colors ?? data.colorOptions ?? data.color);
   const sizes = sizeList(data.sizes ?? data.sizeStock ?? data.stockBySize ?? data.stock);
   const mappedSizes = sizes.length > 0 ? sizes : sizeFields(data);
