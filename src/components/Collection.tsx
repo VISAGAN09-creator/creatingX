@@ -58,29 +58,67 @@ function buildCollections(products: Product[]): ProductCollection[] {
 
 export function Collections({ products, status, onViewAll }: CollectionsProps) {
   const collections = useMemo(() => buildCollections(products), [products]);
+  const carouselCollections = collections.length > 0 ? [...collections, ...collections, ...collections] : [];
   
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [showLeft, setShowLeft] = useState(false);
-  const [showRight, setShowRight] = useState(true);
+  const [isHovered, setIsHovered] = useState(false);
 
-  const updateScrollButtons = () => {
+  // Auto-scroll animation refs
+  const requestRef = useRef<number | null>(null);
+  const lastTimeRef = useRef<number | null>(null);
+  const initializedRef = useRef(false);
+  const scrollPositionRef = useRef(0);
+
+  const animate = (time: number) => {
     const container = scrollRef.current;
     if (!container) return;
 
-    const { scrollLeft, scrollWidth, clientWidth } = container;
-    setShowLeft(scrollLeft > 5);
-    setShowRight(scrollLeft + clientWidth < scrollWidth - 5);
+    const oneSetWidth = container.scrollWidth / 3;
+    if (oneSetWidth <= 0) {
+      lastTimeRef.current = time;
+      requestRef.current = requestAnimationFrame(animate);
+      return;
+    }
+
+    if (!initializedRef.current) {
+      const startPos = oneSetWidth;
+      container.scrollLeft = startPos;
+      scrollPositionRef.current = startPos;
+      initializedRef.current = true;
+    }
+
+    if (lastTimeRef.current !== null) {
+      const delta = time - lastTimeRef.current;
+      // Smooth movement: 40 pixels per second
+      scrollPositionRef.current += (40 * delta) / 1000;
+      container.scrollLeft = Math.round(scrollPositionRef.current);
+    }
+    lastTimeRef.current = time;
+    requestRef.current = requestAnimationFrame(animate);
+  };
+
+  const startAutoScroll = () => {
+    if (requestRef.current === null) {
+      lastTimeRef.current = null;
+      requestRef.current = requestAnimationFrame(animate);
+    }
+  };
+
+  const stopAutoScroll = () => {
+    if (requestRef.current !== null) {
+      cancelAnimationFrame(requestRef.current);
+      requestRef.current = null;
+    }
   };
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      updateScrollButtons();
-    }, 100);
+      startAutoScroll();
+    }, 500);
 
-    window.addEventListener('resize', updateScrollButtons);
     return () => {
       clearTimeout(timer);
-      window.removeEventListener('resize', updateScrollButtons);
+      stopAutoScroll();
     };
   }, [collections]);
 
@@ -101,6 +139,40 @@ export function Collections({ products, status, onViewAll }: CollectionsProps) {
       left: direction === 'next' ? scrollAmount : -scrollAmount,
       behavior: 'smooth',
     });
+  };
+
+  const handleScrollEvent = () => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const oneSetWidth = container.scrollWidth / 3;
+    if (oneSetWidth <= 0) return;
+
+    const currentScroll = container.scrollLeft;
+    
+    // Wrap-around logic for seamless infinite scroll
+    if (currentScroll >= oneSetWidth * 2) {
+      const wrapped = currentScroll - oneSetWidth;
+      container.scrollLeft = wrapped;
+      scrollPositionRef.current = wrapped;
+    } else if (currentScroll <= 10) {
+      const wrapped = currentScroll + oneSetWidth;
+      container.scrollLeft = wrapped;
+      scrollPositionRef.current = wrapped;
+    } else {
+      // Sync the float accumulator with the actual container scroll position
+      scrollPositionRef.current = currentScroll;
+    }
+  };
+
+  const handleMouseEnter = () => {
+    setIsHovered(true);
+    stopAutoScroll();
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovered(false);
+    startAutoScroll();
   };
 
   return (
@@ -126,13 +198,18 @@ export function Collections({ products, status, onViewAll }: CollectionsProps) {
 
         {collections.length > 0 && (
           <Reveal>
-            <div className="relative">
+            <div
+              className="relative"
+              onMouseEnter={handleMouseEnter}
+              onMouseLeave={handleMouseLeave}
+            >
               {/* Left Arrow Button */}
               <button
                 type="button"
                 onClick={() => handleScroll('prev')}
-                disabled={!showLeft}
-                className="absolute left-0 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center border border-metal-mid bg-white text-black shadow-sm transition-all duration-300 hover:bg-black hover:text-white hover:border-black active:scale-95 disabled:opacity-0 disabled:pointer-events-none"
+                className={`absolute left-0 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center border border-metal-mid bg-white text-black shadow-sm transition-all duration-300 hover:bg-black hover:text-white hover:border-black active:scale-95 ${
+                  isHovered ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                }`}
                 aria-label="Scroll left"
               >
                 <ArrowLeft size={18} strokeWidth={2} />
@@ -142,8 +219,9 @@ export function Collections({ products, status, onViewAll }: CollectionsProps) {
               <button
                 type="button"
                 onClick={() => handleScroll('next')}
-                disabled={!showRight}
-                className="absolute right-0 top-1/2 z-20 translate-x-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center border border-metal-mid bg-white text-black shadow-sm transition-all duration-300 hover:bg-black hover:text-white hover:border-black active:scale-95 disabled:opacity-0 disabled:pointer-events-none"
+                className={`absolute right-0 top-1/2 z-20 translate-x-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center border border-metal-mid bg-white text-black shadow-sm transition-all duration-300 hover:bg-black hover:text-white hover:border-black active:scale-95 ${
+                  isHovered ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                }`}
                 aria-label="Scroll right"
               >
                 <ArrowRight size={18} strokeWidth={2} />
@@ -152,12 +230,12 @@ export function Collections({ products, status, onViewAll }: CollectionsProps) {
               {/* Scroll Container */}
               <div
                 ref={scrollRef}
-                onScroll={updateScrollButtons}
-                className="flex gap-4 overflow-x-auto scroll-smooth scrollbar-none py-4 -mx-5 px-5 sm:-mx-8 sm:px-8 lg:-mx-12 lg:px-12"
+                onScroll={handleScrollEvent}
+                className="flex gap-4 overflow-hidden py-4 -mx-5 px-5 sm:-mx-8 sm:px-8 lg:-mx-12 lg:px-12"
               >
-                {collections.map((collection) => (
+                {carouselCollections.map((collection, index) => (
                   <motion.button
-                    key={collection.id}
+                    key={`${collection.id}-${index}`}
                     type="button"
                     data-cursor="hover"
                     className="group relative block h-[260px] w-[220px] shrink-0 overflow-hidden bg-metal-light text-left shadow-none outline-none transition-shadow duration-300 hover:z-10 hover:shadow-metal sm:h-[320px] sm:w-[280px] lg:h-[380px] lg:w-[330px]"
@@ -195,4 +273,5 @@ export function Collections({ products, status, onViewAll }: CollectionsProps) {
     </section>
   );
 }
+
 
