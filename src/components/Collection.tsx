@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
-import { ArrowRight } from 'lucide-react';
-import { useMemo } from 'react';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DataStatus, Product, ProductCollection } from '../types';
 import { Reveal } from './Reveal';
 import { SectionHeader } from './SectionHeader';
@@ -16,8 +16,6 @@ type CollectionsProps = {
 function collectionName(product: Product) {
   return product.theme?.trim() || product.filters?.[0]?.trim() || 'Core';
 }
-
-
 
 function countLabel(count: number) {
   return `${count} ${count === 1 ? 'Product' : 'Products'}`;
@@ -60,7 +58,50 @@ function buildCollections(products: Product[]): ProductCollection[] {
 
 export function Collections({ products, status, onViewAll }: CollectionsProps) {
   const collections = useMemo(() => buildCollections(products), [products]);
-  const carouselCollections = collections.length > 0 ? [...collections, ...collections, ...collections] : [];
+  
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [showLeft, setShowLeft] = useState(false);
+  const [showRight, setShowRight] = useState(true);
+
+  const updateScrollButtons = () => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const { scrollLeft, scrollWidth, clientWidth } = container;
+    setShowLeft(scrollLeft > 5);
+    setShowRight(scrollLeft + clientWidth < scrollWidth - 5);
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      updateScrollButtons();
+    }, 100);
+
+    window.addEventListener('resize', updateScrollButtons);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', updateScrollButtons);
+    };
+  }, [collections]);
+
+  const handleScroll = (direction: 'prev' | 'next') => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const firstChild = container.firstElementChild as HTMLElement;
+    const cardWidth = firstChild ? firstChild.offsetWidth : 330;
+
+    let gap = 28; // lg gap-7
+    if (window.innerWidth < 640) gap = 16; // mobile gap-4
+    else if (window.innerWidth < 1024) gap = 20; // sm gap-5
+
+    const scrollAmount = cardWidth + gap;
+
+    container.scrollBy({
+      left: direction === 'next' ? scrollAmount : -scrollAmount,
+      behavior: 'smooth',
+    });
+  };
 
   return (
     <section
@@ -85,11 +126,38 @@ export function Collections({ products, status, onViewAll }: CollectionsProps) {
 
         {collections.length > 0 && (
           <Reveal>
-            <div className="collection-marquee -mx-5 overflow-hidden py-4 sm:-mx-8 lg:-mx-12">
-              <div className="collection-marquee-track flex w-max gap-4 px-5 sm:gap-5 sm:px-8 lg:gap-7 lg:px-12">
-                {carouselCollections.map((collection, index) => (
+            <div className="relative">
+              {/* Left Arrow Button */}
+              <button
+                type="button"
+                onClick={() => handleScroll('prev')}
+                disabled={!showLeft}
+                className="absolute left-0 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center border border-metal-mid bg-white text-black shadow-sm transition-all duration-300 hover:bg-black hover:text-white hover:border-black active:scale-95 disabled:opacity-0 disabled:pointer-events-none"
+                aria-label="Scroll left"
+              >
+                <ArrowLeft size={18} strokeWidth={2} />
+              </button>
+
+              {/* Right Arrow Button */}
+              <button
+                type="button"
+                onClick={() => handleScroll('next')}
+                disabled={!showRight}
+                className="absolute right-0 top-1/2 z-20 translate-x-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center border border-metal-mid bg-white text-black shadow-sm transition-all duration-300 hover:bg-black hover:text-white hover:border-black active:scale-95 disabled:opacity-0 disabled:pointer-events-none"
+                aria-label="Scroll right"
+              >
+                <ArrowRight size={18} strokeWidth={2} />
+              </button>
+
+              {/* Scroll Container */}
+              <div
+                ref={scrollRef}
+                onScroll={updateScrollButtons}
+                className="flex gap-4 overflow-x-auto scroll-smooth scrollbar-none py-4 -mx-5 px-5 sm:-mx-8 sm:px-8 lg:-mx-12 lg:px-12"
+              >
+                {collections.map((collection) => (
                   <motion.button
-                    key={`${collection.id}-${index}`}
+                    key={collection.id}
                     type="button"
                     data-cursor="hover"
                     className="group relative block h-[260px] w-[220px] shrink-0 overflow-hidden bg-metal-light text-left shadow-none outline-none transition-shadow duration-300 hover:z-10 hover:shadow-metal sm:h-[320px] sm:w-[280px] lg:h-[380px] lg:w-[330px]"
@@ -127,3 +195,4 @@ export function Collections({ products, status, onViewAll }: CollectionsProps) {
     </section>
   );
 }
+
