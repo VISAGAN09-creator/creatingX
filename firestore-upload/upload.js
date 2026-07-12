@@ -25,7 +25,7 @@ async function upload() {
         const { id, ...productData } = product;
 
         // 2. TARGET YOUR EXISTING "Gym Freak" COLLECTION
-        const docRef = db.collection('Anime').doc(docId);
+        const docRef = db.collection('Movies & Series').doc(docId);
 
         // 3. USE MERGE TO APPEND SAFELY WITHOUT WIPING EXISTING FIELDS
         batch.set(docRef, productData, { merge: true });
