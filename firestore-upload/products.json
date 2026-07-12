@@ -1,45 +1,55 @@
 [
   {
-    "id": "Christ Warrior",
-    "name": "Christ Warrior",
+    "id": "MJ King of Pop",
+    "name": "MJ King of Pop",
     "price": 499,
-    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FChrist%20Warrior%2FCHRIST%20WARRIOR.jpg?alt=media&token=089063b4-c60c-4765-9de3-0dd35ad7de15",
-    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FChrist%20Warrior%2FCHRIST%20WARRIOR%20(1).jpg?alt=media&token=83f9fd0f-2549-4349-8a0b-23999fbe4bbd"
+    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20King%20of%20Pop%2FMICHEAL%20JACKSON%20KP.jpg?alt=media&token=9b680a12-f572-4f9d-b1c5-5fc380d73ea9",
+    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20King%20of%20Pop%2FMICHEAL%20JACKSON%20KP%202.jpg?alt=media&token=e69f5519-a30b-4aab-9922-f23cb22951f5",
+    "img3": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20King%20of%20Pop%2FMICHEAL%20JACKSON%20KP%203.jpg?alt=media&token=cdbd74bb-718a-48c9-8ab7-93ce2f91f235",
+    "img4": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20King%20of%20Pop%2FMICHEAL%20JACKSON%20KP%204.jpg?alt=media&token=adf71789-7796-490f-ad5f-f424b6e2227c"
   },
   {
-    "id": "Drop Nation",
-    "name": "Drop Nation",
+    "id": "Olodum Michael Jackson",
+    "name": "Olodum Michael Jackson",
     "price": 499,
-    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FDrop%20Nation%2FDROP%20NATION.jpg?alt=media&token=e6902d0d-f59d-4838-8942-8ed4a4ca2684",
-    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FDrop%20Nation%2FDROP%20NATION%20%20(5).jpg?alt=media&token=24821893-9d5d-4e91-a5fb-bfba2a224a11",
-    "img3": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FDrop%20Nation%2FDROP%20NATION%20%20(3).jpg?alt=media&token=60d9ad1c-3720-4b5a-9c87-374ecb95e6a5",
-    "img4": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FDrop%20Nation%2FDROP%20NATION%20%20(2).jpg?alt=media&token=aa2e53d6-f3bf-45d2-9241-84b1e7772e6f"
+    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20Odulum%2FMICHEAL%20JACKSON%20%E2%9A%A1%EF%B8%8F%20(3).jpg?alt=media&token=81e8850f-7b44-4ab8-98fe-f9dcce071135",
+    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20Odulum%2FMICHEAL%20JACKSON%20%E2%9A%A1%EF%B8%8F.jpg?alt=media&token=e0370fdc-007e-4aea-adaa-db25f13db56f"
   },
   {
-    "id": "IMMANUEL LIGHT BEARERS",
-    "name": "Immanuel Light Bearers",
+    "id": "MJ Red Dark",
+    "name": "MJ Red Dark",
     "price": 499,
-    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FIMMANUEL%20LIGHT%20BEARERS%2FIMMANUEL%20LIGHT%20BEARERS.jpg?alt=media&token=fd1cd61e-1296-4cda-bb2a-a5356be9e566",
-    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FIMMANUEL%20LIGHT%20BEARERS%2FIMMANUEL%20LIGHT%20BEARERS%20%20%20(1).jpg?alt=media&token=d3ccaaf4-c0d9-4c04-9610-81b91b441bfa"
+    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20Red%2FMICHEAL%20JACKSON.jpg?alt=media&token=eda09e69-b138-4ad2-a626-5d08d3be4493",
+    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20Red%2FMICHEAL%20JACKSON%20(1).jpg?alt=media&token=98dac951-8191-4ecc-b53b-e75315b606a2"
   },
   {
-    "id": "Klang Kuenstler",
-    "name": "Klang Kuenstler",
+    "id": "MJ Thriller",
+    "name": "MJ Thriller",
     "price": 499,
-    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FKlang%20Kuenstler%2FKlang%20Kuenstler.jpg?alt=media&token=53967f12-b028-4f2c-9cc7-7be636b1dff7",
-    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FKlang%20Kuenstler%2FKlang%20Kuenstler%20%20(1).jpg?alt=media&token=8c7259b0-a445-4a97-88f0-17867b143cdb"
+    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20Thriller%2FMJ%20THRILLER.jpg?alt=media&token=ff0eadf5-f0dd-4a3a-9d29-4f16ea2ff08f",
+    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20Thriller%2FMJ%20THRILLER%20(1).jpg?alt=media&token=4fb2ea0d-27ef-4c5b-b654-7d6d47641b72"
   },
   {
-    "id": "Nirvana",
-    "name": "Nirvana",
+    "id": "Micheal the Legend",
+    "name": "Micheal the Legend",
     "price": 499,
-    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FNirvana%2FNIRVANA.jpg?alt=media&token=4523f439-7909-4bb4-bc47-9c604b137556"
+    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20image%2FMICHEAL%20JACKSON%20%E2%9A%A1%EF%B8%8F%E2%9C%A8.jpg?alt=media&token=a78f74fb-b114-4ea2-8d08-6d2d0140a3c0",
+    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20image%2FMICHEAL%20JACKSON%20%E2%9A%A1%EF%B8%8F%E2%9C%A8%20(5).jpg?alt=media&token=63a79bdc-131d-4513-9cdf-e93c0ae7dd0c"
   },
   {
-    "id": "Wanna be Yours",
-    "name": "Wanna be Yours",
+    "id": "U1",
+    "name": "U1",
     "price": 499,
-    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FWanna%20be%20yours%2FWanna%20be%20yours.jpg?alt=media&token=19c73d7a-6b79-466e-8587-5eb72b567436",
-    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FWanna%20be%20yours%2FWanna%20be%20yours%20(1).jpg?alt=media&token=d02112bc-ab00-401f-a664-cd331a216715"
+    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FU1%2FDRUG%20DEALER%20%F0%9F%8E%B6%F0%9F%8E%B8U1.jpg?alt=media&token=3bcdc4d8-64a3-4dc8-98cf-1953f67e2161",
+    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FU1%2FDRUG%20DEALER%20%F0%9F%8E%B6%F0%9F%8E%B8U1.jpg?alt=media&token=3bcdc4d8-64a3-4dc8-98cf-1953f67e2161"
+  },
+  {
+    "id": "Weekend",
+    "name": "Weekend",
+    "price": 499,
+    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FWeekend%2FTHE%20WEEKND.jpg?alt=media&token=b3308973-e497-4c5f-8f7c-baad1924f01e",
+    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FWeekend%2FTHE%20WEEKND(1).jpg?alt=media&token=cbcbd423-a6df-4fb7-a2cd-2f4c018565e2",
+    "img3": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FWeekend%2FTHE%20WEEKND(1).jpg?alt=media&token=cbcbd423-a6df-4fb7-a2cd-2f4c018565e2",
+    "img4": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FWeekend%2FTHE%20WEEKND(3).jpg?alt=media&token=570c0383-46f7-4f4f-9fb3-36c40fe90dd8"
   }
 ]
