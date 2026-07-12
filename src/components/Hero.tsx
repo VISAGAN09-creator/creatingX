@@ -173,8 +173,7 @@ export function Hero({
             COMING IN HOT🌶️
           </h1>
           <p className="mb-10 max-w-[600px] text-base font-light leading-7 text-metal-light sm:text-lg">
-            Custom print t-shirts crafted for the bold. Unconventional shapes, liquid metal aesthetics,
-            and dopamine-inducing designs that redefine streetwear.
+            Custom print t-shirts crafted for the bold & designs that redefine STREETWEAR.
           </p>
           <MagneticAnchor
             href="#latest-drop"

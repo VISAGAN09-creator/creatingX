@@ -1,55 +1,20 @@
 [
   {
-    "id": "MJ King of Pop",
-    "name": "MJ King of Pop",
+    "id": "Connar McGregor",
+    "name": "Connar McGregor",
     "price": 499,
-    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20King%20of%20Pop%2FMICHEAL%20JACKSON%20KP.jpg?alt=media&token=9b680a12-f572-4f9d-b1c5-5fc380d73ea9",
-    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20King%20of%20Pop%2FMICHEAL%20JACKSON%20KP%202.jpg?alt=media&token=e69f5519-a30b-4aab-9922-f23cb22951f5",
-    "img3": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20King%20of%20Pop%2FMICHEAL%20JACKSON%20KP%203.jpg?alt=media&token=cdbd74bb-718a-48c9-8ab7-93ce2f91f235",
-    "img4": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20King%20of%20Pop%2FMICHEAL%20JACKSON%20KP%204.jpg?alt=media&token=adf71789-7796-490f-ad5f-f424b6e2227c"
+    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMc%20Gregnor%2FTHE%20NOTORIOUS%20-%20Connor%20McGregor%20%F0%9F%91%91-.jpg?alt=media&token=c50b8126-b0c0-44da-a9d3-fcfa81576612",
+    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMc%20Gregnor%2FTHE%20NOTORIOUS%20-%20Connor%20McGregor%20%F0%9F%91%91-%20(1).jpg?alt=media&token=0cc45ee9-9879-4b8c-a5b4-e0ee54c71c04",
+    "img3": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMc%20Gregnor%2FTHE%20NOTORIOUS%20-%20Connor%20McGregor%20%F0%9F%91%91-%20(2).jpg?alt=media&token=58178364-e59a-483b-8d1c-d4cc140f5a9c",
+    "img4": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMc%20Gregnor%2FTHE%20NOTORIOUS%20-%20Connor%20McGregor%20%F0%9F%91%91-%20(3).jpg?alt=media&token=922abb08-f7ef-4468-9a80-62759fb84ac3"
   },
   {
-    "id": "Olodum Michael Jackson",
-    "name": "Olodum Michael Jackson",
+    "id": "UFC x Venam",
+    "name": "UFC x Venam",
     "price": 499,
-    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20Odulum%2FMICHEAL%20JACKSON%20%E2%9A%A1%EF%B8%8F%20(3).jpg?alt=media&token=81e8850f-7b44-4ab8-98fe-f9dcce071135",
-    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20Odulum%2FMICHEAL%20JACKSON%20%E2%9A%A1%EF%B8%8F.jpg?alt=media&token=e0370fdc-007e-4aea-adaa-db25f13db56f"
-  },
-  {
-    "id": "MJ Red Dark",
-    "name": "MJ Red Dark",
-    "price": 499,
-    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20Red%2FMICHEAL%20JACKSON.jpg?alt=media&token=eda09e69-b138-4ad2-a626-5d08d3be4493",
-    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20Red%2FMICHEAL%20JACKSON%20(1).jpg?alt=media&token=98dac951-8191-4ecc-b53b-e75315b606a2"
-  },
-  {
-    "id": "MJ Thriller",
-    "name": "MJ Thriller",
-    "price": 499,
-    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20Thriller%2FMJ%20THRILLER.jpg?alt=media&token=ff0eadf5-f0dd-4a3a-9d29-4f16ea2ff08f",
-    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20Thriller%2FMJ%20THRILLER%20(1).jpg?alt=media&token=4fb2ea0d-27ef-4c5b-b654-7d6d47641b72"
-  },
-  {
-    "id": "Micheal the Legend",
-    "name": "Micheal the Legend",
-    "price": 499,
-    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20image%2FMICHEAL%20JACKSON%20%E2%9A%A1%EF%B8%8F%E2%9C%A8.jpg?alt=media&token=a78f74fb-b114-4ea2-8d08-6d2d0140a3c0",
-    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FMJ%20image%2FMICHEAL%20JACKSON%20%E2%9A%A1%EF%B8%8F%E2%9C%A8%20(5).jpg?alt=media&token=63a79bdc-131d-4513-9cdf-e93c0ae7dd0c"
-  },
-  {
-    "id": "U1",
-    "name": "U1",
-    "price": 499,
-    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FU1%2FDRUG%20DEALER%20%F0%9F%8E%B6%F0%9F%8E%B8U1.jpg?alt=media&token=3bcdc4d8-64a3-4dc8-98cf-1953f67e2161",
-    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FU1%2FDRUG%20DEALER%20%F0%9F%8E%B6%F0%9F%8E%B8U1.jpg?alt=media&token=3bcdc4d8-64a3-4dc8-98cf-1953f67e2161"
-  },
-  {
-    "id": "Weekend",
-    "name": "Weekend",
-    "price": 499,
-    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FWeekend%2FTHE%20WEEKND.jpg?alt=media&token=b3308973-e497-4c5f-8f7c-baad1924f01e",
-    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FWeekend%2FTHE%20WEEKND(1).jpg?alt=media&token=cbcbd423-a6df-4fb7-a2cd-2f4c018565e2",
-    "img3": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FWeekend%2FTHE%20WEEKND(1).jpg?alt=media&token=cbcbd423-a6df-4fb7-a2cd-2f4c018565e2",
-    "img4": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FWeekend%2FTHE%20WEEKND(3).jpg?alt=media&token=570c0383-46f7-4f4f-9fb3-36c40fe90dd8"
+    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FUFC%20x%20Venam%2FUFC%20x%20VENUM%20%20(1).jpg?alt=media&token=ffd6342f-8729-4471-ae42-4ed55c04fd79",
+    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FUFC%20x%20Venam%2FUFC%20x%20VENUM.jpg?alt=media&token=11d3a87f-a7b0-4228-aa86-a6d1e24c93a8",
+    "img3": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FUFC%20x%20Venam%2FUFC%20x%20VENUM%20%20(3).jpg?alt=media&token=38ca2ece-f9db-44c4-a686-e4efe7055bd7",
+    "img4": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FUFC%20x%20Venam%2FUFC%20x%20VENUM%20(2).jpg?alt=media&token=669ee038-ba6f-42a7-bbd6-574f4fb4b711"
   }
 ]
