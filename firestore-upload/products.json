@@ -1,0 +1,28 @@
+[
+  {
+    "id": "Dragon Ball Z",
+    "name": "Dragon Ball Z",
+    "price": 499,
+    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FDragon%20Ball%2FDRAGONBALL%20Z.jpg?alt=media&token=f13291d9-999d-41f9-b221-b4bd54c7602f",
+    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FDragon%20Ball%2FDRAGONBALL%20Z%20%20(1).jpg?alt=media&token=ea0aa11f-33b1-40e1-9154-e6a75f1915c0",
+    "img3": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FDragon%20Ball%2FDRAGONBALL%20Z%20%20(2).jpg?alt=media&token=a5e8328c-1e4d-4f59-b7c2-8eda60afccd2",
+    "img4": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FDragon%20Ball%2FDRAGONBALL%20Z%20(3).jpg?alt=media&token=c3d2d622-ef48-4c58-8441-8889bcfc1765"
+  },
+  {
+    "id": "Goku",
+    "name": "Goku",
+    "price": 499,
+    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FGoku%2FGOKU.jpg?alt=media&token=fd5ece8f-d434-4144-beda-36553bd4f06c",
+    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FGoku%2FGOKU%20%20(1).jpg?alt=media&token=7c071222-fa55-4d8c-a4c3-b1940162e680",
+    "img3": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FGoku%2FGOKU%20%20(2).jpg?alt=media&token=ef8e9529-f4f0-4bb8-aeae-8fdd904f3965",
+    "img4": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FGoku%2FGOKU%20%20(3).jpg?alt=media&token=c6ceb700-8814-476d-86c2-ea0790e3ba13"
+  },
+  {
+    "id": "Super Saiyan",
+    "name": "Super Saiyan",
+    "price": 499,
+    "img1": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FSuper%20Saiyan%2FSUPER%20SAIYAN.jpg?alt=media&token=1f87706f-107b-4a3c-8f93-e140eb9d27b9",
+    "img2": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FSuper%20Saiyan%2FSUPER%20SAIYAN%20%20(1).jpg?alt=media&token=80fe98e3-e9a5-4f24-b3e3-8044187dbf6c",
+    "img3": "https://firebasestorage.googleapis.com/v0/b/ecommerce-f1448.firebasestorage.app/o/products%2FSuper%20Saiyan%2FSUPER%20SAIYAN%20%20(2).jpg?alt=media&token=78ac264b-4be8-4bea-97d2-3c8b44c41c2b"
+  }
+]

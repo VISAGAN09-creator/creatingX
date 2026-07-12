@@ -12,3 +12,4 @@ firebase-service-account.json
 *.log
 firebase-debug.log
 codex.html
+firestore-upload/serviceAccountKey.json
