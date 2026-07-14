@@ -1,24 +1,41 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { getCookie, setCookie } from '../utils/cookies';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CartLine, Product } from '../types';
 
 // ============================================================================
-// useCart — cart state, cookie persistence, and Firestore sync
+// useCart — cart state with localStorage persistence
 // ============================================================================
 //
 // Encapsulates:
-//  • cartLines state (initialised from cookie)
+//  • cartLines state (initialised from localStorage)
 //  • cartOpen drawer state
-//  • Cart ID generation and Firestore hydration on mount
-//  • Debounced Firestore sync on every cart change
-//  • Cookie persistence on every cart change
+//  • localStorage persistence on every cart change
 //  • addToCart, increment, decrement, remove, clearCart mutations
 //  • Derived values: cartCount, subtotal
 //
-// No other component or hook needs to know about the persistence strategy.
 // ============================================================================
+
+const STORAGE_KEY = 'cart';
+
+/** Safely read and parse cart data from localStorage. */
+function loadCart(): CartLine[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Safely write cart data to localStorage. */
+function saveCart(lines: CartLine[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(lines));
+  } catch (e) {
+    console.error('Error saving cart to localStorage:', e);
+  }
+}
 
 export type UseCartReturn = {
   cartLines: CartLine[];
@@ -37,84 +54,13 @@ export function useCart(): UseCartReturn {
   // ---- State ---------------------------------------------------------------
 
   const [cartOpen, setCartOpen] = useState(false);
-  const [cartLines, setCartLines] = useState<CartLine[]>(() => {
-    try {
-      const saved = getCookie('cart');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [cartLines, setCartLines] = useState<CartLine[]>(loadCart);
 
-  const [cartId, setCartId] = useState<string | null>(null);
-  const isCartSyncInitialized = useRef(false);
-
-  // ---- Cart ID generation + Firestore hydration ----------------------------
+  // ---- localStorage persistence --------------------------------------------
 
   useEffect(() => {
-    const initCart = async () => {
-      let currentCartId = getCookie('cart_id');
-      if (!currentCartId) {
-        currentCartId =
-          typeof crypto?.randomUUID === 'function'
-            ? crypto.randomUUID()
-            : Math.random().toString(36).substring(2, 15) +
-              Math.random().toString(36).substring(2, 15);
-        setCookie('cart_id', currentCartId, 30);
-      }
-      setCartId(currentCartId);
-
-      try {
-        const cartDocRef = doc(db, 'carts', currentCartId);
-        const cartSnapshot = await getDoc(cartDocRef);
-        if (cartSnapshot.exists()) {
-          const data = cartSnapshot.data();
-          if (data && Array.isArray(data.items)) {
-            setCartLines((current) => {
-              if (current.length === 0) {
-                return data.items;
-              }
-              return current;
-            });
-          }
-        }
-      } catch (err) {
-        console.error('Error loading cart from Firestore:', err);
-      } finally {
-        isCartSyncInitialized.current = true;
-      }
-    };
-
-    initCart();
-  }, []);
-
-  // ---- Cookie + Firestore persistence (debounced) --------------------------
-
-  useEffect(() => {
-    try {
-      setCookie('cart', JSON.stringify(cartLines), 30);
-    } catch (e) {
-      console.error('Error saving cart cookie:', e);
-    }
-
-    if (!cartId || !isCartSyncInitialized.current) return;
-
-    // Debounce Firestore sync — waits 800ms after the last cart change before
-    // writing, so rapid +/- clicks don't each trigger a separate setDoc call.
-    const timeout = setTimeout(async () => {
-      try {
-        const cartDocRef = doc(db, 'carts', cartId);
-        await setDoc(cartDocRef, {
-          items: cartLines,
-          lastUpdated: new Date().toISOString(),
-        });
-      } catch (err) {
-        console.error('Error saving cart to Firestore:', err);
-      }
-    }, 800);
-
-    return () => clearTimeout(timeout);
-  }, [cartLines, cartId]);
+    saveCart(cartLines);
+  }, [cartLines]);
 
   // ---- Derived values ------------------------------------------------------
 
