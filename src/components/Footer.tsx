@@ -1,4 +1,4 @@
-import { Instagram, Music2, Twitter } from 'lucide-react';
+import { Instagram } from 'lucide-react';
 import { useState } from 'react';
 import { footerColumns } from '../data/siteData';
 import { MagneticButton } from './Magnetic';
@@ -43,7 +43,19 @@ export function Footer({ activePage }: FooterProps) {
                   Thoughts Of The Day
                 </span>
               ) : (
-                <img src={logo} alt="METALFLUX" className="h-10 w-auto object-contain" />
+                <div className="flex items-center gap-4">
+                  <img src={logo} alt="METALFLUX" className="h-10 w-auto object-contain" />
+                  <a
+                    href="https://www.instagram.com/varataaah/"
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="Instagram"
+                    data-cursor="hover"
+                    className="flex h-10 w-10 items-center justify-center border border-metal-mid text-metal-dark transition hover:border-black hover:bg-black hover:text-white"
+                  >
+                    <Instagram size={18} strokeWidth={2} />
+                  </a>
+                </div>
               )}
             </div>
             <p className="max-w-[300px] text-[0.95rem] leading-7 text-metal-dark">
@@ -103,26 +115,6 @@ export function Footer({ activePage }: FooterProps) {
 
         <div className="flex flex-col gap-6 pt-8 sm:flex-row sm:items-center sm:justify-between sm:pt-10">
           <p className="text-xs text-metal-text">© {new Date().getFullYear()} Varataaa. All rights reserved.</p>
-          <div className="flex gap-4 sm:gap-5">
-            {[
-              { label: 'Instagram', icon: Instagram },
-              { label: 'Twitter', icon: Twitter },
-              { label: 'TikTok', icon: Music2 },
-            ].map((social) => {
-              const Icon = social.icon;
-              return (
-                <a
-                  key={social.label}
-                  href="#"
-                  aria-label={social.label}
-                  data-cursor="hover"
-                  className="flex h-10 w-10 items-center justify-center border border-metal-mid text-metal-dark transition hover:border-black hover:bg-black hover:text-white"
-                >
-                  <Icon size={18} strokeWidth={2} />
-                </a>
-              );
-            })}
-          </div>
         </div>
       </div>
       {activePage !== 'totd' && (
