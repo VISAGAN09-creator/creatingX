@@ -52,9 +52,10 @@ export type ProductSize = {
 
 export type ProductSizeGuideRow = {
   size: string;
-  chest: string;
-  length: string;
-  sleeve: string;
+  toFitChest: string;
+  Chest: string;
+  Length: string;
+  shoulder: string;
 };
 
 export type ProductCollection = {

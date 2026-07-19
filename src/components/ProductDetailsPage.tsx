@@ -32,12 +32,14 @@ const DEFAULT_SIZES = [
 ];
 
 const DEFAULT_SIZE_GUIDE = [
-  { size: 'XS', chest: '38"', length: '26"', sleeve: '24"' },
-  { size: 'S', chest: '40"', length: '27"', sleeve: '25"' },
-  { size: 'M', chest: '42"', length: '28"', sleeve: '26"' },
-  { size: 'L', chest: '44"', length: '29"', sleeve: '27"' },
-  { size: 'XL', chest: '46"', length: '30"', sleeve: '28"' },
-  { size: 'XXL', chest: '48"', length: '31"', sleeve: '29"' },
+  { size: 'XXS', toFitChest: '34', Chest: '40', Length: '28', shoulder: '19' },
+  { size: 'XS', toFitChest: '36', Chest: '42', Length: '28.5', shoulder: '20' },
+  { size: 'S', toFitChest: '38', Chest: '44', Length: '29', shoulder: '21' },
+  { size: 'M', toFitChest: '40', Chest: '46', Length: '29', shoulder: '22' },
+  { size: 'L', toFitChest: '42', Chest: '48', Length: '29.5', shoulder: '23' },
+  { size: 'XL', toFitChest: '44', Chest: '50', Length: '29.5', shoulder: '24' },
+  { size: 'XXL', toFitChest: '46', Chest: '52', Length: '30', shoulder: '25' },
+  { size: 'XXXL', toFitChest: '48', Chest: '54', Length: '30', shoulder: '26' },
 ];
 
 const DEFAULT_DETAILS = [
@@ -52,8 +54,6 @@ const DEFAULT_SHIPPING = [
   'Free shipping on orders above RS. 3,000',
   'Standard delivery: 4-6 business days',
   'Express delivery: 2-3 business days',
-  '14-day hassle-free returns',
-  'Cash on delivery available',
 ];
 
 const DEFAULT_CARE = [
@@ -523,7 +523,7 @@ export function ProductDetailsPage({
             if (event.target === event.currentTarget) setSizeGuideOpen(false);
           }}
         >
-          <div className="w-full max-w-[520px] bg-white p-6 text-black shadow-metal sm:p-10">
+          <div className="w-full max-w-[620px] bg-white p-6 text-black shadow-metal sm:p-10">
             <div className="mb-7 flex items-center justify-between gap-4">
               <h2 className="font-display text-2xl font-bold tracking-normal">Size Guide</h2>
               <button
@@ -540,7 +540,7 @@ export function ProductDetailsPage({
               <table className="w-full border-collapse text-center text-[13px]">
                 <thead>
                   <tr>
-                    {['Size', 'Chest', 'Length', 'Sleeve'].map((heading) => (
+                    {['Sizes', 'To Fit Chest', 'Chest', 'Length', 'Shoulder'].map((heading) => (
                       <th
                         key={heading}
                         className="border-b border-metal-light bg-[#f5f5f5] px-3 py-3.5 text-[11px] font-bold uppercase tracking-[0.08em]"
@@ -553,10 +553,11 @@ export function ProductDetailsPage({
                 <tbody>
                   {sizeGuide.map((row) => (
                     <tr key={row.size} className="transition hover:bg-black/[0.02]">
-                      <td className="border-b border-metal-light px-3 py-3.5">{row.size}</td>
-                      <td className="border-b border-metal-light px-3 py-3.5">{row.chest}</td>
-                      <td className="border-b border-metal-light px-3 py-3.5">{row.length}</td>
-                      <td className="border-b border-metal-light px-3 py-3.5">{row.sleeve}</td>
+                      <td className="border-b border-metal-light px-3 py-3.5 font-semibold">{row.size}</td>
+                      <td className="border-b border-metal-light px-3 py-3.5">{row.toFitChest}</td>
+                      <td className="border-b border-metal-light px-3 py-3.5">{row.Chest}</td>
+                      <td className="border-b border-metal-light px-3 py-3.5">{row.Length}</td>
+                      <td className="border-b border-metal-light px-3 py-3.5">{row.shoulder}</td>
                     </tr>
                   ))}
                 </tbody>

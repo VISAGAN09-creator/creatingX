@@ -1,4 +1,5 @@
 import type { DataStatus, Product } from '../types';
+import { ArrowRight } from 'lucide-react';
 import { ProductCard } from './ProductCard';
 import { SectionHeader } from './SectionHeader';
 
@@ -32,17 +33,30 @@ export function Lookbook({ products, status, onAddToCart, onOpenProduct, onViewA
           <p className="max-w-xl text-sm leading-6 text-metal-text">No product looks are available yet.</p>
         )}
         {products.length > 0 && (
-          <div className="grid grid-cols-2 items-stretch gap-4 sm:gap-6 lg:grid-cols-4 lg:gap-7 xl:gap-[30px]">
-            {products.map((product, index) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                index={index}
-                onAdd={onAddToCart}
-                onOpen={onOpenProduct}
-              />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-2 items-stretch gap-4 sm:gap-6 lg:grid-cols-4 lg:gap-7 xl:gap-[30px]">
+              {products.slice(0, 10).map((product, index) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  index={index}
+                  onAdd={onAddToCart}
+                  onOpen={onOpenProduct}
+                />
+              ))}
+
+              {products.length > 10 && (
+                <div className="flex items-center justify-center min-h-[200px] p-4">
+                  <button
+                    onClick={onViewAll}
+                    className="group flex items-center justify-center gap-2 border border-white px-6 py-3 text-sm font-semibold uppercase tracking-[0.1em] text-white transition-all hover:bg-white hover:text-black"
+                  >
+                    MORE PRODUCTS <ArrowRight size={16} strokeWidth={2} className="transition-transform group-hover:translate-x-1" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
         )}
       </div>
     </section>
