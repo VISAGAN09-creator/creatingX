@@ -140,7 +140,9 @@ export default function App() {
         )}
       </main>
 
-      {router.activePage !== 'checkout' && <Footer activePage={router.activePage} />}
+      {router.activePage !== 'checkout' && (
+        <Footer activePage={router.activePage} onNavigate={router.navigateToHomeSection} />
+      )}
 
       <CartDrawer
         isOpen={cart.cartOpen}

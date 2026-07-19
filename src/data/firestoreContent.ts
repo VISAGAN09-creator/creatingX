@@ -209,9 +209,10 @@ function sizeGuideList(value: unknown): ProductSizeGuideRow[] {
     return [
       {
         size,
-        chest: text(record.chest) ?? '-',
-        length: text(record.length) ?? '-',
-        sleeve: text(record.sleeve) ?? '-',
+        toFitChest: text(record.toFitChest) ?? text(record.chest) ?? '-',
+        Chest: text(record.Chest) ?? '-',
+        Length: text(record.Length) ?? text(record.length) ?? '-',
+        shoulder: text(record.shoulder) ?? text(record.sleeve) ?? '-',
       },
     ];
   });

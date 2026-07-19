@@ -135,7 +135,7 @@ export const features: Feature[] = [
   },
   {
     title: 'Fast Delivery',
-    description: 'Shipped within 48 hours. Track your order in real-time from print to doorstep.',
+    description: 'Shipped in 4-5 days. Track your order in real-time from print to doorstep.',
     icon: Truck,
   },
 ];
@@ -149,15 +149,15 @@ export const stats = [
 export const footerColumns: FooterColumn[] = [
   {
     title: 'Shop',
-    links: ['New Arrivals', 'Best Sellers', 'Custom Prints', 'Limited Edition', 'Sale'],
+    links: ['New Arrivals', 'Custom Prints'],
   },
   {
     title: 'Company',
-    links: ['About Us', 'Careers', 'Press', 'Sustainability', 'Affiliates'],
+    links: ['About Us','Size Guide'],
   },
   {
     title: 'Support',
-    links: ['FAQ', 'Shipping', 'Returns', 'Size Guide', 'Contact'],
+    links: ['FAQ', 'Shipping', 'Returns'],
   },
 ];
 

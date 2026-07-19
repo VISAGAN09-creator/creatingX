@@ -3,14 +3,61 @@ import { useState } from 'react';
 import { footerColumns } from '../data/siteData';
 import { MagneticButton } from './Magnetic';
 import logo from '../assets/logo.png';
+import { scrollToHash } from '../utils/scroll';
 
 type FooterProps = {
   activePage?: string;
+  onNavigate?: (href: string) => void;
 };
 
-export function Footer({ activePage }: FooterProps) {
+export function Footer({ activePage, onNavigate }: FooterProps) {
   const [email, setEmail] = useState('');
   const [joined, setJoined] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const showToast = (message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(null), 2500);
+  };
+
+  const handleLinkClick = (event: React.MouseEvent, columnTitle: string, link: string) => {
+    event.preventDefault();
+
+    if (columnTitle === 'Support') {
+      showToast('Soon');
+      return;
+    }
+
+    if (link === 'New Arrivals') {
+      if (onNavigate) {
+        onNavigate('#latest-drop');
+      } else {
+        scrollToHash('#latest-drop');
+      }
+      return;
+    }
+
+    if (link === 'Custom Prints') {
+      if (onNavigate) {
+        onNavigate('#customize');
+      } else {
+        scrollToHash('#customize');
+      }
+      return;
+    }
+
+    if (link === 'About Us') {
+      if (onNavigate) {
+        onNavigate('#about');
+      } else {
+        scrollToHash('#about');
+      }
+      return;
+    }
+
+    // Default fallback (e.g. Size Guide, etc.)
+    showToast('Soon');
+  };
 
   const handleJoin = async () => {
     const trimmed = email.trim();
@@ -101,6 +148,7 @@ export function Footer({ activePage }: FooterProps) {
                   <li key={link}>
                     <a
                       href="#"
+                      onClick={(event) => handleLinkClick(event, column.title, link)}
                       data-cursor="hover"
                       className="text-sm text-metal-dark transition hover:text-black"
                     >
@@ -122,6 +170,11 @@ export function Footer({ activePage }: FooterProps) {
           <h1 className="text-[11vw] font-display font-black text-center leading-none tracking-normal uppercase select-none bg-gradient-to-b from-[#ff2c2c]/[0.12] to-[#ff2c2c]/[0.01] bg-clip-text text-transparent transform -translate-x-[1vw]">
             Varataaa
           </h1>
+        </div>
+      )}
+      {toast && (
+        <div className="fixed bottom-8 left-1/2 z-[2000] -translate-x-1/2 rounded-lg bg-black px-7 py-3.5 text-[13px] font-medium text-white shadow-[0_8px_32px_rgba(0,0,0,0.15)] animate-in fade-in slide-in-from-bottom-4 duration-300">
+          {toast}
         </div>
       )}
     </footer>
