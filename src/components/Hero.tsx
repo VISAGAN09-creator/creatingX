@@ -80,21 +80,23 @@ export function Hero({
       {/* Blinking Sale Badges (Blue Boxes) */}
       {heroProducts.length > 0 && (
         <>
-          <div className="absolute top-28 left-5 sm:left-8 lg:left-12 z-[2]">
+          {/* Centered on mobile, left-aligned on sm+ */}
+          <div className="absolute top-28 left-1/2 -translate-x-1/2 sm:left-8 sm:translate-x-0 lg:left-12 z-[2]">
             <motion.img
               src={saleBadge}
               alt="Sale"
-              className="h-16 w-16 sm:h-20 sm:w-20 lg:h-24 lg:w-24 object-contain"
+              className="h-20 w-20 sm:h-20 sm:w-20 lg:h-24 lg:w-24 object-contain"
               animate={shouldReduceMotion ? undefined : { opacity: [1, 0.15, 1] }}
               transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
             />
           </div>
 
-          <div className="absolute top-28 right-5 sm:right-8 lg:right-12 z-[2]">
+          {/* Hidden on mobile, right-aligned on sm+ */}
+          <div className="absolute top-28 right-5 sm:right-8 lg:right-12 z-[2] hidden sm:block">
             <motion.img
               src={saleBadge}
               alt="Sale"
-              className="h-16 w-16 sm:h-20 sm:w-20 lg:h-24 lg:w-24 object-contain"
+              className="h-20 w-20 sm:h-20 sm:w-20 lg:h-24 lg:w-24 object-contain"
               animate={shouldReduceMotion ? undefined : { opacity: [1, 0.15, 1] }}
               transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
             />
@@ -104,7 +106,7 @@ export function Hero({
 
       {/* Bottom-Left Hero Product Slot (Green Box) */}
       {heroProducts[0] && (
-        <div className="absolute bottom-10 left-5 sm:left-8 lg:left-12 z-[2] max-w-[120px] sm:max-w-[160px]">
+        <div className="absolute bottom-10 left-5 sm:left-8 lg:left-12 z-[2] max-w-[150px] sm:max-w-[200px]">
           <button
             type="button"
             data-cursor="hover"
@@ -122,16 +124,13 @@ export function Hero({
             <h4 className="truncate text-xs font-semibold uppercase tracking-[0.05em] text-white">
               {heroProducts[0].name}
             </h4>
-            <p className="text-[10px] text-metal-text mt-0.5">
-              {formatPrice(heroProducts[0].price)}
-            </p>
           </button>
         </div>
       )}
 
       {/* Bottom-Right Hero Product Slot (Green Box) */}
       {heroProducts[1] && (
-        <div className="absolute bottom-10 right-5 sm:right-8 lg:right-12 z-[2] max-w-[120px] sm:max-w-[160px]">
+        <div className="absolute bottom-10 right-5 sm:right-8 lg:right-12 z-[2] max-w-[150px] sm:max-w-[200px]">
           <button
             type="button"
             data-cursor="hover"
@@ -149,9 +148,6 @@ export function Hero({
             <h4 className="truncate text-xs font-semibold uppercase tracking-[0.05em] text-white">
               {heroProducts[1].name}
             </h4>
-            <p className="text-[10px] text-metal-text mt-0.5">
-              {formatPrice(heroProducts[1].price)}
-            </p>
           </button>
         </div>
       )}
