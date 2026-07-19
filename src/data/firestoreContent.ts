@@ -2,13 +2,15 @@ import {
   collection,
   doc,
   getDoc,
+  increment,
   onSnapshot,
+  updateDoc,
   type DocumentData,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { slugify } from '../utils/string';
-import type { LookbookItem, Product, ProductColor, ProductSize, ProductSizeGuideRow } from '../types';
+import type { LookbookItem, Product, ProductColor, ProductSize, ProductSizeGuideRow, StockInventory } from '../types';
 
 const productsCollectionName = import.meta.env.VITE_FIRESTORE_PRODUCTS_COLLECTION || 'products';
 const lookbookCollectionName = import.meta.env.VITE_FIRESTORE_LOOKBOOK_COLLECTION || 'lookbook';
@@ -502,4 +504,85 @@ export function subscribeToTOTD(
       onError?.(error);
     },
   );
+}
+
+/**
+ * Subscribe to real-time stock inventory updates.
+ *
+ * Listens to the `stocks/inventory` document and emits the parsed
+ * StockInventory map whenever stock quantities change.
+ * Keys are normalised to lowercase for case-insensitive matching.
+ *
+ * Returns an unsubscribe function.
+ */
+export function subscribeToStocks(
+  onUpdate: (stocks: StockInventory) => void,
+  onError?: (error: Error) => void,
+): Unsubscribe {
+  const stockDocRef = doc(db, 'stocks', 'inventory');
+
+  return onSnapshot(
+    stockDocRef,
+    (snapshot) => {
+      if (!snapshot.exists()) {
+        onUpdate({});
+        return;
+      }
+
+      const raw = snapshot.data();
+      const normalised: StockInventory = {};
+
+      for (const [productName, sizeMap] of Object.entries(raw)) {
+        if (sizeMap && typeof sizeMap === 'object' && !Array.isArray(sizeMap)) {
+          const sizes: Record<string, number> = {};
+          for (const [sizeName, qty] of Object.entries(sizeMap as Record<string, unknown>)) {
+            if (typeof qty === 'number' && Number.isFinite(qty)) {
+              sizes[sizeName.toUpperCase()] = Math.max(0, Math.floor(qty));
+            }
+          }
+          normalised[productName.toLowerCase()] = sizes;
+        }
+      }
+
+      onUpdate(normalised);
+    },
+    (error) => {
+      console.error('Firestore stocks snapshot error:', error);
+      onError?.(error);
+    },
+  );
+}
+
+/**
+ * Atomically decrement stock quantities after a successful purchase.
+ *
+ * @param items - Map of product name → { size → quantity purchased }
+ *
+ * Uses Firestore `increment(-qty)` for atomic updates so concurrent
+ * purchases don't cause race conditions.
+ */
+export async function decrementStock(
+  items: Record<string, Record<string, number>>,
+): Promise<void> {
+  const stockDocRef = doc(db, 'stocks', 'inventory');
+
+  // Build a flat update object using dot-notation for nested fields
+  // e.g. { "AURA.M": increment(-2), "Christ Warrior.L": increment(-1) }
+  const updates: Record<string, unknown> = {};
+
+  for (const [productName, sizes] of Object.entries(items)) {
+    for (const [sizeName, qty] of Object.entries(sizes)) {
+      if (qty > 0) {
+        updates[`${productName}.${sizeName}`] = increment(-qty);
+      }
+    }
+  }
+
+  if (Object.keys(updates).length === 0) return;
+
+  try {
+    await updateDoc(stockDocRef, updates);
+  } catch (error) {
+    console.error('Failed to decrement stock:', error);
+  }
 }

@@ -40,6 +40,9 @@ export type CartLine = Product & {
 
 export type DataStatus = 'loading' | 'ready' | 'error';
 
+/** Centralized stock map: product name → { size → quantity } */
+export type StockInventory = Record<string, Record<string, number>>;
+
 export type ProductColor = {
   name: string;
   value: string;

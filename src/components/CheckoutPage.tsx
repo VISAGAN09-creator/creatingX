@@ -4,6 +4,7 @@ import type { CartLine } from '../types';
 import { formatPrice } from '../utils/format';
 import { SmartImage } from './SmartImage';
 import { loadGatewayScript, openCheckout } from '../lib/paymentGateway';
+import { decrementStock } from '../data/firestoreContent';
 
 import logo from '../assets/logo.png';
 
@@ -174,6 +175,25 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
               }
 
               const result = await verifyResponse.json();
+
+              // Step 4: Decrement centralized stock for purchased items
+              // Cart line names are formatted as "ProductName (Size)"
+              const stockDecrements: Record<string, Record<string, number>> = {};
+              for (const line of lines) {
+                const match = line.name.match(/^(.+?)\s*\(([^)]+)\)$/);
+                if (match) {
+                  const [, productName, sizeName] = match;
+                  if (!stockDecrements[productName]) stockDecrements[productName] = {};
+                  stockDecrements[productName][sizeName] =
+                    (stockDecrements[productName][sizeName] ?? 0) + line.quantity;
+                }
+              }
+              if (Object.keys(stockDecrements).length > 0) {
+                decrementStock(stockDecrements).catch((err) =>
+                  console.error('Stock decrement failed (non-blocking):', err),
+                );
+              }
+
               onClearCart();
               setSuccessOrderId(result.orderId);
               setIsPaying(false);
