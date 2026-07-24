@@ -1,5 +1,5 @@
 import { ArrowLeft, Plus, Ruler, ShoppingBag, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DataStatus, Product } from '../types';
 import { formatPrice } from '../utils/format';
 import { MagneticButton } from './Magnetic';
@@ -121,6 +121,35 @@ export function ProductDetailsPage({
   const [selectedSize, setSelectedSize] = useState('');
   const [openAccordion, setOpenAccordion] = useState('description');
   const [sizeGuideOpen, setSizeGuideOpen] = useState(false);
+
+  const touchStartX = useRef<number | null>(null);
+  const touchEndX = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchEndX.current = null;
+    touchStartX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartX.current === null || touchEndX.current === null) return;
+    const distance = touchStartX.current - touchEndX.current;
+    const minSwipeDistance = 35;
+
+    if (distance > minSwipeDistance && images.length > 1) {
+      setCurrentImage((prev) => (prev + 1) % images.length);
+      setIsZoomed(false);
+    } else if (distance < -minSwipeDistance && images.length > 1) {
+      setCurrentImage((prev) => (prev - 1 + images.length) % images.length);
+      setIsZoomed(false);
+    }
+
+    touchStartX.current = null;
+    touchEndX.current = null;
+  };
 
   const images = useMemo(() => (product ? productImages(product) : []), [product]);
   const colors = useMemo(() => (product?.colors?.length ? product.colors : DEFAULT_COLORS), [product]);
@@ -334,33 +363,43 @@ export function ProductDetailsPage({
               ))}
             </div>
 
-            <button
-              type="button"
-             
-              className={`order-1 relative mx-auto aspect-[4/5] w-full max-w-[460px] overflow-hidden bg-[#f5f5f5] lg:order-2 lg:max-w-[430px] ${
+            <div
+              className={`order-1 group relative mx-auto aspect-[4/5] w-full max-w-[460px] overflow-hidden bg-[#f5f5f5] lg:order-2 lg:max-w-[430px] touch-pan-y select-none ${
                 isZoomed ? 'cursor-zoom-out' : 'cursor-zoom-in'
               }`}
-              aria-label={isZoomed ? 'Zoom out product image' : 'Zoom in product image'}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
               onClick={() => setIsZoomed((zoomed) => !zoomed)}
             >
               <SmartImage
                 src={images[currentImage] ?? product.image}
                 alt={product.alt}
-                className={`h-full w-full object-cover transition duration-500 ${
+                className={`h-full w-full object-cover transition duration-500 select-none ${
                   isZoomed ? 'scale-[1.6]' : 'hover:scale-[1.02]'
                 }`}
               />
+
               {images.length > 1 && (
-                <div className="absolute bottom-5 left-1/2 z-[3] flex -translate-x-1/2 gap-2">
+                <div className="absolute bottom-5 left-1/2 z-[4] flex -translate-x-1/2 gap-2">
                   {images.map((image, index) => (
-                    <span
+                    <button
                       key={`${image}-dot-${index}`}
-                      className={`h-[3px] w-8 transition ${currentImage === index ? 'bg-white' : 'bg-white/40'}`}
+                      type="button"
+                      aria-label={`Go to image ${index + 1}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCurrentImage(index);
+                        setIsZoomed(false);
+                      }}
+                      className={`h-1.5 rounded-full transition-all duration-300 ${
+                        currentImage === index ? 'w-8 bg-white' : 'w-2 bg-white/40 hover:bg-white/70'
+                      }`}
                     />
                   ))}
                 </div>
               )}
-            </button>
+            </div>
           </div>
 
           <div className="pt-2">
