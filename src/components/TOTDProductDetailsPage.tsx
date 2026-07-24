@@ -25,12 +25,14 @@ const DEFAULT_COLORS = [
 ];
 
 const DEFAULT_SIZES = [
+  { name: 'XXS', stock: 1 },
   { name: 'XS', stock: 1 },
   { name: 'S', stock: 1 },
   { name: 'M', stock: 1 },
   { name: 'L', stock: 1 },
   { name: 'XL', stock: 1 },
-  { name: 'XXL', stock: 0 },
+  { name: 'XXL', stock: 1 },
+  { name: 'XXXL', stock: 1 },
 ];
 
 const DEFAULT_SIZE_GUIDE = [
@@ -413,7 +415,7 @@ export function TOTDProductDetailsPage({
                   </button>
                 </div>
 
-                <div className="mt-4 grid grid-cols-6 gap-2">
+                <div className="mt-4 flex flex-wrap gap-2.5">
                   {sizes.map((size) => {
                     const isSelected = selectedSize === size.name;
                     const outOfStock = size.stock <= 0;
