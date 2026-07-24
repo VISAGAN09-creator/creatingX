@@ -15,6 +15,7 @@ import { ProductDetailsPage } from './components/ProductDetailsPage';
 import { ProductViewingPage } from './components/ProductViewingPage';
 import { SearchDrawer } from './components/SearchDrawer';
 import { TOTD } from './components/TOTD';
+import { TOTDProductDetailsPage } from './components/TOTDProductDetailsPage';
 import { useCart } from './hooks/useCart';
 import { useCatalog } from './hooks/useCatalog';
 import { useRouter } from './hooks/useRouter';
@@ -45,11 +46,22 @@ export default function App() {
     [catalog.catalogProducts, catalog.totdProducts, router.selectedProductId],
   );
 
+  const isTotdProduct = useMemo(() => {
+    if (!selectedProduct) return router.productReturnPage === 'totd';
+    return (
+      catalog.totdProducts.some((p) => p.id === selectedProduct.id) ||
+      router.productReturnPage === 'totd'
+    );
+  }, [selectedProduct, catalog.totdProducts, router.productReturnPage]);
+
   // ---- Cross-concern handler: checkout closes cart drawer, then navigates --
   const handleOpenCheckout = () => {
     cart.setCartOpen(false);
     router.openCheckoutPage();
   };
+
+  const effectiveActivePage =
+    isTotdProduct && router.activePage === 'productDetail' ? 'totd' : router.activePage;
 
   // ---- Render --------------------------------------------------------------
   return (
@@ -62,7 +74,7 @@ export default function App() {
           onCartOpen={() => cart.setCartOpen(true)}
           onSearchOpen={() => setSearchOpen(true)}
           onNavigate={router.navigateToHomeSection}
-          activePage={router.activePage}
+          activePage={effectiveActivePage}
         />
       )}
 
@@ -77,22 +89,25 @@ export default function App() {
             }}
           />
         ) : router.activePage === 'productDetail' ? (
-          <ProductDetailsPage
-            product={selectedProduct}
-            products={
-              router.productReturnPage === 'totd'
-                ? catalog.totdProducts
-                : catalog.catalogProducts
-            }
-            status={
-              router.productReturnPage === 'totd'
-                ? catalog.totdStatus
-                : catalog.catalogStatus
-            }
-            onAddToCart={cart.addToCart}
-            onOpenProduct={router.openProductDetail}
-            onBack={router.closeProductDetail}
-          />
+          isTotdProduct ? (
+            <TOTDProductDetailsPage
+              product={selectedProduct}
+              products={catalog.totdProducts}
+              status={catalog.totdStatus}
+              onAddToCart={cart.addToCart}
+              onOpenProduct={router.openProductDetail}
+              onBack={router.closeProductDetail}
+            />
+          ) : (
+            <ProductDetailsPage
+              product={selectedProduct}
+              products={catalog.catalogProducts}
+              status={catalog.catalogStatus}
+              onAddToCart={cart.addToCart}
+              onOpenProduct={router.openProductDetail}
+              onBack={router.closeProductDetail}
+            />
+          )
         ) : router.activePage === 'products' ? (
           <ProductViewingPage
             products={catalog.catalogProducts}
@@ -139,7 +154,7 @@ export default function App() {
       </main>
 
       {router.activePage !== 'checkout' && (
-        <Footer activePage={router.activePage} onNavigate={router.navigateToHomeSection} />
+        <Footer activePage={effectiveActivePage} onNavigate={router.navigateToHomeSection} />
       )}
 
       <CartDrawer
