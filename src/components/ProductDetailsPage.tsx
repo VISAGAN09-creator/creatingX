@@ -210,7 +210,7 @@ export function ProductDetailsPage({
         <div className="mx-auto w-full max-w-shell">
           <button
             type="button"
-            data-cursor="hover"
+           
             className="mb-8 inline-flex h-11 items-center gap-3 border border-metal-mid px-4 text-sm font-semibold uppercase tracking-[0.05em] text-black transition hover:bg-black hover:text-white"
             onClick={onBack}
           >
@@ -229,7 +229,7 @@ export function ProductDetailsPage({
         <div className="mx-auto w-full max-w-shell">
           <button
             type="button"
-            data-cursor="hover"
+           
             className="mb-8 inline-flex h-11 items-center gap-3 border border-metal-mid px-4 text-sm font-semibold uppercase tracking-[0.05em] text-black transition hover:bg-black hover:text-white"
             onClick={onBack}
           >
@@ -294,7 +294,7 @@ export function ProductDetailsPage({
       >
         <button
           type="button"
-          data-cursor="hover"
+         
           className="mb-10 inline-flex h-11 items-center gap-3 border border-metal-mid px-4 text-sm font-semibold uppercase tracking-[0.05em] text-black transition hover:bg-black hover:text-white"
           onClick={onBack}
         >
@@ -316,7 +316,7 @@ export function ProductDetailsPage({
                 <button
                   key={`${image}-${index}`}
                   type="button"
-                  data-cursor="hover"
+                 
                   className={`h-[100px] w-[84px] shrink-0 overflow-hidden border-2 bg-[#f5f5f5] transition lg:h-[120px] lg:w-full ${
                     currentImage === index ? 'border-black' : 'border-transparent'
                   }`}
@@ -336,7 +336,7 @@ export function ProductDetailsPage({
 
             <button
               type="button"
-              data-cursor="hover"
+             
               className={`order-1 relative mx-auto aspect-[4/5] w-full max-w-[460px] overflow-hidden bg-[#f5f5f5] lg:order-2 lg:max-w-[430px] ${
                 isZoomed ? 'cursor-zoom-out' : 'cursor-zoom-in'
               }`}
@@ -386,7 +386,7 @@ export function ProductDetailsPage({
                 </p>
                 <button
                   type="button"
-                  data-cursor="hover"
+                 
                   className="inline-flex items-center gap-2 text-[11px] font-medium text-metal-text underline underline-offset-4 transition hover:text-black"
                   onClick={() => setSizeGuideOpen(true)}
                 >
@@ -402,7 +402,7 @@ export function ProductDetailsPage({
                     <button
                       key={size.name}
                       type="button"
-                      data-cursor={isOutOfStock ? undefined : 'hover'}
+                     
                       disabled={isOutOfStock}
                       aria-pressed={selectedSize === size.name}
                       title={isOutOfStock ? `${size.name} out of stock` : undefined}
@@ -432,7 +432,7 @@ export function ProductDetailsPage({
               </MagneticButton>
               <button
                 type="button"
-                data-cursor="hover"
+               
                 disabled={!canAddToCart}
                 className="flex h-14 items-center justify-center border border-black bg-transparent px-4 text-xs font-bold uppercase tracking-[0.16em] text-black transition disabled:cursor-not-allowed disabled:opacity-45 enabled:hover:bg-black enabled:hover:text-white"
                 onClick={addSelectedProduct}
@@ -448,7 +448,7 @@ export function ProductDetailsPage({
                   <div key={item.id} className="border-b border-metal-light">
                     <button
                       type="button"
-                      data-cursor="hover"
+                     
                       className="flex w-full items-center justify-between py-5 text-left transition hover:opacity-70"
                       onClick={() => setOpenAccordion(isOpen ? '' : item.id)}
                     >
@@ -489,7 +489,7 @@ export function ProductDetailsPage({
               <button
                 key={item.id}
                 type="button"
-                data-cursor="hover"
+               
                 className="group text-left"
                 onClick={() => onOpenProduct(item)}
               >
@@ -528,7 +528,7 @@ export function ProductDetailsPage({
               <h2 className="font-display text-2xl font-bold tracking-normal">Size Guide</h2>
               <button
                 type="button"
-                data-cursor="hover"
+               
                 aria-label="Close size guide"
                 className="flex h-10 w-10 items-center justify-center border border-metal-mid text-black transition hover:bg-black hover:text-white"
                 onClick={() => setSizeGuideOpen(false)}

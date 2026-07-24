@@ -4,7 +4,6 @@ import { CartDrawer } from './components/CartDrawer';
 import { CheckoutPage } from './components/CheckoutPage';
 import { CookieConsent } from './components/CookieConsent';
 import { Collections } from './components/Collection';
-import { CustomCursor } from './components/CustomCursor';
 import { Customize } from './components/Customize';
 import { Footer } from './components/Footer';
 import { Hero } from './components/Hero';
@@ -55,7 +54,6 @@ export default function App() {
   // ---- Render --------------------------------------------------------------
   return (
     <>
-      <CustomCursor />
       <LiquidCanvas />
 
       {router.activePage !== 'checkout' && (

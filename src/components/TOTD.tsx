@@ -29,7 +29,7 @@ export function TOTD({ products, status, onAddToCart, onOpenProduct, onBack }: T
           <div>
             <button
               type="button"
-              data-cursor="hover"
+             
               className="mb-8 inline-flex h-11 items-center gap-3 border border-metal-light/35 px-4 text-sm font-semibold uppercase tracking-[0.05em] text-white transition hover:bg-white hover:text-black"
               onClick={onBack}
             >

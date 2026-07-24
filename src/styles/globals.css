@@ -47,19 +47,6 @@ input {
   font: inherit;
 }
 
-@media (pointer: fine) {
-
-  body,
-  a,
-  button,
-  input,
-  textarea,
-  select,
-  [role='button'],
-  [data-cursor='hover'] {
-    cursor: none;
-  }
-}
 
 @media (prefers-reduced-motion: reduce) {
 

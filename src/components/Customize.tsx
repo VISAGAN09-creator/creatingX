@@ -29,7 +29,7 @@ export function Customize() {
               return (
                 <div
                   key={feature.title}
-                  data-cursor="hover"
+                 
                   className="flex gap-5 border-l-[3px] border-black bg-metal-light p-5 transition duration-300 hover:translate-x-2 hover:bg-metal-mid sm:p-6"
                 >
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center bg-black text-white">
@@ -55,7 +55,7 @@ export function Customize() {
 
         <Reveal className="relative flex h-[430px] items-center justify-center sm:h-[540px] lg:h-[600px]">
           <div
-            data-cursor="hover"
+           
             className="clip-octagon relative h-[410px] w-[310px] overflow-hidden bg-gradient-to-br from-metal-light to-metal-mid sm:h-[500px] sm:w-[400px]"
           >
             <SmartImage

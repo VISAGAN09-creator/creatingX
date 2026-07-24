@@ -208,7 +208,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
         <header className="border-b border-[#e0e0e0] px-4 py-5 text-center flex justify-center">
           <button
             type="button"
-            data-cursor="hover"
+           
             className="flex items-center justify-center"
             onClick={onBack}
           >
@@ -240,7 +240,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
 
           <button
             type="button"
-            data-cursor="hover"
+           
             className="w-full h-14 bg-black text-white text-xs font-bold uppercase tracking-[0.16em] hover:bg-[#333333] transition flex items-center justify-center"
             onClick={onBack}
           >
@@ -277,7 +277,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
       <header className="border-b border-[#e0e0e0] px-4 py-5 text-center flex justify-center">
         <button
           type="button"
-          data-cursor="hover"
+         
           className="flex items-center justify-center"
           onClick={onBack}
         >
@@ -291,7 +291,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
             <h2 className="font-display text-[22px] font-bold tracking-normal">Contact</h2>
             <button
               type="button"
-              data-cursor="hover"
+             
               className="text-[13px] text-[#0066cc] transition hover:underline"
               onClick={() => showToast('Sign in modal coming soon')}
             >
@@ -377,7 +377,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
               />
               <button
                 type="button"
-                data-cursor="hover"
+               
                 aria-label="Search address"
                 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#999999]"
                 onClick={() => showToast('Search address')}
@@ -455,7 +455,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
               />
               <button
                 type="button"
-                data-cursor="hover"
+               
                 aria-label="Phone help"
                 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#999999]"
                 onClick={() => showToast('Phone number required for delivery updates')}
@@ -513,7 +513,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
                 Shipping
                 <button
                   type="button"
-                  data-cursor="hover"
+                 
                   aria-label="Shipping information"
                   onClick={() => showToast('Shipping calculated after address entered')}
                 >
@@ -538,7 +538,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
 
             <button
               type="button"
-              data-cursor="hover"
+             
               disabled={isPaying || lines.length === 0}
               className={`flex h-14 w-full items-center justify-center gap-2.5 rounded-lg bg-[#1a1a1a] text-sm font-bold uppercase tracking-[0.08em] text-white transition disabled:cursor-not-allowed disabled:opacity-50 enabled:hover:-translate-y-px enabled:hover:bg-[#333333] enabled:hover:shadow-[0_6px_20px_rgba(0,0,0,0.15)] ${isPaying ? 'pointer-events-none' : ''
                 }`}
@@ -555,7 +555,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
                 <button
                   key={link}
                   type="button"
-                  data-cursor="hover"
+                 
                   className="mx-2 text-[11px] text-[#666666] transition hover:text-[#1a1a1a]"
                   onClick={() => showToast(link)}
                 >

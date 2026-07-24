@@ -41,7 +41,6 @@ export function MagneticAnchor({ children, strength = 4, style, ...props }: Magn
 
   return (
     <motion.a
-      data-cursor="hover"
       {...props}
       style={{ ...style, x: magnetic.x, y: magnetic.y }}
       onMouseMove={(event) => {
@@ -63,7 +62,6 @@ export function MagneticButton({ children, strength = 4, style, ...props }: Magn
 
   return (
     <motion.button
-      data-cursor="hover"
       {...props}
       style={{ ...style, x: magnetic.x, y: magnetic.y }}
       onMouseMove={(event) => {

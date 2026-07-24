@@ -105,7 +105,7 @@ export function ProductViewingPage({
           <div>
             <button
               type="button"
-              data-cursor="hover"
+             
               className="mb-8 inline-flex h-11 items-center gap-3 border border-metal-mid px-4 text-sm font-semibold uppercase tracking-[0.05em] text-black transition hover:bg-black hover:text-white"
               onClick={onBack}
             >
@@ -129,7 +129,7 @@ export function ProductViewingPage({
         <div className="mb-10 flex flex-wrap items-center gap-3">
           <button
             type="button"
-            data-cursor="hover"
+           
             aria-pressed={selectedFilters.length === 0}
             className={`inline-flex min-h-11 items-center gap-2 border px-4 text-sm font-semibold uppercase tracking-[0.05em] transition ${
               selectedFilters.length === 0
@@ -149,7 +149,7 @@ export function ProductViewingPage({
               <button
                 key={filter}
                 type="button"
-                data-cursor="hover"
+               
                 aria-pressed={isSelected}
                 className={`inline-flex min-h-11 items-center gap-2 border px-4 text-sm font-semibold uppercase tracking-[0.05em] transition ${
                   isSelected
@@ -167,7 +167,7 @@ export function ProductViewingPage({
           {selectedFilters.length > 0 && (
             <button
               type="button"
-              data-cursor="hover"
+             
               className="inline-flex h-11 w-11 items-center justify-center border border-metal-mid text-black transition hover:bg-black hover:text-white"
               aria-label="Clear selected filters"
               onClick={() => setSelectedFilters([])}
@@ -213,7 +213,7 @@ export function ProductViewingPage({
               >
                 <button
                   type="button"
-                  data-cursor="hover"
+                 
                   className="inline-flex h-11 w-11 items-center justify-center border border-metal-mid text-black transition disabled:cursor-not-allowed disabled:opacity-40 enabled:hover:bg-black enabled:hover:text-white"
                   disabled={currentPage <= 1}
                   aria-label="Previous product page"
@@ -226,7 +226,7 @@ export function ProductViewingPage({
                   <button
                     key={pageNumber}
                     type="button"
-                    data-cursor="hover"
+                   
                     aria-current={pageNumber === currentPage ? 'page' : undefined}
                     className={`h-11 min-w-11 border px-4 text-sm font-semibold transition ${
                       pageNumber === currentPage
@@ -241,7 +241,7 @@ export function ProductViewingPage({
 
                 <button
                   type="button"
-                  data-cursor="hover"
+                 
                   className="inline-flex h-11 w-11 items-center justify-center border border-metal-mid text-black transition disabled:cursor-not-allowed disabled:opacity-40 enabled:hover:bg-black enabled:hover:text-white"
                   disabled={currentPage >= pageCount}
                   aria-label="Next product page"

@@ -41,7 +41,7 @@ export function CookieConsent() {
       <div className="flex gap-2.5 mt-2">
         <button
           type="button"
-          data-cursor="hover"
+         
           onClick={handleEssentialOnly}
           className="flex-1 h-10 border border-white/20 bg-transparent text-white text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-white/10 hover:border-white transition-all duration-200"
         >
@@ -49,7 +49,7 @@ export function CookieConsent() {
         </button>
         <button
           type="button"
-          data-cursor="hover"
+         
           onClick={handleAcceptAll}
           className="flex-1 h-10 bg-white text-black text-[10px] font-bold uppercase tracking-[0.08em] hover:bg-white/80 transition-all duration-200"
         >

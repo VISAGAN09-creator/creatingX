@@ -109,7 +109,7 @@ export function Hero({
         <div className="absolute bottom-10 left-5 sm:left-8 lg:left-12 z-[2] max-w-[150px] sm:max-w-[200px]">
           <button
             type="button"
-            data-cursor="hover"
+           
             onClick={() => onOpenProduct?.(heroProducts[0])}
             className="group relative flex flex-col overflow-hidden text-left bg-black/45 backdrop-blur-md border border-white/10 p-2 sm:p-3 transition hover:border-white/30 hover:bg-black/60 shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
           >
@@ -133,7 +133,7 @@ export function Hero({
         <div className="absolute bottom-10 right-5 sm:right-8 lg:right-12 z-[2] max-w-[150px] sm:max-w-[200px]">
           <button
             type="button"
-            data-cursor="hover"
+           
             onClick={() => onOpenProduct?.(heroProducts[1])}
             className="group relative flex flex-col overflow-hidden text-left bg-black/45 backdrop-blur-md border border-white/10 p-2 sm:p-3 transition hover:border-white/30 hover:bg-black/60 shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
           >

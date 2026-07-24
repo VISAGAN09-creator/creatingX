@@ -78,7 +78,7 @@ export function CartDrawer({
               </div>
               <button
                 type="button"
-                data-cursor="hover"
+               
                 aria-label="Close cart"
                 onClick={onClose}
                 className="flex h-11 w-11 items-center justify-center border border-metal-mid text-black transition hover:bg-black hover:text-white"
@@ -104,7 +104,7 @@ export function CartDrawer({
                     <motion.article
                       key={line.id}
                       layout
-                      data-cursor="hover"
+                     
                       className="grid grid-cols-[88px_1fr] gap-4 border-b border-metal-light pb-5"
                     >
                       <div className="aspect-[3/4] overflow-hidden bg-metal-light">
@@ -118,7 +118,7 @@ export function CartDrawer({
                           </div>
                           <button
                             type="button"
-                            data-cursor="hover"
+                           
                             aria-label={`Remove ${line.name}`}
                             onClick={() => onRemove(line.id)}
                             className="flex h-9 w-9 shrink-0 items-center justify-center text-metal-text transition hover:bg-black hover:text-white"
@@ -131,7 +131,7 @@ export function CartDrawer({
                           <div className="flex items-center border border-metal-mid">
                             <button
                               type="button"
-                              data-cursor="hover"
+                             
                               aria-label={`Decrease ${line.name} quantity`}
                               onClick={() => onDecrement(line.id)}
                               className="flex h-9 w-9 items-center justify-center text-black transition hover:bg-metal-light"
@@ -143,7 +143,7 @@ export function CartDrawer({
                             </span>
                             <button
                               type="button"
-                              data-cursor="hover"
+                             
                               aria-label={`Increase ${line.name} quantity`}
                               onClick={() => onIncrement(line.id)}
                               className="flex h-9 w-9 items-center justify-center text-black transition hover:bg-metal-light"

@@ -92,7 +92,7 @@ export function SearchDrawer({
               </div>
               <button
                 type="button"
-                data-cursor="hover"
+               
                 aria-label="Close search"
                 onClick={onClose}
                 className="flex h-11 w-11 items-center justify-center border border-metal-mid text-black transition hover:bg-black hover:text-white"
@@ -151,7 +151,7 @@ export function SearchDrawer({
                     <button
                       key={product.id}
                       type="button"
-                      data-cursor="hover"
+                     
                       onClick={() => {
                         onOpenProduct(product);
                         onClose();

@@ -49,7 +49,7 @@ export function Navbar({ cartCount, onCartOpen, onSearchOpen, onNavigate, active
       <nav className="mx-auto flex max-w-shell items-center justify-between gap-5">
         <button
           type="button"
-          data-cursor="hover"
+         
           className="flex items-center"
           onClick={() => handleNavigate('#hero')}
         >
@@ -67,7 +67,7 @@ export function Navbar({ cartCount, onCartOpen, onSearchOpen, onNavigate, active
             <li key={link.href}>
               <button
                 type="button"
-                data-cursor="hover"
+               
                 onClick={() => handleNavigate(link.href)}
                 className="group relative py-1 text-[0.85rem] font-medium uppercase tracking-[0.05em] text-black"
               >
@@ -110,7 +110,7 @@ export function Navbar({ cartCount, onCartOpen, onSearchOpen, onNavigate, active
 
           <button
             type="button"
-            data-cursor="hover"
+           
             aria-label={menuOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={menuOpen}
             className="inline-flex h-11 w-11 items-center justify-center border border-metal-mid text-black lg:hidden"
@@ -135,7 +135,7 @@ export function Navbar({ cartCount, onCartOpen, onSearchOpen, onNavigate, active
                 <motion.button
                   key={link.href}
                   type="button"
-                  data-cursor="hover"
+                 
                   initial={{ opacity: 0, x: -12 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.04 }}
