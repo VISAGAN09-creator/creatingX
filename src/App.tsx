@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { About } from './components/About';
 import { CartDrawer } from './components/CartDrawer';
 import { CheckoutPage } from './components/CheckoutPage';
@@ -20,6 +20,11 @@ import { useCart } from './hooks/useCart';
 import { useCatalog } from './hooks/useCatalog';
 import { useRouter } from './hooks/useRouter';
 import { scrollToHash } from './utils/scroll';
+import './features/tshirt-customizer/customizer.css';
+
+const TShirtCustomizer = lazy(
+  () => import('./features/tshirt-customizer/TShirtCustomizer'),
+);
 
 // ============================================================================
 // App — thin composition shell
@@ -125,6 +130,18 @@ export default function App() {
             onOpenProduct={router.openProductDetail}
             onBack={() => router.navigateToHomeSection('#hero')}
           />
+        ) : router.activePage === 'customize-studio' ? (
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center min-h-[60vh] pt-24 text-neutral-500 text-sm">
+                Loading customizer…
+              </div>
+            }
+          >
+            <div className="tshirt-customizer-root">
+              <TShirtCustomizer />
+            </div>
+          </Suspense>
         ) : (
           <>
             <Hero products={catalog.catalogProducts} onOpenProduct={router.openProductDetail} />
@@ -147,13 +164,13 @@ export default function App() {
               onOpenProduct={router.openProductDetail}
               onViewAll={() => router.openProductPage()}
             />
-            <Customize />
+            <Customize onStartDesigning={router.openCustomizeStudio} />
             <About />
           </>
         )}
       </main>
 
-      {router.activePage !== 'checkout' && (
+      {router.activePage !== 'checkout' && router.activePage !== 'customize-studio' && (
         <Footer activePage={effectiveActivePage} onNavigate={router.navigateToHomeSection} />
       )}
 

@@ -3,14 +3,40 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { CustomizerState, PanelId, TShirtSize } from './types';
 import { PRESET_DESIGNS } from './presets';
-import { TShirt3DViewer } from './components/TShirt3DViewer';
-import { 
-  Shirt, RotateCcw, Upload, Trash2, Check, Download, 
-  Sliders, Sparkles 
+import { TShirt3DViewer } from './componets/TShirt3DViewer';
+import {
+  BRAND_NAME,
+  BRAND_TAG,
+  EXPORT_FILENAME_PREFIX,
+  BUNDLE_PRICE,
+  ACID_WASH_EXTRA_LABEL,
+  STRIKE_PRICE,
+  PRINT_PRICES,
+  validateUploadFile,
+} from './config';
+
+import {
+  Shirt, RotateCcw, Upload, Trash2, Check, Download,
+  Sliders, Sparkles, AlertCircle,
 } from 'lucide-react';
+
+// ── Blob URL helpers ─────────────────────────────────────────────────
+/** Safely revoke a URL only if it is a blob: URL (never revoke data: presets). */
+function revokeBlobUrl(url: string | null): void {
+  if (url?.startsWith('blob:')) {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/** Revoke every blob URL across all design panels. */
+function revokeAllBlobUrls(designs: CustomizerState['designs']): void {
+  (Object.keys(designs) as PanelId[]).forEach((panel) => {
+    revokeBlobUrl(designs[panel].url);
+  });
+}
 
 type MobileTab = 'upload' | 'edit' | null;
 
@@ -30,7 +56,7 @@ function useIsMobile(breakpoint = 1024) {
   return isMobile;
 }
 
-export default function App() {
+export default function TShirtCustomizer() {
   // Initialize customizer state with premium defaults
   const [state, setState] = useState<CustomizerState>({
     color: 'black',
@@ -86,19 +112,44 @@ export default function App() {
   const [showPriceBreakdown, setShowPriceBreakdown] = useState(false);
   const [showExportSuccess, setShowExportSuccess] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
+
+  // ── Blob URL cleanup on unmount ──────────────────────────────────
+  useEffect(() => {
+    return () => {
+      // state ref captured at unmount time
+      setState((prev) => {
+        revokeAllBlobUrls(prev.designs);
+        return prev; // no actual state change
+      });
+    };
+  }, []);
 
   // Helper to handle state updates
   const handleStateChange = (updater: (prev: CustomizerState) => CustomizerState) => {
     setState(updater);
   };
 
-  // Upload file conversion to local blob URL
-  const handleUploadFile = (panel: PanelId, file: File) => {
+  // Upload file with validation and blob lifecycle management
+  const handleUploadFile = useCallback((panel: PanelId, file: File) => {
+    // Validate file before creating blob URL
+    const error = validateUploadFile(file);
+    if (error) {
+      setUploadError(error);
+      // Reset the file input so the user can re-select
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    setUploadError(null);
+
     const localUrl = URL.createObjectURL(file);
     setState((prev) => {
+      // Revoke old blob URL before replacing
+      revokeBlobUrl(prev.designs[panel].url);
+
       const nextDesigns = { ...prev.designs };
       nextDesigns[panel] = {
         ...nextDesigns[panel],
@@ -107,10 +158,16 @@ export default function App() {
       };
       return { ...prev, designs: nextDesigns };
     });
-  };
 
-  const handleClearDesign = (panel: PanelId) => {
+    // Reset the file input so re-selecting the same file triggers onChange
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, []);
+
+  const handleClearDesign = useCallback((panel: PanelId) => {
     setState((prev) => {
+      // Revoke blob URL before clearing
+      revokeBlobUrl(prev.designs[panel].url);
+
       const nextDesigns = { ...prev.designs };
       nextDesigns[panel] = {
         ...nextDesigns[panel],
@@ -119,10 +176,17 @@ export default function App() {
       };
       return { ...prev, designs: nextDesigns };
     });
-  };
+    setUploadError(null);
+  }, []);
 
   // Reset to initial mockup configuration
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
+    // Revoke all blob URLs before resetting to preset data URLs
+    setState((prev) => {
+      revokeAllBlobUrls(prev.designs);
+      return prev;
+    });
+    setUploadError(null);
     setState({
       color: 'black',
       garmentSize: 'L',
@@ -172,7 +236,7 @@ export default function App() {
       style: 'oversized',
       finish: 'normal',
     });
-  };
+  }, []);
 
   // Compute total detailed pricing breakdown
   const computePriceBreakdown = () => {
@@ -250,28 +314,43 @@ export default function App() {
     setIsExporting(true);
     setTimeout(() => {
       setIsExporting(false);
-      setShowExportSuccess(true);
-      
+
+      // SECURITY: only query within the scoped viewer container — never
+      // fall back to document.querySelector('svg') which could grab a
+      // nav icon or logo SVG from elsewhere on the page.
       const svgEl = document.querySelector('#tshirt-viewer-container svg');
-      if (svgEl) {
-        const serializer = new XMLSerializer();
-        let source = serializer.serializeToString(svgEl);
-        if (!source.match(/^<svg[^>]+xmlns="http:\/\/www\.w3\.org\/2000\/svg"/)) {
-          source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
-        }
-        if (!source.match(/^<svg[^>]+xmlns:xlink="http:\/\/www\.w3\.org\/1999\/xlink"/)) {
-          source = source.replace(/^<svg/, '<svg xmlns:xlink="http://www.w3.org/1999/xlink"');
-        }
-        
-        const blob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `coming-in-hot-mockup-${state.style}-${state.color}.svg`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+      if (!svgEl) {
+        setUploadError('Could not find the T-shirt mockup to export. Please try again.');
+        return;
       }
+
+      setShowExportSuccess(true);
+
+      const serializer = new XMLSerializer();
+      let source = serializer.serializeToString(svgEl);
+      if (!source.match(/^<svg[^>]+xmlns="http:\/\/www\.w3\.org\/2000\/svg"/)) {
+        source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+      }
+      if (!source.match(/^<svg[^>]+xmlns:xlink="http:\/\/www\.w3\.org\/1999\/xlink"/)) {
+        source = source.replace(/^<svg/, '<svg xmlns:xlink="http://www.w3.org/1999/xlink"');
+      }
+
+      const blob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' });
+      const exportUrl = URL.createObjectURL(blob);
+
+      // Sanitize filename — only allow alphanumeric, hyphen, dot, underscore
+      const safeFilename = `${EXPORT_FILENAME_PREFIX}-${state.style}-${state.color}.svg`
+        .replace(/[^a-zA-Z0-9._-]/g, '');
+
+      const link = document.createElement('a');
+      link.href = exportUrl;
+      link.download = safeFilename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Revoke the temporary export blob URL to avoid memory leak
+      URL.revokeObjectURL(exportUrl);
     }, 850);
   };
 
@@ -372,10 +451,11 @@ export default function App() {
 
       <div className="flex flex-col gap-1.5 bg-neutral-50 p-3 rounded-xl border border-neutral-200">
         <span className="text-[10px] font-mono font-bold text-neutral-500 uppercase tracking-wider">Upload Custom File</span>
+        <span className="text-[8px] text-neutral-400 font-mono">PNG, JPEG, WebP, GIF — max 5 MB</span>
         <input
           type="file"
           ref={fileInputRef}
-          accept="image/*"
+          accept="image/png,image/jpeg,image/webp,image/gif"
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) handleUploadFile(state.activePanel, file);
@@ -389,6 +469,14 @@ export default function App() {
           <Upload className="w-4 h-4 text-neutral-450" />
           <span>Choose local file</span>
         </button>
+
+        {/* Upload validation error message */}
+        {uploadError && (
+          <div className="flex items-start gap-1.5 bg-red-50 border border-red-200 text-red-700 text-[10px] font-medium rounded-lg px-2.5 py-2 animate-fade-in">
+            <AlertCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" />
+            <span>{uploadError}</span>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -448,7 +536,7 @@ export default function App() {
           </div>
 
           <div className="text-[9px] text-neutral-700 bg-neutral-50 border border-neutral-200/80 rounded-xl px-3 py-1.5 text-center mt-1 w-full max-w-sm">
-            ✨ Upload both <strong>Front & Back</strong> designs to unlock package price of <strong>Rs. 599</strong>!
+            ✨ Upload both <strong>Front & Back</strong> designs to unlock package price of <strong>{BUNDLE_PRICE}</strong>!
           </div>
 
           <div className="flex justify-between w-full max-w-sm px-[25%]">
@@ -474,7 +562,7 @@ export default function App() {
                         : 'bg-white border-neutral-200 text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900'
                     }`}
                   >
-                    Acid Wash (+Rs. 150)
+                    Acid Wash (+{ACID_WASH_EXTRA_LABEL})
                   </button>
                 </div>
               ) : (
@@ -542,7 +630,7 @@ export default function App() {
               <span>Graphic Print Size</span>
               <span className="text-[8px] text-neutral-800 font-bold font-sans">
                 {isPriceLocked 
-                  ? (state.designs[state.activePanel].sizeType === 'small' ? 'Rs. 150' : state.designs[state.activePanel].sizeType === 'medium' ? 'Rs. 250' : 'Rs. 350')
+                   ? (PRINT_PRICES[state.designs[state.activePanel].sizeType] ?? 'Rs. 250')
                   : 'Included'
                 }
               </span>
@@ -634,7 +722,7 @@ export default function App() {
       >
         <span>Price:</span>
         <span className="font-mono text-sm tracking-tight text-neutral-900 font-black">
-          {isPriceLocked ? '🔒 Locked' : 'Rs. 599'}
+          {isPriceLocked ? '🔒 Locked' : BUNDLE_PRICE}
         </span>
       </button>
 
@@ -697,8 +785,8 @@ export default function App() {
               <div className="border-t border-neutral-200 pt-3 mt-2 flex justify-between items-baseline">
                 <span className="text-xs font-black uppercase text-neutral-900">Bundle Price</span>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-xl font-black text-neutral-900 font-mono">Rs. 599</span>
-                  <span className="text-[10px] text-neutral-400 line-through font-mono">Rs. 1,499</span>
+                  <span className="text-xl font-black text-neutral-900 font-mono">{BUNDLE_PRICE}</span>
+                  <span className="text-[10px] text-neutral-400 line-through font-mono">{STRIKE_PRICE}</span>
                 </div>
               </div>
             </div>
@@ -753,7 +841,7 @@ export default function App() {
   );
 
   return (
-    <div className="h-screen max-h-screen overflow-hidden flex flex-col bg-neutral-50 text-neutral-900 p-3 sm:p-4 font-sans antialiased select-none">
+    <div className="min-h-[calc(100vh-5rem)] overflow-hidden flex flex-col bg-neutral-50 text-neutral-900 p-3 sm:p-4 pt-24 font-sans antialiased select-none">
       
       <header className="flex-none flex items-center justify-between border-b border-neutral-200 pb-2.5 mb-2.5 sm:pb-3 sm:mb-3">
         <div className="flex items-center gap-2.5">
@@ -762,10 +850,10 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2">
             <span className="font-display font-black tracking-widest text-neutral-900 uppercase text-md">
-              HOTDROP
+              {BRAND_NAME}
             </span>
             <span className="text-[8px] font-mono border border-neutral-250 bg-neutral-100 text-neutral-600 px-1 py-0.2 rounded-sm font-semibold uppercase tracking-wider">
-              CUSTOM
+              {BRAND_TAG}
             </span>
           </div>
         </div>

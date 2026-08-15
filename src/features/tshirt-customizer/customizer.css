@@ -1,25 +1,26 @@
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Syne:wght@700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
-@import "tailwindcss";
 
-@theme {
-  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-display: "Syne", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
-}
+/*
+ * Customizer-specific styles.
+ * Tailwind v4 directives (@import "tailwindcss", @theme) have been removed —
+ * the site loads Tailwind v3 globally via globals.css + PostCSS.
+ *
+ * Custom utilities and keyframes used by the customizer live here.
+ */
 
-/* Custom scrollbars for a clean workspace */
-::-webkit-scrollbar {
+/* Custom scrollbars — scoped to customizer root to avoid overriding site styles */
+.tshirt-customizer-root ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
-::-webkit-scrollbar-track {
+.tshirt-customizer-root ::-webkit-scrollbar-track {
   background: transparent;
 }
-::-webkit-scrollbar-thumb {
+.tshirt-customizer-root ::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 9999px;
 }
-::-webkit-scrollbar-thumb:hover {
+.tshirt-customizer-root ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
 

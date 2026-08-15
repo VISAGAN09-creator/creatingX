@@ -5,7 +5,7 @@ import { scrollToHash } from '../utils/scroll';
 // ============================================================================
 // Page types supported by the application router.
 // ============================================================================
-export type AppPage = 'home' | 'products' | 'productDetail' | 'checkout' | 'totd';
+export type AppPage = 'home' | 'products' | 'productDetail' | 'checkout' | 'totd' | 'customize-studio';
 
 /** Pages the user can "return to" after viewing a product detail page. */
 type ReturnablePage = 'home' | 'products' | 'totd';
@@ -16,6 +16,7 @@ type ReturnablePage = 'home' | 'products' | 'totd';
 function pageFromHash(): AppPage {
   const hash = window.location.hash;
   if (hash === '#checkout') return 'checkout';
+  if (hash === '#customize-studio') return 'customize-studio';
   if (hash.startsWith('#product-')) return 'productDetail';
   if (hash === '#totd') return 'totd';
   if (hash === '#products') return 'products';
@@ -54,6 +55,7 @@ export type UseRouterReturn = {
   productReturnPage: ReturnablePage;
   openProductPage: (filter?: string) => void;
   openCheckoutPage: () => void;
+  openCustomizeStudio: () => void;
   openProductDetail: (product: Product) => void;
   navigateToHomeSection: (href: string) => void;
   closeProductDetail: () => void;
@@ -91,6 +93,13 @@ export function useRouter(): UseRouterReturn {
         return;
       }
 
+      if (hash === '#customize-studio') {
+        setSelectedProductId(null);
+        setSelectedCatalogFilter(null);
+        setActivePage('customize-studio');
+        return;
+      }
+
       setSelectedProductId(null);
       if (hash !== '#products') setSelectedCatalogFilter(null);
       setActivePage(hash === '#products' ? 'products' : 'home');
@@ -120,6 +129,14 @@ export function useRouter(): UseRouterReturn {
     setActivePage('checkout');
     setSelectedProductId(null);
     window.history.pushState(null, '', '#checkout');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const openCustomizeStudio = useCallback(() => {
+    setActivePage('customize-studio');
+    setSelectedProductId(null);
+    setSelectedCatalogFilter(null);
+    window.history.pushState(null, '', '#customize-studio');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
@@ -175,6 +192,7 @@ export function useRouter(): UseRouterReturn {
     productReturnPage,
     openProductPage,
     openCheckoutPage,
+    openCustomizeStudio,
     openProductDetail,
     navigateToHomeSection,
     closeProductDetail,

@@ -1,10 +1,14 @@
 import { ArrowRight } from 'lucide-react';
 import { features } from '../data/siteData';
-import { MagneticAnchor } from './Magnetic';
+import { MagneticButton } from './Magnetic';
 import { Reveal } from './Reveal';
 import { SmartImage } from './SmartImage';
 
-export function Customize() {
+type CustomizeProps = {
+  onStartDesigning?: () => void;
+};
+
+export function Customize({ onStartDesigning }: CustomizeProps) {
   return (
     <section
       id="customize"
@@ -44,13 +48,14 @@ export function Customize() {
             })}
           </div>
 
-          <MagneticAnchor
-            href="#"
+          <MagneticButton
+            type="button"
+            onClick={onStartDesigning}
             className="liquid-metal metal-sheen mt-10 inline-flex min-h-14 items-center gap-4 bg-black px-8 py-4 text-sm font-semibold uppercase tracking-[0.05em] text-white transition-shadow duration-300 hover:shadow-metal sm:px-10"
           >
             Start Designing
             <ArrowRight size={20} strokeWidth={2} />
-          </MagneticAnchor>
+          </MagneticButton>
         </Reveal>
 
         <Reveal className="relative flex h-[430px] items-center justify-center sm:h-[540px] lg:h-[600px]">
