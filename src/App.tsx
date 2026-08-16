@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { About } from './components/About';
 import { CartDrawer } from './components/CartDrawer';
 import { CheckoutPage } from './components/CheckoutPage';
@@ -16,15 +16,11 @@ import { ProductViewingPage } from './components/ProductViewingPage';
 import { SearchDrawer } from './components/SearchDrawer';
 import { TOTD } from './components/TOTD';
 import { TOTDProductDetailsPage } from './components/TOTDProductDetailsPage';
+import { TShirtCustomizer } from './features/tshirt-customizer/TShirtCustomizer';
 import { useCart } from './hooks/useCart';
 import { useCatalog } from './hooks/useCatalog';
 import { useRouter } from './hooks/useRouter';
 import { scrollToHash } from './utils/scroll';
-import './features/tshirt-customizer/customizer.css';
-
-const TShirtCustomizer = lazy(
-  () => import('./features/tshirt-customizer/TShirtCustomizer'),
-);
 
 // ============================================================================
 // App — thin composition shell
@@ -130,18 +126,11 @@ export default function App() {
             onOpenProduct={router.openProductDetail}
             onBack={() => router.navigateToHomeSection('#hero')}
           />
-        ) : router.activePage === 'customize-studio' ? (
-          <Suspense
-            fallback={
-              <div className="flex items-center justify-center min-h-[60vh] pt-24 text-neutral-500 text-sm">
-                Loading customizer…
-              </div>
-            }
-          >
-            <div className="tshirt-customizer-root">
-              <TShirtCustomizer />
-            </div>
-          </Suspense>
+        ) : router.activePage === 'customize' ? (
+          <TShirtCustomizer
+            onAddToCart={cart.addToCart}
+            onBack={() => router.navigateToHomeSection('#hero')}
+          />
         ) : (
           <>
             <Hero products={catalog.catalogProducts} onOpenProduct={router.openProductDetail} />
@@ -164,13 +153,13 @@ export default function App() {
               onOpenProduct={router.openProductDetail}
               onViewAll={() => router.openProductPage()}
             />
-            <Customize onStartDesigning={router.openCustomizeStudio} />
+            <Customize onStartDesigning={router.openCustomizePage} />
             <About />
           </>
         )}
       </main>
 
-      {router.activePage !== 'checkout' && router.activePage !== 'customize-studio' && (
+      {router.activePage !== 'checkout' && (
         <Footer activePage={effectiveActivePage} onNavigate={router.navigateToHomeSection} />
       )}
 

@@ -1,6 +1,6 @@
 import { ArrowRight } from 'lucide-react';
 import { features } from '../data/siteData';
-import { MagneticButton } from './Magnetic';
+import { MagneticAnchor } from './Magnetic';
 import { Reveal } from './Reveal';
 import { SmartImage } from './SmartImage';
 
@@ -9,6 +9,15 @@ type CustomizeProps = {
 };
 
 export function Customize({ onStartDesigning }: CustomizeProps) {
+  const handleStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (onStartDesigning) {
+      onStartDesigning();
+    } else {
+      window.location.hash = '#customize';
+    }
+  };
+
   return (
     <section
       id="customize"
@@ -48,14 +57,14 @@ export function Customize({ onStartDesigning }: CustomizeProps) {
             })}
           </div>
 
-          <MagneticButton
-            type="button"
-            onClick={onStartDesigning}
-            className="liquid-metal metal-sheen mt-10 inline-flex min-h-14 items-center gap-4 bg-black px-8 py-4 text-sm font-semibold uppercase tracking-[0.05em] text-white transition-shadow duration-300 hover:shadow-metal sm:px-10"
+          <a
+            href="#customize"
+            onClick={handleStart}
+            className="liquid-metal metal-sheen mt-10 inline-flex min-h-14 items-center gap-4 bg-black px-8 py-4 text-sm font-semibold uppercase tracking-[0.05em] text-white transition-shadow duration-300 hover:shadow-metal sm:px-10 cursor-pointer"
           >
             Start Designing
             <ArrowRight size={20} strokeWidth={2} />
-          </MagneticButton>
+          </a>
         </Reveal>
 
         <Reveal className="relative flex h-[430px] items-center justify-center sm:h-[540px] lg:h-[600px]">

@@ -63,19 +63,29 @@ export function Navbar({ cartCount, onCartOpen, onSearchOpen, onNavigate, active
         </button>
 
         <ul className="hidden list-none items-center gap-8 lg:flex xl:gap-10">
-          {navLinks.map((link) => (
-            <li key={link.href}>
-              <button
-                type="button"
-               
-                onClick={() => handleNavigate(link.href)}
-                className="group relative py-1 text-[0.85rem] font-medium uppercase tracking-[0.05em] text-black"
-              >
-                {link.label}
-                <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-black transition-all duration-300 group-hover:w-full" />
-              </button>
-            </li>
-          ))}
+          {navLinks.map((link) => {
+            const isLinkActive =
+              (link.href === '#customize' && activePage === 'customize') ||
+              (link.href === '#totd' && activePage === 'totd');
+            return (
+              <li key={link.href}>
+                <button
+                  type="button"
+                  onClick={() => handleNavigate(link.href)}
+                  className={`group relative py-1 text-[0.85rem] font-medium uppercase tracking-[0.05em] transition-colors ${
+                    isLinkActive ? 'text-black font-bold' : 'text-black'
+                  }`}
+                >
+                  {link.label}
+                  <span
+                    className={`absolute bottom-0 left-0 h-[1.5px] bg-black transition-all duration-300 ${
+                      isLinkActive ? 'w-full' : 'w-0 group-hover:w-full'
+                    }`}
+                  />
+                </button>
+              </li>
+            );
+          })}
         </ul>
 
         <div className="flex items-center gap-2 sm:gap-4">

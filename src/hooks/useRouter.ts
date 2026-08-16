@@ -5,10 +5,10 @@ import { scrollToHash } from '../utils/scroll';
 // ============================================================================
 // Page types supported by the application router.
 // ============================================================================
-export type AppPage = 'home' | 'products' | 'productDetail' | 'checkout' | 'totd' | 'customize-studio';
+export type AppPage = 'home' | 'products' | 'productDetail' | 'checkout' | 'totd' | 'customize';
 
 /** Pages the user can "return to" after viewing a product detail page. */
-type ReturnablePage = 'home' | 'products' | 'totd';
+type ReturnablePage = 'home' | 'products' | 'totd' | 'customize';
 
 /**
  * Parse the current `window.location.hash` into the matching AppPage.
@@ -16,10 +16,10 @@ type ReturnablePage = 'home' | 'products' | 'totd';
 function pageFromHash(): AppPage {
   const hash = window.location.hash;
   if (hash === '#checkout') return 'checkout';
-  if (hash === '#customize-studio') return 'customize-studio';
   if (hash.startsWith('#product-')) return 'productDetail';
   if (hash === '#totd') return 'totd';
   if (hash === '#products') return 'products';
+  if (hash === '#customize') return 'customize';
   return 'home';
 }
 
@@ -55,7 +55,7 @@ export type UseRouterReturn = {
   productReturnPage: ReturnablePage;
   openProductPage: (filter?: string) => void;
   openCheckoutPage: () => void;
-  openCustomizeStudio: () => void;
+  openCustomizePage: () => void;
   openProductDetail: (product: Product) => void;
   navigateToHomeSection: (href: string) => void;
   closeProductDetail: () => void;
@@ -93,10 +93,10 @@ export function useRouter(): UseRouterReturn {
         return;
       }
 
-      if (hash === '#customize-studio') {
+      if (hash === '#customize') {
         setSelectedProductId(null);
         setSelectedCatalogFilter(null);
-        setActivePage('customize-studio');
+        setActivePage('customize');
         return;
       }
 
@@ -125,18 +125,18 @@ export function useRouter(): UseRouterReturn {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
+  const openCustomizePage = useCallback(() => {
+    setActivePage('customize');
+    setSelectedProductId(null);
+    setSelectedCatalogFilter(null);
+    window.history.pushState(null, '', '#customize');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
   const openCheckoutPage = useCallback(() => {
     setActivePage('checkout');
     setSelectedProductId(null);
     window.history.pushState(null, '', '#checkout');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
-
-  const openCustomizeStudio = useCallback(() => {
-    setActivePage('customize-studio');
-    setSelectedProductId(null);
-    setSelectedCatalogFilter(null);
-    window.history.pushState(null, '', '#customize-studio');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
@@ -164,6 +164,14 @@ export function useRouter(): UseRouterReturn {
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
+    if (href === '#customize') {
+      setActivePage('customize');
+      setSelectedProductId(null);
+      setSelectedCatalogFilter(null);
+      window.history.pushState(null, '', '#customize');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     setActivePage('home');
     setSelectedProductId(null);
     setSelectedCatalogFilter(null);
@@ -182,8 +190,12 @@ export function useRouter(): UseRouterReturn {
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
+    if (productReturnPage === 'customize') {
+      openCustomizePage();
+      return;
+    }
     navigateToHomeSection('#hero');
-  }, [navigateToHomeSection, openProductPage, productReturnPage]);
+  }, [navigateToHomeSection, openCustomizePage, openProductPage, productReturnPage]);
 
   return {
     activePage,
@@ -192,7 +204,7 @@ export function useRouter(): UseRouterReturn {
     productReturnPage,
     openProductPage,
     openCheckoutPage,
-    openCustomizeStudio,
+    openCustomizePage,
     openProductDetail,
     navigateToHomeSection,
     closeProductDetail,

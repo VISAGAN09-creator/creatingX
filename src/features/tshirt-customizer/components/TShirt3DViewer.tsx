@@ -5,7 +5,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { PanelId, CustomizerState, TShirtColor, DesignSizeType } from '../types';
-import { RotateCw, Move, Check, Sparkles, RefreshCw, Eye } from 'lucide-react';
+import { RotateCw, Move, RefreshCw } from 'lucide-react';
 
 interface TShirt3DViewerProps {
     state: CustomizerState;
@@ -67,15 +67,6 @@ export const TShirt3DViewer: React.FC<TShirt3DViewerProps> = ({
             case 'medium':
             default:
                 return 0.70;
-        }
-    };
-
-    const getPriceForSizeType = (sizeType: DesignSizeType) => {
-        switch (sizeType) {
-            case 'small': return 499;
-            case 'large': return 699;
-            case 'medium':
-            default: return 599;
         }
     };
 
@@ -225,9 +216,6 @@ export const TShirt3DViewer: React.FC<TShirt3DViewerProps> = ({
         };
     }, [isDragging, isRotating]);
 
-    // Determine current display price based on design size
-    const currentPrice = getPriceForSizeType(activeDesign.sizeType);
-
     // Helper to render high-fidelity T-shirt garment with folds and shading
     const renderGarmentSvg = (panel: PanelId, size: number = 420) => {
         const shirtColor = getGarmentColorHex(color);
@@ -319,7 +307,7 @@ export const TShirt3DViewer: React.FC<TShirt3DViewerProps> = ({
 
         // Front / Back Full Body SVG
         return (
-            <svg viewBox="0 0 500 500" width={size} height={size} className="drop-shadow-3xl transition-all duration-500">
+            <svg viewBox="0 0 500 500" width={size} height={size} className="drop-shadow-2xl transition-all duration-500">
                 <defs>
                     {/* Filter for subtle fabric blur */}
                     <filter id="creaseBlur" x="-20%" y="-20%" width="140%" height="140%">
@@ -382,7 +370,7 @@ export const TShirt3DViewer: React.FC<TShirt3DViewerProps> = ({
                 {/* Brand label detail visible in inner collar */}
                 {!isBack && style !== 'polo' && (
                     <g transform="translate(250, 105)" opacity="0.35">
-                        <text fontFamily="monospace" fontSize="7" fill="#888" textAnchor="middle" letterSpacing="2">STUDIO 3D</text>
+                        <text fontFamily="monospace" fontSize="7" fill="#888" textAnchor="middle" letterSpacing="2">VARATAAA</text>
                         <text y="7" fontFamily="sans-serif" fontSize="5" fill="#555" textAnchor="middle" fontWeight="bold">PREMIUM TEE • {garmentSize}</text>
                     </g>
                 )}
@@ -550,7 +538,6 @@ export const TShirt3DViewer: React.FC<TShirt3DViewerProps> = ({
     };
 
     // Coordinates translation for Design Printable Overlay
-    // Translate design panel dimensions relative to the front/back/sleeve layouts
     const getPanelOverlayDimensions = (panel: PanelId) => {
         switch (panel) {
             case 'leftSleeve':
@@ -625,21 +612,21 @@ export const TShirt3DViewer: React.FC<TShirt3DViewerProps> = ({
 
             {/* Visual Controls / Showroom Toggle Header */}
             <div className="w-full flex items-center justify-between mb-3 px-1">
-                <div className="flex items-center gap-1.5">
-                    <span className="inline-flex h-2 w-2 rounded-full bg-neutral-900 animate-pulse"></span>
-                    <span className="text-xs font-mono text-neutral-500 uppercase tracking-widest font-semibold">
-                        {is3dShowcase ? '3D Live Showroom' : `${activePanel === 'extra' ? 'extra front-side' : activePanel} view editor`}
+                <div className="flex items-center gap-2">
+                    <span className="inline-flex h-2.5 w-2.5 rounded-full bg-black animate-pulse"></span>
+                    <span className="text-xs font-mono text-metal-dark uppercase tracking-widest font-semibold">
+                        {is3dShowcase ? '3D Live Showroom' : `${activePanel === 'extra' ? 'extra front' : activePanel} View Editor`}
                     </span>
                 </div>
 
                 {/* View Mode Switcher */}
-                <div className="bg-neutral-100 border border-neutral-200 p-0.5 rounded-lg flex gap-1">
+                <div className="bg-metal-light border border-metal-mid p-0.5 rounded-lg flex gap-1">
                     <button
                         id="editor-mode-btn"
                         onClick={() => setIs3dShowcase(false)}
-                        className={`px-3 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${!is3dShowcase
-                                ? 'bg-neutral-900 text-white shadow-xs font-semibold'
-                                : 'text-neutral-550 hover:text-neutral-900'
+                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer ${!is3dShowcase
+                                ? 'bg-black text-white shadow-sm font-semibold'
+                                : 'text-metal-dark hover:text-black'
                             }`}
                     >
                         🎯 Precision Editor
@@ -647,9 +634,9 @@ export const TShirt3DViewer: React.FC<TShirt3DViewerProps> = ({
                     <button
                         id="showroom-mode-btn"
                         onClick={() => setIs3dShowcase(true)}
-                        className={`px-3 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${is3dShowcase
-                                ? 'bg-neutral-900 text-white shadow-xs font-semibold'
-                                : 'text-neutral-550 hover:text-neutral-900'
+                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer ${is3dShowcase
+                                ? 'bg-black text-white shadow-sm font-semibold'
+                                : 'text-metal-dark hover:text-black'
                             }`}
                     >
                         🛰️ 3D Showroom
@@ -658,12 +645,12 @@ export const TShirt3DViewer: React.FC<TShirt3DViewerProps> = ({
             </div>
 
             {/* Main Preview Container */}
-            <div className="relative flex-1 w-full min-h-[440px] flex items-center justify-center bg-[radial-gradient(circle_at_center,_#ffffff_0%,_#f1f4f8_100%)] rounded-2xl border border-neutral-200 p-6 overflow-hidden select-none shadow-2xs">
+            <div className="relative flex-1 w-full min-h-[420px] sm:min-h-[460px] flex items-center justify-center bg-[radial-gradient(circle_at_center,_#ffffff_0%,_#f3f4f6_100%)] rounded-2xl border border-metal-mid p-4 sm:p-6 overflow-hidden select-none shadow-sm">
 
                 {/* Technical background grids */}
-                <div className="absolute inset-0 bg-[linear-gradient(to_right,#00000003_1px,transparent_1px),linear-gradient(to_bottom,#00000003_1px,transparent_1px)] bg-[size:16px_16px] pointer-events-none" />
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] h-[340px] rounded-full border border-neutral-250/40 pointer-events-none" />
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full border border-neutral-300/15 pointer-events-none" />
+                <div className="absolute inset-0 bg-[linear-gradient(to_right,#00000008_1px,transparent_1px),linear-gradient(to_bottom,#00000008_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] h-[340px] rounded-full border border-metal-mid/40 pointer-events-none" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] h-[520px] rounded-full border border-metal-mid/20 pointer-events-none" />
 
                 {!is3dShowcase ? (
                     /* ================= PRECISION EDITOR MODE ================= */
@@ -677,7 +664,7 @@ export const TShirt3DViewer: React.FC<TShirt3DViewerProps> = ({
                         {/* Interactive Design Area Overlay */}
                         <div
                             id="printable-bounds-area"
-                            className="absolute border border-dashed border-neutral-300/60 hover:border-neutral-900/40 rounded transition-colors group"
+                            className="absolute border border-dashed border-neutral-400/70 hover:border-black rounded transition-colors group"
                             style={{
                                 width: overlayDim.width,
                                 height: overlayDim.height,
@@ -686,7 +673,7 @@ export const TShirt3DViewer: React.FC<TShirt3DViewerProps> = ({
                             }}
                         >
                             {/* Printable Area Helper Badge */}
-                            <div className="absolute -top-5 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-neutral-900 text-[9px] text-white px-1.5 py-0.5 rounded border border-neutral-950 font-mono whitespace-nowrap z-30 shadow-xs">
+                            <div className="absolute -top-6 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-black text-[10px] text-white px-2 py-0.5 rounded font-mono whitespace-nowrap z-30 shadow-md">
                                 {overlayDim.label}
                             </div>
 
@@ -745,7 +732,7 @@ export const TShirt3DViewer: React.FC<TShirt3DViewerProps> = ({
                                         id={`active-design-box-${activePanel}`}
                                         onMouseDown={handleDragStart}
                                         onTouchStart={handleDragStart}
-                                        className={`absolute cursor-move group/design select-none origin-center ${isDragging ? 'ring-1 ring-neutral-900 ring-offset-2 ring-offset-white scale-[1.02]' : ''
+                                        className={`absolute cursor-move group/design select-none origin-center ${isDragging ? 'ring-2 ring-black ring-offset-2 ring-offset-white scale-[1.02]' : ''
                                             }`}
                                         style={{
                                             left: `${activeDesign.x}%`,
@@ -758,11 +745,11 @@ export const TShirt3DViewer: React.FC<TShirt3DViewerProps> = ({
                                         }}
                                     >
                                         {/* Bounding Box Highlights */}
-                                        <div className="absolute -inset-1 border border-dashed border-neutral-300 group-hover/design:border-neutral-900 rounded opacity-50 group-hover/design:opacity-100 transition-all pointer-events-none" />
+                                        <div className="absolute -inset-1 border border-dashed border-metal-dark group-hover/design:border-black rounded opacity-60 group-hover/design:opacity-100 transition-all pointer-events-none" />
 
-                                        {/* Drag Handle Help Label (visible on hover) */}
-                                        <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-neutral-900 text-[10px] text-white px-2 py-0.5 rounded border border-neutral-950 shadow-md font-mono flex items-center gap-1 opacity-0 group-hover/design:opacity-100 transition-all pointer-events-none whitespace-nowrap z-40">
-                                            <Move className="w-3 h-3 text-neutral-350" />
+                                        {/* Drag Handle Help Label */}
+                                        <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-black text-[10px] text-white px-2 py-0.5 rounded shadow-md font-mono flex items-center gap-1 opacity-0 group-hover/design:opacity-100 transition-all pointer-events-none whitespace-nowrap z-40">
+                                            <Move className="w-3 h-3 text-neutral-300" />
                                             Drag to move
                                         </div>
 
@@ -774,33 +761,33 @@ export const TShirt3DViewer: React.FC<TShirt3DViewerProps> = ({
                                             className="w-full h-full object-contain pointer-events-none"
                                         />
 
-                                        {/* Interactive Rotation Dial Knot (Top Center Anchor) */}
+                                        {/* Interactive Rotation Dial Knob (Top Center Anchor) */}
                                         <div
                                             onMouseDown={handleRotateStart}
                                             onTouchStart={handleRotateStart}
-                                            className="absolute -top-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-neutral-900 hover:bg-neutral-950 border border-neutral-950 text-white flex items-center justify-center cursor-alias shadow-md scale-0 group-hover/design:scale-100 transition-transform active:scale-110 z-50"
-                                            title="Drag to Rotate"
+                                            className="absolute -top-3.5 left-1/2 -translate-x-1/2 w-7 h-7 rounded-full bg-black hover:bg-neutral-800 border border-white text-white flex items-center justify-center cursor-alias shadow-lg scale-0 group-hover/design:scale-100 transition-transform active:scale-110 z-50"
+                                            title="Drag around to rotate"
                                         >
-                                            <RotateCw className="w-3 h-3 animate-spin-slow" />
+                                            <RotateCw className="w-3.5 h-3.5" />
                                         </div>
 
-                                        {/* Info badge showing rotation angle when dragging/rotating */}
+                                        {/* Info badge showing rotation angle when rotated */}
                                         {activeDesign.rotation > 0 && (
-                                            <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 bg-neutral-900 border border-neutral-950 text-[9px] text-white px-1 rounded font-mono pointer-events-none shadow-xs">
+                                            <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 bg-black text-[10px] text-white px-1.5 py-0.5 rounded font-mono pointer-events-none shadow-md">
                                                 {activeDesign.rotation}°
                                             </div>
                                         )}
                                     </div>
                                 ) : (
                                     /* Empty state for printable area */
-                                    <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center opacity-40 group-hover:opacity-85 transition-opacity">
-                                        <div className="w-8 h-8 rounded-full border border-dashed border-neutral-300 flex items-center justify-center mb-1">
-                                            <span className="text-neutral-500 text-xs">+</span>
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center opacity-50 group-hover:opacity-90 transition-opacity">
+                                        <div className="w-9 h-9 rounded-full border border-dashed border-metal-dark flex items-center justify-center mb-1.5">
+                                            <span className="text-black text-sm font-bold">+</span>
                                         </div>
-                                        <span className="text-[10px] font-mono text-neutral-500">
+                                        <span className="text-[11px] font-mono text-metal-dark font-medium">
                                             {activePanel === 'front' || activePanel === 'back'
-                                                ? 'Compulsory design area'
-                                                : 'Optional print area'}
+                                                ? 'Compulsory printable area'
+                                                : 'Optional printable area'}
                                         </span>
                                     </div>
                                 )}
@@ -809,23 +796,23 @@ export const TShirt3DViewer: React.FC<TShirt3DViewerProps> = ({
 
                         {/* Quick helper controls docked at the bottom of editor frame */}
                         {activeDesign.url && (
-                            <div className="absolute bottom-1 bg-white/95 border border-neutral-200 backdrop-blur-md rounded-xl p-1.5 flex gap-2 shadow-sm z-20">
+                            <div className="absolute bottom-1 bg-white/95 border border-metal-mid backdrop-blur-md rounded-xl p-1.5 flex gap-2 shadow-sm z-20">
                                 <button
                                     onClick={handleResetPosition}
-                                    className="p-1 px-2.5 rounded text-[10px] font-mono text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50 transition-all flex items-center gap-1 cursor-pointer"
+                                    className="p-1 px-2.5 rounded text-[10px] font-mono text-metal-dark hover:text-black hover:bg-metal-light transition-all flex items-center gap-1 cursor-pointer"
                                     title="Reset Position"
                                 >
-                                    <RefreshCw className="w-3 h-3 text-neutral-500" /> Reset
+                                    <RefreshCw className="w-3 h-3 text-metal-dark" /> Reset Position
                                 </button>
-                                <div className="w-[1px] bg-neutral-150" />
+                                <div className="w-[1px] bg-metal-mid" />
                                 <div className="flex gap-1">
                                     {(['small', 'medium', 'large'] as DesignSizeType[]).map((sz) => (
                                         <button
                                             key={sz}
                                             onClick={() => handleSizeClick(sz)}
                                             className={`text-[9px] px-2 py-0.5 rounded font-mono uppercase transition-all cursor-pointer ${activeDesign.sizeType === sz
-                                                    ? 'bg-neutral-900 text-white'
-                                                    : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50'
+                                                    ? 'bg-black text-white font-bold'
+                                                    : 'text-metal-dark hover:text-black hover:bg-metal-light'
                                                 }`}
                                         >
                                             {sz[0]}
@@ -837,7 +824,7 @@ export const TShirt3DViewer: React.FC<TShirt3DViewerProps> = ({
                     </div>
                 ) : (
                     /* ================= 3D SHOWROOM MODE ================= */
-                    <div className="relative w-full h-[360px] flex items-center justify-center">
+                    <div className="relative w-full h-[380px] flex items-center justify-center">
 
                         {/* Real 3D viewport containing revolving perspectives */}
                         <div
@@ -859,10 +846,11 @@ export const TShirt3DViewer: React.FC<TShirt3DViewerProps> = ({
 
                                 {/* 1. FRONT PANEL CARD */}
                                 <div
-                                    className="absolute inset-0 flex items-center justify-center backface-hidden"
+                                    className="absolute inset-0 flex items-center justify-center"
                                     style={{
                                         transform: 'translateZ(15px)',
                                         transformStyle: 'preserve-3d',
+                                        backfaceVisibility: 'hidden',
                                     }}
                                 >
                                     <div className="relative w-full h-full flex items-center justify-center">
@@ -1056,22 +1044,22 @@ export const TShirt3DViewer: React.FC<TShirt3DViewerProps> = ({
 
                             </div>
                             {/* 3D Showroom interactive options (pause spin, manual rotate slider) */}
-                            <div className="absolute bottom-2 flex items-center gap-3 bg-white/95 border border-neutral-200 px-4 py-2 rounded-xl backdrop-blur-md shadow-xs z-20">
+                            <div className="absolute bottom-2 flex items-center gap-3 bg-white/95 border border-metal-mid px-4 py-2 rounded-xl backdrop-blur-md shadow-sm z-20">
                                 <button
                                     id="spin-pause-btn"
                                     onClick={() => setIsAutoSpinning(!isAutoSpinning)}
                                     className={`px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${isAutoSpinning
-                                            ? 'bg-neutral-100 text-neutral-900 font-semibold border border-neutral-200/50'
-                                            : 'text-neutral-500 hover:text-neutral-900'
+                                            ? 'bg-metal-light text-black font-semibold border border-metal-mid'
+                                            : 'text-metal-dark hover:text-black'
                                         }`}
                                 >
                                     {isAutoSpinning ? '⏸️ Pause Spin' : '▶️ Auto Spin'}
                                 </button>
 
-                                <div className="w-[1px] h-4 bg-neutral-200" />
+                                <div className="w-[1px] h-4 bg-metal-mid" />
 
                                 <div className="flex items-center gap-2">
-                                    <span className="text-[10px] font-mono text-neutral-500">Manual Spin</span>
+                                    <span className="text-[10px] font-mono text-metal-dark">Manual Angle</span>
                                     <input
                                         type="range"
                                         min="0"
@@ -1081,9 +1069,9 @@ export const TShirt3DViewer: React.FC<TShirt3DViewerProps> = ({
                                             setIsAutoSpinning(false);
                                             setAutoRotateAngle(Number(e.target.value));
                                         }}
-                                        className="w-24 accent-neutral-900 bg-neutral-200 h-1 rounded-lg cursor-pointer"
+                                        className="w-24 accent-black bg-metal-mid h-1 rounded-lg cursor-pointer"
                                     />
-                                    <span className="text-[10px] font-mono text-neutral-800 w-6">
+                                    <span className="text-[10px] font-mono text-black font-semibold w-6">
                                         {Math.round(autoRotateAngle)}°
                                     </span>
                                 </div>
