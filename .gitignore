@@ -13,12 +13,9 @@ firebase-service-account.json
 firebase-debug.log
 codex.html
 firestore-upload/serviceAccountKey.json
-<<<<<<< HEAD
 .firebase/
-=======
 Payment possiblities
 functions/server.cjs
 functions/gateway/
 functions/.env
 functions/node_modules/
->>>>>>> development
