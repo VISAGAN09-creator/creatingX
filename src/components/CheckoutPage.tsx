@@ -130,6 +130,15 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
         }),
       });
 
+      const contentType = createResponse.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error(
+          createResponse.ok
+            ? 'Backend API returned HTML instead of JSON. Ensure the backend server is running or deployed.'
+            : `Backend request failed (status ${createResponse.status}).`
+        );
+      }
+
       if (!createResponse.ok) {
         const errorData = await createResponse.json();
         throw new Error(errorData.message || 'Failed to create payment order on server.');
@@ -172,6 +181,11 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ orderId: paymentData.order_id || orderData.gatewayData?.order_id }),
               });
+
+              const verifyContentType = verifyResponse.headers.get('content-type') || '';
+              if (!verifyContentType.includes('application/json')) {
+                throw new Error('Backend verification returned an invalid response.');
+              }
 
               if (!verifyResponse.ok) {
                 const errorData = await verifyResponse.json();

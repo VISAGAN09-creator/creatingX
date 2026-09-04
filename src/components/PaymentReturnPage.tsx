@@ -36,6 +36,11 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
           body: JSON.stringify({ orderId }),
         });
 
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          throw new Error('Payment verification server is not reachable or returned an invalid response.');
+        }
+
         const data = await response.json();
 
         if (data.success) {
