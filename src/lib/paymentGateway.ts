@@ -128,8 +128,8 @@ export function openCheckout(
   }
 
   try {
-    // Initialize Cashfree in SANDBOX mode
-    const cashfree = new window.Cashfree({ mode: 'sandbox' });
+    // Initialize Cashfree in PRODUCTION mode
+    const cashfree = new window.Cashfree({ mode: 'production' });
 
     // Redirect to Cashfree's hosted checkout page
     cashfree

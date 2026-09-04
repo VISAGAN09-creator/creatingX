@@ -70,7 +70,7 @@ const ALLOWED_ORIGINS = (() => {
 
   if (envOrigins) {
     // Merge production origins with dev origins (dev origins are harmless in prod)
-    const prodOrigins = envOrigins.split(',').map(o => o.trim()).filter(Boolean);
+    const prodOrigins = envOrigins.split(',').map(o => o.trim().replace(/\/+$/, '')).filter(Boolean);
     return [...new Set([...prodOrigins, ...devOrigins])];
   }
 
@@ -312,7 +312,7 @@ app.post('/api/create-order', async (req, res) => {
 
     // --- Build return URL ---
     // Detect the request origin for the return URL
-    const origin = req.headers.origin || req.headers.referer?.replace(/\/[^/]*$/, '') || 'http://localhost:5173';
+    const origin = req.headers.origin || req.headers.referer?.replace(/\/[^/]*$/, '') || 'https://ecommerce-f1448.web.app';
     const returnUrl = `${origin}/#payment-return`;
 
     // --- Build customer info ---
@@ -774,6 +774,16 @@ app.post('/api/subscribe', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`[Server] Backend running on port ${PORT}`);
-});
+// ============================================================================
+// EXPORT FOR FIREBASE CLOUD FUNCTIONS + LOCAL DEV
+// ============================================================================
+// When running locally via `node server.cjs`, start the Express server.
+// When deployed as a Cloud Function, the function wrapper imports `app`.
+// ============================================================================
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`[Server] Backend running on port ${PORT}`);
+  });
+}
+
+module.exports = { app };
