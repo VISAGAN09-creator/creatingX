@@ -1,30 +1,17 @@
 // ============================================================================
-// PAYMENT GATEWAY ADAPTER — CLIENT SIDE
+// PAYMENT GATEWAY ADAPTER — CLIENT SIDE (CASHFREE)
 // ============================================================================
 //
-// This module provides a gateway-agnostic interface for the checkout UI.
-// CheckoutPage.tsx calls these functions instead of any specific payment SDK.
+// This module integrates with Cashfree Hosted Checkout (redirect-based flow).
 //
-// ┌─────────────────────────────────────────────────────────────────────────┐
-// │  HOW TO INTEGRATE A NEW PAYMENT GATEWAY CLIENT-SIDE                   │
-// │                                                                       │
-// │  1. Implement `loadGatewayScript()`:                                  │
-// │     - Load the gateway's checkout.js / SDK script into the page       │
-// │     - Return true when ready, false on failure                        │
-// │                                                                       │
-// │  2. Implement `openCheckout()`:                                       │
-// │     - Receive order data from the server + customer info              │
-// │     - Open the gateway's payment modal/redirect                       │
-// │     - Call `onSuccess(paymentData)` when payment completes            │
-// │       paymentData = any object the server needs to verify             │
-// │     - Call `onDismiss()` if the user closes without paying            │
-// │     - Call `onError(errorMessage)` on failure                         │
-// │                                                                       │
-// │  3. Set the VITE_PAYMENT_GATEWAY env var if needed for any            │
-// │     gateway-specific client config.                                   │
-// │                                                                       │
-// │  That's it. No changes to CheckoutPage.tsx are needed.                │
-// └─────────────────────────────────────────────────────────────────────────┘
+// Flow:
+//  1. loadGatewayScript() — loads the Cashfree JS SDK from their CDN
+//  2. openCheckout()     — calls cashfree.checkout() which redirects to
+//                          Cashfree's hosted payment page
+//  3. After payment, Cashfree redirects back to the return_url with order_id
+//
+// The Cashfree Secret Key is NEVER used here. Only payment_session_id
+// (returned by the backend) is needed client-side.
 //
 // ============================================================================
 
@@ -64,60 +51,109 @@ export type CheckoutContext = {
 };
 
 // ============================================================================
-// PLACEHOLDER IMPLEMENTATION
-// ============================================================================
-// Replace the bodies of these two functions with your gateway's SDK logic.
-// The function signatures and return types should stay the same.
+// CASHFREE JS SDK INTEGRATION
 // ============================================================================
 
+// Declare the global Cashfree type from the SDK
+declare global {
+  interface Window {
+    Cashfree?: {
+      new (options: { mode: string }): {
+        checkout: (options: { paymentSessionId: string; redirectTarget?: string }) => Promise<{ error?: { message: string }; redirect?: boolean; paymentDetails?: unknown }>;
+      };
+    };
+  }
+}
+
 /**
- * Load the payment gateway's client-side script/SDK.
+ * Load the Cashfree JS SDK v3 from their CDN.
  *
  * @returns `true` when the SDK is ready, `false` if loading failed.
- *
- * Example (Stripe):
- * ```ts
- * export async function loadGatewayScript(): Promise<boolean> {
- *   if (window.Stripe) return true;
- *   return new Promise((resolve) => {
- *     const script = document.createElement('script');
- *     script.src = 'https://js.stripe.com/v3/';
- *     script.onload = () => resolve(true);
- *     script.onerror = () => resolve(false);
- *     document.body.appendChild(script);
- *   });
- * }
- * ```
  */
 export async function loadGatewayScript(): Promise<boolean> {
-  // No gateway configured — nothing to load.
-  // When you integrate a real gateway, load its SDK script here.
-  return true;
+  // If already loaded, return immediately
+  if (window.Cashfree) return true;
+
+  return new Promise((resolve) => {
+    // Check if script tag already exists
+    const existingScript = document.querySelector('script[src*="sdk.cashfree.com"]');
+    if (existingScript) {
+      // Wait for it to load
+      existingScript.addEventListener('load', () => resolve(!!window.Cashfree));
+      existingScript.addEventListener('error', () => resolve(false));
+      if (window.Cashfree) resolve(true);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+    script.async = true;
+    script.onload = () => resolve(!!window.Cashfree);
+    script.onerror = () => {
+      console.error('[Cashfree] Failed to load Cashfree JS SDK.');
+      resolve(false);
+    };
+    document.head.appendChild(script);
+  });
 }
 
 /**
- * Open the payment gateway's checkout modal/redirect.
+ * Open the Cashfree Hosted Checkout via redirect.
+ *
+ * This function calls cashfree.checkout() which will redirect the browser
+ * to Cashfree's hosted payment page. After payment, Cashfree redirects
+ * back to the return_url configured in the backend.
+ *
+ * Note: Because this is a redirect flow, the onSuccess callback is NOT
+ * called here — success is handled by the PaymentReturnPage component
+ * that the user is redirected to after payment.
  *
  * @param context  Customer info and order data from the server.
- * @param callbacks  Functions to call on success, dismiss, or error.
- *
- * Example (Stripe):
- * ```ts
- * export function openCheckout(context: CheckoutContext, callbacks: CheckoutCallbacks) {
- *   const stripe = window.Stripe(context.orderData.gatewayData.publicKey);
- *   stripe.redirectToCheckout({ sessionId: context.orderData.gatewayData.sessionId })
- *     .then(result => {
- *       if (result.error) callbacks.onError(result.error.message);
- *     });
- * }
- * ```
+ * @param callbacks  Functions to call on dismiss or error.
  */
 export function openCheckout(
-  _context: CheckoutContext,
+  context: CheckoutContext,
   callbacks: CheckoutCallbacks,
 ): void {
-  // No gateway configured — inform the developer.
-  callbacks.onError(
-    'Payment gateway is not configured. See src/lib/paymentGateway.ts for setup instructions.',
-  );
+  const paymentSessionId = context.orderData.gatewayData?.payment_session_id as string;
+
+  if (!paymentSessionId) {
+    callbacks.onError('No payment session ID received from server.');
+    return;
+  }
+
+  if (!window.Cashfree) {
+    callbacks.onError('Cashfree SDK is not loaded. Please try again.');
+    return;
+  }
+
+  try {
+    // Initialize Cashfree in SANDBOX mode
+    const cashfree = new window.Cashfree({ mode: 'sandbox' });
+
+    // Redirect to Cashfree's hosted checkout page
+    cashfree
+      .checkout({
+        paymentSessionId,
+        redirectTarget: '_self', // redirect in the same tab
+      })
+      .then((result) => {
+        // This promise resolves if checkout fails to redirect (rare)
+        if (result.error) {
+          callbacks.onError(result.error.message || 'Payment checkout failed.');
+        }
+        // If redirect happened, this code won't execute
+        // (the browser navigates away)
+      })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : 'Failed to open Cashfree checkout.';
+        console.error('[Cashfree] Checkout error:', message);
+        callbacks.onError(message);
+      });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to initialize Cashfree checkout.';
+    console.error('[Cashfree] Init error:', message);
+    callbacks.onError(message);
+  }
 }
+

@@ -13,6 +13,7 @@ import { Lookbook } from './components/Lookbook';
 import { Navbar } from './components/Navbar';
 import { ProductDetailsPage } from './components/ProductDetailsPage';
 import { ProductViewingPage } from './components/ProductViewingPage';
+import { PaymentReturnPage } from './components/PaymentReturnPage';
 import { SearchDrawer } from './components/SearchDrawer';
 import { TOTD } from './components/TOTD';
 import { TOTDProductDetailsPage } from './components/TOTDProductDetailsPage';
@@ -69,7 +70,7 @@ export default function App() {
     <>
       <LiquidCanvas />
 
-      {router.activePage !== 'checkout' && (
+      {router.activePage !== 'checkout' && router.activePage !== 'paymentReturn' && (
         <Navbar
           cartCount={cart.cartCount}
           onCartOpen={() => cart.setCartOpen(true)}
@@ -80,7 +81,14 @@ export default function App() {
       )}
 
       <main className="relative z-[1] overflow-x-hidden">
-        {router.activePage === 'checkout' ? (
+        {router.activePage === 'paymentReturn' ? (
+          <PaymentReturnPage
+            orderId={router.paymentReturnOrderId}
+            onBack={() => {
+              router.navigateToHomeSection('#hero');
+            }}
+          />
+        ) : router.activePage === 'checkout' ? (
           <CheckoutPage
             lines={cart.cartLines}
             subtotal={cart.subtotal}
@@ -159,7 +167,7 @@ export default function App() {
         )}
       </main>
 
-      {router.activePage !== 'checkout' && (
+      {router.activePage !== 'checkout' && router.activePage !== 'paymentReturn' && (
         <Footer activePage={effectiveActivePage} onNavigate={router.navigateToHomeSection} />
       )}
 

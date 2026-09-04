@@ -118,13 +118,22 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
     }
 
     try {
-      // Step 1: Create order via backend server API
+      // Step 1: Create order via backend — send items (product IDs + quantities)
+      // The server will look up authoritative prices from Firestore.
       const createResponse = await fetch('/api/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: Math.round(total * 100), // smallest currency unit
-          currency: 'INR',
+          items: lines.map((line) => ({
+            id: line.id,
+            quantity: line.quantity,
+          })),
+          customer: {
+            email,
+            phone,
+            name: [firstName, lastName].filter(Boolean).join(' '),
+          },
+          shipping: { country, address, apartment, city, state, pinCode },
         }),
       });
 
@@ -135,7 +144,22 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
 
       const orderData = await createResponse.json();
 
-      // Step 2: Open the gateway's checkout UI
+      // Store checkout context in sessionStorage for use after redirect
+      try {
+        sessionStorage.setItem(
+          'cashfree_checkout_context',
+          JSON.stringify({
+            email,
+            firstName,
+            lastName,
+            orderId: orderData.gatewayData?.order_id,
+          }),
+        );
+      } catch {
+        // sessionStorage may be unavailable; proceed anyway
+      }
+
+      // Step 2: Open the gateway's checkout UI (this will redirect for Cashfree)
       openCheckout(
         {
           email,
@@ -145,27 +169,15 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
           orderData,
         },
         {
-          // Step 3: On success — verify payment and store order
+          // For redirect-based flows (Cashfree), onSuccess is typically not called
+          // because the browser navigates away. But we handle it for completeness.
           onSuccess: async (paymentData) => {
             setIsPaying(true);
             try {
-              const orderDetails = {
-                customer: { email, firstName, lastName, phone },
-                shipping: { country, address, apartment, city, state, pinCode },
-                items: lines.map((line) => ({
-                  id: line.id,
-                  name: line.name,
-                  price: line.price,
-                  quantity: line.quantity,
-                  image: line.image,
-                })),
-                pricing: { subtotal, tax, shipping, total },
-              };
-
               const verifyResponse = await fetch('/api/verify-payment', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ paymentData, orderDetails }),
+                body: JSON.stringify({ orderId: paymentData.order_id || orderData.gatewayData?.order_id }),
               });
 
               if (!verifyResponse.ok) {
@@ -174,8 +186,12 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
               }
 
               const result = await verifyResponse.json();
-              onClearCart();
-              setSuccessOrderId(result.orderId);
+              if (result.success) {
+                onClearCart();
+                setSuccessOrderId(result.orderId);
+              } else {
+                showToast(result.message || 'Payment was not successful.', 'error');
+              }
               setIsPaying(false);
             } catch (err) {
               console.error('Error verifying payment:', err);

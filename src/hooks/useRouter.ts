@@ -5,7 +5,7 @@ import { scrollToHash } from '../utils/scroll';
 // ============================================================================
 // Page types supported by the application router.
 // ============================================================================
-export type AppPage = 'home' | 'products' | 'productDetail' | 'checkout' | 'totd' | 'customize';
+export type AppPage = 'home' | 'products' | 'productDetail' | 'checkout' | 'totd' | 'customize' | 'paymentReturn';
 
 /** Pages the user can "return to" after viewing a product detail page. */
 type ReturnablePage = 'home' | 'products' | 'totd' | 'customize';
@@ -16,11 +16,25 @@ type ReturnablePage = 'home' | 'products' | 'totd' | 'customize';
 function pageFromHash(): AppPage {
   const hash = window.location.hash;
   if (hash === '#checkout') return 'checkout';
+  if (hash.startsWith('#payment-return')) return 'paymentReturn';
   if (hash.startsWith('#product-')) return 'productDetail';
   if (hash === '#totd') return 'totd';
   if (hash === '#products') return 'products';
   if (hash === '#customize') return 'customize';
   return 'home';
+}
+
+/**
+ * Extract the order_id from the payment return hash.
+ * Hash format: #payment-return?order_id=xxx
+ */
+function orderIdFromPaymentReturnHash(): string | null {
+  const hash = window.location.hash;
+  if (!hash.startsWith('#payment-return')) return null;
+  const queryPart = hash.split('?')[1];
+  if (!queryPart) return null;
+  const params = new URLSearchParams(queryPart);
+  return params.get('order_id') || null;
 }
 
 /**
@@ -53,6 +67,7 @@ export type UseRouterReturn = {
   selectedProductId: string | null;
   selectedCatalogFilter: string | null;
   productReturnPage: ReturnablePage;
+  paymentReturnOrderId: string | null;
   openProductPage: (filter?: string) => void;
   openCheckoutPage: () => void;
   openCustomizePage: () => void;
@@ -66,6 +81,7 @@ export function useRouter(): UseRouterReturn {
   const [selectedProductId, setSelectedProductId] = useState<string | null>(productIdFromHash);
   const [selectedCatalogFilter, setSelectedCatalogFilter] = useState<string | null>(null);
   const [productReturnPage, setProductReturnPage] = useState<ReturnablePage>('home');
+  const [paymentReturnOrderId, setPaymentReturnOrderId] = useState<string | null>(orderIdFromPaymentReturnHash);
 
   // ---- Hash ↔ state sync (fully self-contained) ----------------------------
 
@@ -77,6 +93,14 @@ export function useRouter(): UseRouterReturn {
         setSelectedProductId(null);
         setSelectedCatalogFilter(null);
         setActivePage('checkout');
+        return;
+      }
+
+      if (hash.startsWith('#payment-return')) {
+        setSelectedProductId(null);
+        setSelectedCatalogFilter(null);
+        setPaymentReturnOrderId(orderIdFromPaymentReturnHash());
+        setActivePage('paymentReturn');
         return;
       }
 
@@ -202,6 +226,7 @@ export function useRouter(): UseRouterReturn {
     selectedProductId,
     selectedCatalogFilter,
     productReturnPage,
+    paymentReturnOrderId,
     openProductPage,
     openCheckoutPage,
     openCustomizePage,
