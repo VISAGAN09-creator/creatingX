@@ -237,7 +237,7 @@ export function Collections({ products, status, onViewAll }: CollectionsProps) {
                   <motion.button
                     key={`${collection.id}-${index}`}
                     type="button"
-                    data-cursor="hover"
+                   
                     className="group relative block h-[260px] w-[220px] shrink-0 overflow-hidden bg-metal-light text-left shadow-none outline-none transition-shadow duration-300 hover:z-10 hover:shadow-metal sm:h-[320px] sm:w-[280px] lg:h-[380px] lg:w-[330px]"
                     whileHover={{ scale: 1.08, y: -8 }}
                     transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}

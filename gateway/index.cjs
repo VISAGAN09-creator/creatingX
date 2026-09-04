@@ -75,7 +75,7 @@ const placeholderAdapter = {
 const adapters = {
   // stripe: require('./stripe.cjs'),
   // payu:   require('./payu.cjs'),
-  // cashfree: require('./cashfree.cjs'),
+  cashfree: require('./cashfree.cjs'),
   // phonepe:  require('./phonepe.cjs'),
 };
 

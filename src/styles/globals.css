@@ -47,19 +47,6 @@ input {
   font: inherit;
 }
 
-@media (pointer: fine) {
-
-  body,
-  a,
-  button,
-  input,
-  textarea,
-  select,
-  [role='button'],
-  [data-cursor='hover'] {
-    cursor: none;
-  }
-}
 
 @media (prefers-reduced-motion: reduce) {
 
@@ -189,4 +176,24 @@ input {
   to {
     transform: translateX(-33.333%);
   }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }

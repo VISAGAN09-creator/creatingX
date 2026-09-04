@@ -8,9 +8,25 @@
     ],
     "rewrites": [
       {
+<<<<<<< HEAD
+=======
+        "source": "/api/**",
+        "function": "api"
+      },
+      {
+>>>>>>> development
         "source": "**",
         "destination": "/index.html"
       }
     ]
+<<<<<<< HEAD
+=======
+  },
+  "functions": {
+    "source": "functions",
+    "predeploy": [
+      "npm --prefix functions run copy-server"
+    ]
+>>>>>>> development
   }
 }

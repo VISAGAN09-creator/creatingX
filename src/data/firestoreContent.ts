@@ -49,7 +49,7 @@ async function discoverCollectionNames(): Promise<string[]> {
   // or fall back to it if no other collections are discovered.
   return [...new Set([...discovered, productsCollectionName])];
 }
-const sizeFieldNames = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+const sizeFieldNames = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
 
 function text(value: unknown) {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;

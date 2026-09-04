@@ -1,0 +1,21 @@
+{
+  "name": "metalflux-functions",
+  "description": "Firebase Cloud Functions for METALFLUX payment API",
+  "private": true,
+  "engines": {
+    "node": "18"
+  },
+  "main": "index.js",
+  "scripts": {
+    "copy-server": "node copy-server.js"
+  },
+  "dependencies": {
+    "firebase-functions": "^4.9.0",
+    "firebase-admin": "^12.1.0",
+    "express": "^5.2.1",
+    "cors": "^2.8.6",
+    "helmet": "^8.2.0",
+    "express-rate-limit": "^8.5.2",
+    "dotenv": "^17.4.2"
+  }
+}

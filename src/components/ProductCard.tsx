@@ -45,7 +45,7 @@ export function ProductCard({ product, index, onAdd, onOpen }: ProductCardProps)
   return (
     <Reveal delay={index * 0.07}>
       <motion.article
-        data-cursor="hover"
+       
         role={onOpen ? 'button' : undefined}
         tabIndex={onOpen ? 0 : undefined}
         className="group relative flex h-full flex-col overflow-hidden bg-metal-charcoal"

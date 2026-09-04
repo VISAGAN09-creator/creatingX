@@ -118,13 +118,22 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
     }
 
     try {
-      // Step 1: Create order via backend server API
+      // Step 1: Create order via backend — send items (product IDs + quantities)
+      // The server will look up authoritative prices from Firestore.
       const createResponse = await fetch('/api/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: Math.round(total * 100), // smallest currency unit
-          currency: 'INR',
+          items: lines.map((line) => ({
+            id: line.id,
+            quantity: line.quantity,
+          })),
+          customer: {
+            email,
+            phone,
+            name: [firstName, lastName].filter(Boolean).join(' '),
+          },
+          shipping: { country, address, apartment, city, state, pinCode },
         }),
       });
 
@@ -135,7 +144,22 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
 
       const orderData = await createResponse.json();
 
-      // Step 2: Open the gateway's checkout UI
+      // Store checkout context in sessionStorage for use after redirect
+      try {
+        sessionStorage.setItem(
+          'cashfree_checkout_context',
+          JSON.stringify({
+            email,
+            firstName,
+            lastName,
+            orderId: orderData.gatewayData?.order_id,
+          }),
+        );
+      } catch {
+        // sessionStorage may be unavailable; proceed anyway
+      }
+
+      // Step 2: Open the gateway's checkout UI (this will redirect for Cashfree)
       openCheckout(
         {
           email,
@@ -145,27 +169,15 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
           orderData,
         },
         {
-          // Step 3: On success — verify payment and store order
+          // For redirect-based flows (Cashfree), onSuccess is typically not called
+          // because the browser navigates away. But we handle it for completeness.
           onSuccess: async (paymentData) => {
             setIsPaying(true);
             try {
-              const orderDetails = {
-                customer: { email, firstName, lastName, phone },
-                shipping: { country, address, apartment, city, state, pinCode },
-                items: lines.map((line) => ({
-                  id: line.id,
-                  name: line.name,
-                  price: line.price,
-                  quantity: line.quantity,
-                  image: line.image,
-                })),
-                pricing: { subtotal, tax, shipping, total },
-              };
-
               const verifyResponse = await fetch('/api/verify-payment', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ paymentData, orderDetails }),
+                body: JSON.stringify({ orderId: paymentData.order_id || orderData.gatewayData?.order_id }),
               });
 
               if (!verifyResponse.ok) {
@@ -174,8 +186,12 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
               }
 
               const result = await verifyResponse.json();
-              onClearCart();
-              setSuccessOrderId(result.orderId);
+              if (result.success) {
+                onClearCart();
+                setSuccessOrderId(result.orderId);
+              } else {
+                showToast(result.message || 'Payment was not successful.', 'error');
+              }
               setIsPaying(false);
             } catch (err) {
               console.error('Error verifying payment:', err);
@@ -208,7 +224,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
         <header className="border-b border-[#e0e0e0] px-4 py-5 text-center flex justify-center">
           <button
             type="button"
-            data-cursor="hover"
+           
             className="flex items-center justify-center"
             onClick={onBack}
           >
@@ -240,7 +256,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
 
           <button
             type="button"
-            data-cursor="hover"
+           
             className="w-full h-14 bg-black text-white text-xs font-bold uppercase tracking-[0.16em] hover:bg-[#333333] transition flex items-center justify-center"
             onClick={onBack}
           >
@@ -277,7 +293,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
       <header className="border-b border-[#e0e0e0] px-4 py-5 text-center flex justify-center">
         <button
           type="button"
-          data-cursor="hover"
+         
           className="flex items-center justify-center"
           onClick={onBack}
         >
@@ -291,7 +307,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
             <h2 className="font-display text-[22px] font-bold tracking-normal">Contact</h2>
             <button
               type="button"
-              data-cursor="hover"
+             
               className="text-[13px] text-[#0066cc] transition hover:underline"
               onClick={() => showToast('Sign in modal coming soon')}
             >
@@ -377,7 +393,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
               />
               <button
                 type="button"
-                data-cursor="hover"
+               
                 aria-label="Search address"
                 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#999999]"
                 onClick={() => showToast('Search address')}
@@ -455,7 +471,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
               />
               <button
                 type="button"
-                data-cursor="hover"
+               
                 aria-label="Phone help"
                 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#999999]"
                 onClick={() => showToast('Phone number required for delivery updates')}
@@ -513,7 +529,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
                 Shipping
                 <button
                   type="button"
-                  data-cursor="hover"
+                 
                   aria-label="Shipping information"
                   onClick={() => showToast('Shipping calculated after address entered')}
                 >
@@ -538,7 +554,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
 
             <button
               type="button"
-              data-cursor="hover"
+             
               disabled={isPaying || lines.length === 0}
               className={`flex h-14 w-full items-center justify-center gap-2.5 rounded-lg bg-[#1a1a1a] text-sm font-bold uppercase tracking-[0.08em] text-white transition disabled:cursor-not-allowed disabled:opacity-50 enabled:hover:-translate-y-px enabled:hover:bg-[#333333] enabled:hover:shadow-[0_6px_20px_rgba(0,0,0,0.15)] ${isPaying ? 'pointer-events-none' : ''
                 }`}
@@ -555,7 +571,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
                 <button
                   key={link}
                   type="button"
-                  data-cursor="hover"
+                 
                   className="mx-2 text-[11px] text-[#666666] transition hover:text-[#1a1a1a]"
                   onClick={() => showToast(link)}
                 >

@@ -4,7 +4,20 @@ import { MagneticAnchor } from './Magnetic';
 import { Reveal } from './Reveal';
 import { SmartImage } from './SmartImage';
 
-export function Customize() {
+type CustomizeProps = {
+  onStartDesigning?: () => void;
+};
+
+export function Customize({ onStartDesigning }: CustomizeProps) {
+  const handleStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (onStartDesigning) {
+      onStartDesigning();
+    } else {
+      window.location.hash = '#customize';
+    }
+  };
+
   return (
     <section
       id="customize"
@@ -29,7 +42,7 @@ export function Customize() {
               return (
                 <div
                   key={feature.title}
-                  data-cursor="hover"
+                 
                   className="flex gap-5 border-l-[3px] border-black bg-metal-light p-5 transition duration-300 hover:translate-x-2 hover:bg-metal-mid sm:p-6"
                 >
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center bg-black text-white">
@@ -44,18 +57,19 @@ export function Customize() {
             })}
           </div>
 
-          <MagneticAnchor
-            href="#"
-            className="liquid-metal metal-sheen mt-10 inline-flex min-h-14 items-center gap-4 bg-black px-8 py-4 text-sm font-semibold uppercase tracking-[0.05em] text-white transition-shadow duration-300 hover:shadow-metal sm:px-10"
+          <a
+            href="#customize"
+            onClick={handleStart}
+            className="liquid-metal metal-sheen mt-10 inline-flex min-h-14 items-center gap-4 bg-black px-8 py-4 text-sm font-semibold uppercase tracking-[0.05em] text-white transition-shadow duration-300 hover:shadow-metal sm:px-10 cursor-pointer"
           >
             Start Designing
             <ArrowRight size={20} strokeWidth={2} />
-          </MagneticAnchor>
+          </a>
         </Reveal>
 
         <Reveal className="relative flex h-[430px] items-center justify-center sm:h-[540px] lg:h-[600px]">
           <div
-            data-cursor="hover"
+           
             className="clip-octagon relative h-[410px] w-[310px] overflow-hidden bg-gradient-to-br from-metal-light to-metal-mid sm:h-[500px] sm:w-[400px]"
           >
             <SmartImage

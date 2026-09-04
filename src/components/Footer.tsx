@@ -75,7 +75,7 @@ export function Footer({ activePage, onNavigate }: FooterProps) {
                     target="_blank"
                     rel="noreferrer"
                     aria-label="Instagram"
-                    data-cursor="hover"
+                   
                     className="flex h-10 w-10 items-center justify-center border border-metal-mid text-metal-dark transition hover:border-black hover:bg-black hover:text-white"
                   >
                     <Instagram size={18} strokeWidth={2} />
@@ -113,7 +113,7 @@ export function Footer({ activePage, onNavigate }: FooterProps) {
                     <a
                       href="#"
                       onClick={(event) => handleLinkClick(event, column.title, link)}
-                      data-cursor="hover"
+                     
                       className="text-sm text-metal-dark transition hover:text-black"
                     >
                       {link}

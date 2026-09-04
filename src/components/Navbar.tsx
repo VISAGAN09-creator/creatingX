@@ -49,7 +49,7 @@ export function Navbar({ cartCount, onCartOpen, onSearchOpen, onNavigate, active
       <nav className="mx-auto flex max-w-shell items-center justify-between gap-5">
         <button
           type="button"
-          data-cursor="hover"
+         
           className="flex items-center"
           onClick={() => handleNavigate('#hero')}
         >
@@ -63,19 +63,29 @@ export function Navbar({ cartCount, onCartOpen, onSearchOpen, onNavigate, active
         </button>
 
         <ul className="hidden list-none items-center gap-8 lg:flex xl:gap-10">
-          {navLinks.map((link) => (
-            <li key={link.href}>
-              <button
-                type="button"
-                data-cursor="hover"
-                onClick={() => handleNavigate(link.href)}
-                className="group relative py-1 text-[0.85rem] font-medium uppercase tracking-[0.05em] text-black"
-              >
-                {link.label}
-                <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-black transition-all duration-300 group-hover:w-full" />
-              </button>
-            </li>
-          ))}
+          {navLinks.map((link) => {
+            const isLinkActive =
+              (link.href === '#customize' && activePage === 'customize') ||
+              (link.href === '#totd' && activePage === 'totd');
+            return (
+              <li key={link.href}>
+                <button
+                  type="button"
+                  onClick={() => handleNavigate(link.href)}
+                  className={`group relative py-1 text-[0.85rem] font-medium uppercase tracking-[0.05em] transition-colors ${
+                    isLinkActive ? 'text-black font-bold' : 'text-black'
+                  }`}
+                >
+                  {link.label}
+                  <span
+                    className={`absolute bottom-0 left-0 h-[1.5px] bg-black transition-all duration-300 ${
+                      isLinkActive ? 'w-full' : 'w-0 group-hover:w-full'
+                    }`}
+                  />
+                </button>
+              </li>
+            );
+          })}
         </ul>
 
         <div className="flex items-center gap-2 sm:gap-4">
@@ -110,7 +120,7 @@ export function Navbar({ cartCount, onCartOpen, onSearchOpen, onNavigate, active
 
           <button
             type="button"
-            data-cursor="hover"
+           
             aria-label={menuOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={menuOpen}
             className="inline-flex h-11 w-11 items-center justify-center border border-metal-mid text-black lg:hidden"
@@ -135,7 +145,7 @@ export function Navbar({ cartCount, onCartOpen, onSearchOpen, onNavigate, active
                 <motion.button
                   key={link.href}
                   type="button"
-                  data-cursor="hover"
+                 
                   initial={{ opacity: 0, x: -12 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.04 }}

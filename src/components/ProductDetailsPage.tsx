@@ -1,5 +1,5 @@
 import { ArrowLeft, Plus, Ruler, ShoppingBag, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DataStatus, Product } from '../types';
 import { formatPrice } from '../utils/format';
 import { MagneticButton } from './Magnetic';
@@ -23,12 +23,14 @@ const DEFAULT_COLORS = [
 ];
 
 const DEFAULT_SIZES = [
+  { name: 'XXS', stock: 1 },
   { name: 'XS', stock: 1 },
   { name: 'S', stock: 1 },
   { name: 'M', stock: 1 },
   { name: 'L', stock: 1 },
   { name: 'XL', stock: 1 },
-  { name: 'XXL', stock: 0 },
+  { name: 'XXL', stock: 1 },
+  { name: 'XXXL', stock: 1 },
 ];
 
 const DEFAULT_SIZE_GUIDE = [
@@ -122,6 +124,35 @@ export function ProductDetailsPage({
   const [openAccordion, setOpenAccordion] = useState('description');
   const [sizeGuideOpen, setSizeGuideOpen] = useState(false);
 
+  const touchStartX = useRef<number | null>(null);
+  const touchEndX = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchEndX.current = null;
+    touchStartX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartX.current === null || touchEndX.current === null) return;
+    const distance = touchStartX.current - touchEndX.current;
+    const minSwipeDistance = 35;
+
+    if (distance > minSwipeDistance && images.length > 1) {
+      setCurrentImage((prev) => (prev + 1) % images.length);
+      setIsZoomed(false);
+    } else if (distance < -minSwipeDistance && images.length > 1) {
+      setCurrentImage((prev) => (prev - 1 + images.length) % images.length);
+      setIsZoomed(false);
+    }
+
+    touchStartX.current = null;
+    touchEndX.current = null;
+  };
+
   const images = useMemo(() => (product ? productImages(product) : []), [product]);
   const colors = useMemo(() => (product?.colors?.length ? product.colors : DEFAULT_COLORS), [product]);
   const sizes = useMemo(() => (product?.sizes?.length ? product.sizes : DEFAULT_SIZES), [product]);
@@ -210,7 +241,7 @@ export function ProductDetailsPage({
         <div className="mx-auto w-full max-w-shell">
           <button
             type="button"
-            data-cursor="hover"
+           
             className="mb-8 inline-flex h-11 items-center gap-3 border border-metal-mid px-4 text-sm font-semibold uppercase tracking-[0.05em] text-black transition hover:bg-black hover:text-white"
             onClick={onBack}
           >
@@ -229,7 +260,7 @@ export function ProductDetailsPage({
         <div className="mx-auto w-full max-w-shell">
           <button
             type="button"
-            data-cursor="hover"
+           
             className="mb-8 inline-flex h-11 items-center gap-3 border border-metal-mid px-4 text-sm font-semibold uppercase tracking-[0.05em] text-black transition hover:bg-black hover:text-white"
             onClick={onBack}
           >
@@ -294,7 +325,7 @@ export function ProductDetailsPage({
       >
         <button
           type="button"
-          data-cursor="hover"
+         
           className="mb-10 inline-flex h-11 items-center gap-3 border border-metal-mid px-4 text-sm font-semibold uppercase tracking-[0.05em] text-black transition hover:bg-black hover:text-white"
           onClick={onBack}
         >
@@ -316,7 +347,7 @@ export function ProductDetailsPage({
                 <button
                   key={`${image}-${index}`}
                   type="button"
-                  data-cursor="hover"
+                 
                   className={`h-[100px] w-[84px] shrink-0 overflow-hidden border-2 bg-[#f5f5f5] transition lg:h-[120px] lg:w-full ${
                     currentImage === index ? 'border-black' : 'border-transparent'
                   }`}
@@ -334,33 +365,43 @@ export function ProductDetailsPage({
               ))}
             </div>
 
-            <button
-              type="button"
-              data-cursor="hover"
-              className={`order-1 relative mx-auto aspect-[4/5] w-full max-w-[460px] overflow-hidden bg-[#f5f5f5] lg:order-2 lg:max-w-[430px] ${
+            <div
+              className={`order-1 group relative mx-auto aspect-[4/5] w-full max-w-[460px] overflow-hidden bg-[#f5f5f5] lg:order-2 lg:max-w-[430px] touch-pan-y select-none ${
                 isZoomed ? 'cursor-zoom-out' : 'cursor-zoom-in'
               }`}
-              aria-label={isZoomed ? 'Zoom out product image' : 'Zoom in product image'}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
               onClick={() => setIsZoomed((zoomed) => !zoomed)}
             >
               <SmartImage
                 src={images[currentImage] ?? product.image}
                 alt={product.alt}
-                className={`h-full w-full object-cover transition duration-500 ${
+                className={`h-full w-full object-cover transition duration-500 select-none ${
                   isZoomed ? 'scale-[1.6]' : 'hover:scale-[1.02]'
                 }`}
               />
+
               {images.length > 1 && (
-                <div className="absolute bottom-5 left-1/2 z-[3] flex -translate-x-1/2 gap-2">
+                <div className="absolute bottom-5 left-1/2 z-[4] flex -translate-x-1/2 gap-2">
                   {images.map((image, index) => (
-                    <span
+                    <button
                       key={`${image}-dot-${index}`}
-                      className={`h-[3px] w-8 transition ${currentImage === index ? 'bg-white' : 'bg-white/40'}`}
+                      type="button"
+                      aria-label={`Go to image ${index + 1}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCurrentImage(index);
+                        setIsZoomed(false);
+                      }}
+                      className={`h-1.5 rounded-full transition-all duration-300 ${
+                        currentImage === index ? 'w-8 bg-white' : 'w-2 bg-white/40 hover:bg-white/70'
+                      }`}
                     />
                   ))}
                 </div>
               )}
-            </button>
+            </div>
           </div>
 
           <div className="pt-2">
@@ -386,7 +427,7 @@ export function ProductDetailsPage({
                 </p>
                 <button
                   type="button"
-                  data-cursor="hover"
+                 
                   className="inline-flex items-center gap-2 text-[11px] font-medium text-metal-text underline underline-offset-4 transition hover:text-black"
                   onClick={() => setSizeGuideOpen(true)}
                 >
@@ -402,7 +443,7 @@ export function ProductDetailsPage({
                     <button
                       key={size.name}
                       type="button"
-                      data-cursor={isOutOfStock ? undefined : 'hover'}
+                     
                       disabled={isOutOfStock}
                       aria-pressed={selectedSize === size.name}
                       title={isOutOfStock ? `${size.name} out of stock` : undefined}
@@ -432,7 +473,7 @@ export function ProductDetailsPage({
               </MagneticButton>
               <button
                 type="button"
-                data-cursor="hover"
+               
                 disabled={!canAddToCart}
                 className="flex h-14 items-center justify-center border border-black bg-transparent px-4 text-xs font-bold uppercase tracking-[0.16em] text-black transition disabled:cursor-not-allowed disabled:opacity-45 enabled:hover:bg-black enabled:hover:text-white"
                 onClick={addSelectedProduct}
@@ -448,7 +489,7 @@ export function ProductDetailsPage({
                   <div key={item.id} className="border-b border-metal-light">
                     <button
                       type="button"
-                      data-cursor="hover"
+                     
                       className="flex w-full items-center justify-between py-5 text-left transition hover:opacity-70"
                       onClick={() => setOpenAccordion(isOpen ? '' : item.id)}
                     >
@@ -489,7 +530,7 @@ export function ProductDetailsPage({
               <button
                 key={item.id}
                 type="button"
-                data-cursor="hover"
+               
                 className="group text-left"
                 onClick={() => onOpenProduct(item)}
               >
@@ -528,7 +569,7 @@ export function ProductDetailsPage({
               <h2 className="font-display text-2xl font-bold tracking-normal">Size Guide</h2>
               <button
                 type="button"
-                data-cursor="hover"
+               
                 aria-label="Close size guide"
                 className="flex h-10 w-10 items-center justify-center border border-metal-mid text-black transition hover:bg-black hover:text-white"
                 onClick={() => setSizeGuideOpen(false)}

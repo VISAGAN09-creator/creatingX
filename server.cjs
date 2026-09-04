@@ -62,13 +62,15 @@ const ALLOWED_ORIGINS = (() => {
   const devOrigins = [
     'http://localhost:5173',
     'http://localhost:5174',
+    'http://localhost:5175',
     'http://127.0.0.1:5173',
     'http://127.0.0.1:5174',
+    'http://127.0.0.1:5175',
   ];
 
   if (envOrigins) {
     // Merge production origins with dev origins (dev origins are harmless in prod)
-    const prodOrigins = envOrigins.split(',').map(o => o.trim()).filter(Boolean);
+    const prodOrigins = envOrigins.split(',').map(o => o.trim().replace(/\/+$/, '')).filter(Boolean);
     return [...new Set([...prodOrigins, ...devOrigins])];
   }
 
@@ -138,29 +140,229 @@ app.use('/api/verify-payment', paymentLimiter);
 
 console.log(`[Payment Gateway] Active gateway: ${gateway.gatewayName}`);
 
+// ============================================================================
+// HELPER: Parse compound product ID back to collection + document ID
+// ============================================================================
+// React product IDs are formatted as "<slugified-collection>-<docId>"
+// e.g. "products-Connar McGregor", "fight-UFC x Venam"
+// We need to reverse this to find the Firestore document.
+// ============================================================================
+
+function slugify(value) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+/**
+ * Resolve a compound React product ID to a Firestore collection + doc.
+ * Tries all known collections and returns the first match.
+ *
+ * @param {string} productId — Compound ID like "products-Connar McGregor"
+ * @returns {Promise<{ collectionName: string, docId: string, data: object } | null>}
+ */
+async function resolveProductFromFirestore(productId) {
+  if (!db) return null;
+
+  // Strategy: try to discover collections, then for each collection,
+  // check if the product ID starts with the slugified collection name.
+  let collectionNames = ['products'];
+  try {
+    const configSnap = await db.doc('_config/collections').get();
+    if (configSnap.exists) {
+      const configData = configSnap.data();
+      const names = configData.productCollections || configData.collections || configData.names;
+      if (Array.isArray(names)) {
+        collectionNames = [...new Set([...names.map(n => String(n).trim()).filter(Boolean), 'products'])];
+      }
+    }
+  } catch (e) {
+    // Fall back to default
+  }
+
+  // Also try TOTD collection
+  collectionNames.push('TOTD');
+
+  for (const colName of collectionNames) {
+    const prefix = slugify(colName) + '-';
+    if (productId.startsWith(prefix)) {
+      const docId = productId.slice(prefix.length);
+      if (!docId) continue;
+
+      try {
+        let docSnap = await db.collection(colName).doc(docId).get();
+        if (docSnap.exists) {
+          return { collectionName: colName, docId, data: docSnap.data() };
+        }
+        
+        // If not found, try removing the appended size (e.g., "-S", "-XXL")
+        const lastDashIndex = docId.lastIndexOf('-');
+        if (lastDashIndex > 0) {
+          const docIdWithoutSize = docId.substring(0, lastDashIndex);
+          docSnap = await db.collection(colName).doc(docIdWithoutSize).get();
+          if (docSnap.exists) {
+            return { collectionName: colName, docId: docIdWithoutSize, data: docSnap.data() };
+          }
+        }
+      } catch (e) {
+        console.warn(`[Firestore] Error reading ${colName}/${docId}:`, e.message);
+      }
+    }
+  }
+
+  return null;
+}
+
 /**
  * STEP 1: CREATE ORDER ENDPOINT
  * POST /api/create-order
- * Receives: { amount (smallest currency unit), currency, receipt }
+ * Receives: { items: [{ id, quantity }], customer: { email, phone, name }, shipping }
  * Returns: { success, orderId, amount, currency, gatewayData }
  *
- * This endpoint is gateway-agnostic. The actual order creation is
- * delegated to the gateway adapter in gateway/index.cjs.
+ * SECURITY: The server reads product prices from Firestore.
+ * The client-supplied amount is NEVER trusted.
  */
 app.post('/api/create-order', async (req, res) => {
-  const { amount, currency = 'INR', receipt = 'receipt_order_' + Date.now() } = req.body;
+  const { items, customer, shipping } = req.body;
 
-  // Error handling: Validate amount >= 100 (smallest currency unit)
-  if (!amount || typeof amount !== 'number' || amount < 100) {
+  // --- Validate items array ---
+  if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({
       success: false,
-      message: 'Validation Error: Amount must be a number and at least 100 (smallest currency unit).',
+      message: 'Validation Error: items must be a non-empty array of { id, quantity }.',
+    });
+  }
+
+  if (items.length > 50) {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation Error: Too many items (max 50).',
+    });
+  }
+
+  if (!db) {
+    return res.status(500).json({
+      success: false,
+      message: 'Server database is not initialized.',
     });
   }
 
   try {
-    console.log(`[Payment] Creating order for amount: ${amount} (${amount / 100} ${currency})`);
-    const order = await gateway.createOrder({ amount, currency, receipt });
+    // --- Resolve each item from Firestore and compute authoritative prices ---
+    const resolvedItems = [];
+    let totalAmount = 0;
+
+    for (const item of items) {
+      const productId = typeof item.id === 'string' ? item.id.trim() : '';
+      const quantity = Number(item.quantity);
+
+      if (!productId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation Error: Each item must have a non-empty id.',
+        });
+      }
+
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) {
+        return res.status(400).json({
+          success: false,
+          message: `Validation Error: Quantity for "${productId}" must be an integer between 1 and 100.`,
+        });
+      }
+
+      const product = await resolveProductFromFirestore(productId);
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: `Product not found: "${productId}".`,
+        });
+      }
+
+      // Extract price from Firestore document (server-authoritative)
+      const firestorePrice = Number(product.data.price);
+      if (!Number.isFinite(firestorePrice) || firestorePrice <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Product "${productId}" does not have a valid price.`,
+        });
+      }
+
+      const lineTotal = firestorePrice * quantity;
+      totalAmount += lineTotal;
+
+      resolvedItems.push({
+        productId,
+        firestoreDocId: product.docId,
+        collectionName: product.collectionName,
+        name: product.data.name || product.data.title || product.docId,
+        price: firestorePrice,
+        quantity,
+        lineTotal,
+        image: product.data.img1 || product.data.image || '',
+      });
+    }
+
+    // Round to 2 decimal places
+    totalAmount = Math.round(totalAmount * 100) / 100;
+
+    if (totalAmount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Total amount must be greater than zero.',
+      });
+    }
+
+    // --- Build return URL ---
+    // Detect the request origin for the return URL
+    const origin = req.headers.origin || req.headers.referer?.replace(/\/[^/]*$/, '') || 'https://ecommerce-f1448.web.app';
+    const returnUrl = `${origin}/#payment-return`;
+
+    // --- Build customer info ---
+    const customerName = typeof customer?.name === 'string' ? customer.name.trim() : 'Customer';
+    const customerEmail = typeof customer?.email === 'string' ? customer.email.trim() : '';
+    const customerPhone = typeof customer?.phone === 'string' ? customer.phone.replace(/[^0-9+]/g, '') : '';
+
+    console.log(`[Payment] Creating order: ${resolvedItems.length} item(s), total: ${totalAmount} INR`);
+
+    // --- Store pending order context in Firestore for later verification ---
+    const pendingOrderData = {
+      items: resolvedItems.map(i => ({
+        productId: i.productId,
+        name: i.name,
+        price: i.price,
+        quantity: i.quantity,
+        lineTotal: i.lineTotal,
+        image: i.image,
+      })),
+      totalAmount,
+      customer: {
+        name: customerName,
+        email: customerEmail,
+        phone: customerPhone,
+      },
+      shipping: shipping || {},
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
+
+    const order = await gateway.createOrder({
+      amount: totalAmount,
+      currency: 'INR',
+      receipt: `receipt_${Date.now()}`,
+      customer: {
+        id: `cust_${Date.now()}`,
+        email: customerEmail || 'test@cashfree.com',
+        phone: customerPhone || '9999999999',
+        name: customerName,
+      },
+      returnUrl,
+      items: resolvedItems,
+    });
+
+    // Store pending order data keyed by Cashfree order_id for verification later
+    if (db && order.gatewayData?.order_id) {
+      pendingOrderData.cashfreeOrderId = order.gatewayData.order_id;
+      pendingOrderData.cfOrderId = order.gatewayData.cf_order_id || '';
+      await db.collection('pendingOrders').doc(order.gatewayData.order_id).set(pendingOrderData);
+    }
 
     return res.status(200).json({
       success: true,
@@ -179,260 +381,344 @@ app.post('/api/create-order', async (req, res) => {
   }
 });
 
+// ============================================================================
+// SHARED HELPERS
+// ============================================================================
+
+function sanitizeString(value, maxLength = 500) {
+  if (typeof value !== 'string') return '';
+  return value.replace(/<[^>]*>/g, '').trim().slice(0, maxLength);
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 /**
  * STEP 2: VERIFY PAYMENT ENDPOINT
  * POST /api/verify-payment
- * Receives: { paymentData, orderDetails }
- *   - paymentData:   Gateway-specific data from the client checkout callback
- *   - orderDetails:  Customer, shipping, items, pricing from the checkout form
- * Returns: { success: true/false, orderId }
+ * Receives: { orderId } — the Cashfree order_id returned in the redirect URL
+ * Returns: { success, orderId, paymentStatus, order }
  *
- * This endpoint is gateway-agnostic. Signature/hash verification is delegated
- * to the gateway adapter. All validation, Firestore writes, and email logic
- * remain here in the server.
+ * This endpoint verifies the payment with Cashfree's API (server-to-server),
+ * then writes the order to Firestore ONLY if the payment is genuinely PAID.
+ * The operation is idempotent: refreshing the return page won't create duplicates.
  */
 app.post('/api/verify-payment', async (req, res) => {
-  const { paymentData, orderDetails } = req.body;
+  const { orderId: cashfreeOrderId } = req.body;
 
-  // Error handling: Missing top-level fields
-  if (!paymentData || !orderDetails) {
+  if (!cashfreeOrderId || typeof cashfreeOrderId !== 'string') {
     return res.status(400).json({
       success: false,
-      message: 'Validation Error: Missing paymentData or orderDetails.',
+      message: 'Validation Error: orderId is required.',
     });
   }
 
-  // ============================================================================
-  // INPUT SANITIZATION & VALIDATION HELPERS
-  // ============================================================================
-
-  /**
-   * Strip HTML tags and trim whitespace to prevent XSS payloads from being
-   * stored in Firestore and rendered in admin dashboards or confirmation emails.
-   */
-  function sanitizeString(value, maxLength = 500) {
-    if (typeof value !== 'string') return '';
-    return value.replace(/<[^>]*>/g, '').trim().slice(0, maxLength);
-  }
-
-  /**
-   * HTML-entity-encode special characters for safe embedding in HTML email.
-   * Defense-in-depth: even if sanitizeString misses something, this ensures
-   * the value is rendered as text, not interpreted as HTML/script.
-   */
-  function escapeHtml(str) {
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
-  function isPositiveNumber(value) {
-    return typeof value === 'number' && Number.isFinite(value) && value >= 0;
-  }
-
-  // ============================================================================
-  // EXTRACT & VALIDATE — only the fields the server expects
-  // ============================================================================
-
-  const { customer, shipping, items, pricing } = orderDetails || {};
-
-  // --- Customer validation ---
-  if (!customer || typeof customer !== 'object') {
-    return res.status(400).json({ success: false, message: 'Validation Error: Missing customer details.' });
-  }
-
-  const validatedCustomer = {
-    email:     sanitizeString(customer.email, 254),
-    firstName: sanitizeString(customer.firstName, 100),
-    lastName:  sanitizeString(customer.lastName, 100),
-    phone:     sanitizeString(customer.phone, 20),
-  };
-
-  if (!validatedCustomer.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(validatedCustomer.email)) {
-    return res.status(400).json({ success: false, message: 'Validation Error: Invalid customer email.' });
-  }
-  if (!validatedCustomer.firstName) {
-    return res.status(400).json({ success: false, message: 'Validation Error: Customer first name is required.' });
-  }
-
-  // --- Shipping validation ---
-  if (!shipping || typeof shipping !== 'object') {
-    return res.status(400).json({ success: false, message: 'Validation Error: Missing shipping details.' });
-  }
-
-  const validatedShipping = {
-    country:   sanitizeString(shipping.country, 5),
-    address:   sanitizeString(shipping.address, 500),
-    apartment: sanitizeString(shipping.apartment, 200),
-    city:      sanitizeString(shipping.city, 100),
-    state:     sanitizeString(shipping.state, 100),
-    pinCode:   sanitizeString(shipping.pinCode, 10),
-  };
-
-  if (!validatedShipping.address || !validatedShipping.city || !validatedShipping.pinCode) {
-    return res.status(400).json({ success: false, message: 'Validation Error: Incomplete shipping address.' });
-  }
-
-  // --- Items validation ---
-  if (!Array.isArray(items) || items.length === 0 || items.length > 50) {
-    return res.status(400).json({ success: false, message: 'Validation Error: Items must be a non-empty array (max 50).' });
-  }
-
-  const validatedItems = items.map((item, index) => {
-    if (!item || typeof item !== 'object') {
-      throw new Error(`Item at index ${index} is not a valid object.`);
-    }
-    const name     = sanitizeString(item.name, 200);
-    const price    = Number(item.price);
-    const quantity = Number(item.quantity);
-
-    if (!name) throw new Error(`Item at index ${index} is missing a name.`);
-    if (!isPositiveNumber(price) || price > 10000000) throw new Error(`Item at index ${index} has an invalid price.`);
-    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) throw new Error(`Item at index ${index} has an invalid quantity.`);
-
-    return {
-      id:       sanitizeString(item.id, 100),
-      name,
-      price,
-      quantity,
-      image:    sanitizeString(item.image, 2000),
-    };
-  });
-
-  // --- Pricing validation ---
-  // Server recomputes totals from validated items to prevent price tampering.
-  if (!pricing || typeof pricing !== 'object') {
-    return res.status(400).json({ success: false, message: 'Validation Error: Missing pricing details.' });
-  }
-
-  const serverSubtotal = validatedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const serverTax      = Math.round(serverSubtotal * 0.18 * 100) / 100;
-  const serverShipping = (validatedShipping.address.length > 5 && validatedShipping.pinCode.length === 6) ? 0 : 150;
-  const serverTotal    = serverSubtotal + serverTax + serverShipping;
-
-  const validatedPricing = {
-    subtotal: serverSubtotal,
-    tax:      serverTax,
-    shipping: serverShipping,
-    total:    serverTotal,
-  };
-
-  // ============================================================================
-  // PAYMENT VERIFICATION — delegated to gateway adapter
-  // ============================================================================
-
   try {
-    const verification = await gateway.verifyPayment({ paymentData, orderDetails });
+    // --- Idempotency check: has this order already been processed? ---
+    if (db) {
+      const existingOrders = await db.collection('orders')
+        .where('payment.cashfreeOrderId', '==', cashfreeOrderId)
+        .limit(1)
+        .get();
+
+      if (!existingOrders.empty) {
+        const existingDoc = existingOrders.docs[0];
+        const existingData = existingDoc.data();
+        console.log(`[Payment] Order ${cashfreeOrderId} already verified (idempotent). Doc: ${existingDoc.id}`);
+        return res.status(200).json({
+          success: true,
+          message: 'Payment already verified.',
+          orderId: existingDoc.id,
+          paymentStatus: existingData.status,
+          order: {
+            items: existingData.items,
+            totalAmount: existingData.pricing?.total,
+            customer: existingData.customer,
+          },
+        });
+      }
+    }
+
+    // --- Verify with Cashfree API ---
+    const verification = await gateway.verifyPayment({ orderId: cashfreeOrderId });
 
     if (verification.verified) {
-      console.log(`[Payment] Verification successful for gateway order: ${verification.gatewayOrderId}`);
+      console.log(`[Payment] Verification successful for Cashfree order: ${cashfreeOrderId}`);
 
-      let orderId = '';
+      let firestoreOrderId = '';
+      let orderDetails = null;
 
       if (db) {
-        // ================================================================
-        // Construct order document from VALIDATED data only.
-        // Server controls status, payment, and createdAt — never the client.
-        // ================================================================
+        // Retrieve the pending order context we saved during create-order
+        const pendingSnap = await db.collection('pendingOrders').doc(cashfreeOrderId).get();
+        const pendingData = pendingSnap.exists ? pendingSnap.data() : null;
+
+        if (!pendingData) {
+          console.warn(`[Payment] No pending order found for ${cashfreeOrderId}, creating minimal record.`);
+        }
+
+        const items = pendingData?.items || [];
+        const customer = pendingData?.customer || {};
+        const shipping = pendingData?.shipping || {};
+        const totalAmount = pendingData?.totalAmount || verification.orderAmount || 0;
+
+        // Server recomputes pricing from stored authoritative data
+        const serverSubtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        const serverTax = Math.round(serverSubtotal * 0.18 * 100) / 100;
+        const addressOk = (shipping.address || '').length > 5 && (shipping.pinCode || '').length === 6;
+        const serverShipping = addressOk ? 0 : 150;
+        const serverTotal = serverSubtotal + serverTax + serverShipping;
+
         const finalOrderData = {
-          customer: validatedCustomer,
-          shipping: validatedShipping,
-          items:    validatedItems,
-          pricing:  validatedPricing,
-          payment: {
-            gateway:   gateway.gatewayName,
-            paymentId: verification.gatewayPaymentId,
-            orderId:   verification.gatewayOrderId,
+          customer: {
+            email: sanitizeString(customer.email, 254),
+            firstName: sanitizeString(customer.name?.split(' ')[0] || customer.firstName || '', 100),
+            lastName: sanitizeString(customer.name?.split(' ').slice(1).join(' ') || customer.lastName || '', 100),
+            phone: sanitizeString(customer.phone, 20),
           },
-          status:    'paid',
+          shipping: {
+            country: sanitizeString(shipping.country, 5),
+            address: sanitizeString(shipping.address, 500),
+            apartment: sanitizeString(shipping.apartment, 200),
+            city: sanitizeString(shipping.city, 100),
+            state: sanitizeString(shipping.state, 100),
+            pinCode: sanitizeString(shipping.pinCode, 10),
+          },
+          items: items.map(item => ({
+            id: sanitizeString(item.productId || item.id, 100),
+            name: sanitizeString(item.name, 200),
+            price: Number(item.price) || 0,
+            quantity: Number(item.quantity) || 1,
+            image: sanitizeString(item.image, 2000),
+          })),
+          pricing: {
+            subtotal: serverSubtotal || totalAmount,
+            tax: serverTax,
+            shipping: serverShipping,
+            total: serverTotal || totalAmount,
+          },
+          payment: {
+            gateway: gateway.gatewayName,
+            cashfreeOrderId: cashfreeOrderId,
+            transactionId: verification.gatewayPaymentId || '',
+            paymentStatus: verification.paymentStatus || 'PAID',
+          },
+          status: 'paid',
           createdAt: new Date().toISOString(),
         };
 
-        // 1. Create order document in Firestore using Admin SDK
+        // Double-check idempotency one more time (race condition guard)
+        const doubleCheck = await db.collection('orders')
+          .where('payment.cashfreeOrderId', '==', cashfreeOrderId)
+          .limit(1)
+          .get();
+
+        if (!doubleCheck.empty) {
+          const doc = doubleCheck.docs[0];
+          return res.status(200).json({
+            success: true,
+            message: 'Payment already verified (race condition guard).',
+            orderId: doc.id,
+            paymentStatus: 'paid',
+            order: { items: finalOrderData.items, totalAmount: finalOrderData.pricing.total, customer: finalOrderData.customer },
+          });
+        }
+
         const orderRef = await db.collection('orders').add(finalOrderData);
-        orderId = orderRef.id;
-        console.log(`[Firestore] Order document successfully created with ID: ${orderId}`);
+        firestoreOrderId = orderRef.id;
+        orderDetails = { items: finalOrderData.items, totalAmount: finalOrderData.pricing.total, customer: finalOrderData.customer };
+        console.log(`[Firestore] Order document created: ${firestoreOrderId}`);
 
-        // 2. Create email document to trigger Firebase trigger-email extension
-        //    Uses SANITIZED data throughout to prevent XSS in email content.
-        const itemsListHtml = validatedItems
-          .map(
-            (line) =>
-              `<li>${escapeHtml(line.name)} x ${line.quantity} - ${new Intl.NumberFormat('en-IN', {
-                style: 'currency',
-                currency: 'INR',
-                minimumFractionDigits: 2,
-              }).format(line.price * line.quantity)}</li>`
-          )
-          .join('');
+        // Send confirmation email
+        try {
+          const itemsListHtml = finalOrderData.items
+            .map(line => `<li>${escapeHtml(line.name)} x ${line.quantity} - ${new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format(line.price * line.quantity)}</li>`)
+            .join('');
 
-        await db.collection('mail').add({
-          to: validatedCustomer.email,
-          message: {
-            subject: `Order Confirmation - Order #${orderId.slice(0, 8).toUpperCase()}`,
-            html: `
-              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #1a1a1a;">
-                <h2 style="font-size: 24px; font-weight: bold; border-bottom: 2px solid #1a1a1a; padding-bottom: 15px; margin-bottom: 20px;">
-                  Order Confirmed!
-                </h2>
-                <p>Hi ${escapeHtml(validatedCustomer.firstName)},</p>
-                <p>Thank you for shopping with us! Your payment was successful, and we are preparing your order.</p>
-                
-                <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                  <h3 style="margin-top: 0; font-size: 16px;">Order Summary</h3>
-                  <ul>
-                    ${itemsListHtml}
-                  </ul>
-                  <p style="margin-bottom: 0; font-weight: bold;">Total Paid: ${new Intl.NumberFormat('en-IN', {
-                    style: 'currency',
-                    currency: 'INR',
-                    minimumFractionDigits: 2,
-                  }).format(validatedPricing.total)}</p>
-                </div>
+          if (finalOrderData.customer.email) {
+            await db.collection('mail').add({
+              to: finalOrderData.customer.email,
+              message: {
+                subject: `Order Confirmation - Order #${firestoreOrderId.slice(0, 8).toUpperCase()}`,
+                html: `
+                  <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #1a1a1a;">
+                    <h2 style="font-size: 24px; font-weight: bold; border-bottom: 2px solid #1a1a1a; padding-bottom: 15px; margin-bottom: 20px;">Order Confirmed!</h2>
+                    <p>Hi ${escapeHtml(finalOrderData.customer.firstName)},</p>
+                    <p>Thank you for shopping with us! Your payment was successful.</p>
+                    <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                      <h3 style="margin-top: 0; font-size: 16px;">Order Summary</h3>
+                      <ul>${itemsListHtml}</ul>
+                      <p style="margin-bottom: 0; font-weight: bold;">Total Paid: ${new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format(finalOrderData.pricing.total)}</p>
+                    </div>
+                    <p style="font-size: 12px; color: #888888; margin-top: 40px; border-top: 1px solid #e0e0e0; padding-top: 15px;">If you have any questions, contact customer support.</p>
+                  </div>
+                `,
+              },
+            });
+          }
+        } catch (emailErr) {
+          console.warn('[Email] Failed to create mail trigger:', emailErr.message);
+        }
 
-                <div style="margin: 20px 0;">
-                  <h3 style="font-size: 16px;">Delivery Details</h3>
-                  <p style="margin: 0; color: #555555;">
-                    ${escapeHtml(validatedShipping.address)}${validatedShipping.apartment ? `, ${escapeHtml(validatedShipping.apartment)}` : ''}<br>
-                    ${escapeHtml(validatedShipping.city)}, ${escapeHtml(validatedShipping.state)} ${escapeHtml(validatedShipping.pinCode)}<br>
-                    ${escapeHtml(validatedShipping.country)}
-                  </p>
-                </div>
-
-                <p style="font-size: 12px; color: #888888; margin-top: 40px; border-top: 1px solid #e0e0e0; padding-top: 15px;">
-                  If you have any questions, reply to this email or contact customer support.
-                </p>
-              </div>
-            `,
-          },
-        });
-        console.log(`[Firestore] Mail trigger document successfully created for: ${validatedCustomer.email}`);
+        // Clean up pending order
+        try {
+          await db.collection('pendingOrders').doc(cashfreeOrderId).delete();
+        } catch (e) { /* ignore */ }
       } else {
-        console.warn('[Firebase Warn] Firestore DB is not initialized. Order was not saved to database.');
-        // In local dev/testing without firebase config, return a mock order ID
-        orderId = 'dev_mock_id_' + Math.random().toString(36).substr(2, 9);
+        firestoreOrderId = 'dev_mock_' + Math.random().toString(36).substr(2, 9);
       }
 
       return res.status(200).json({
         success: true,
         message: 'Payment verified and order stored successfully.',
-        orderId,
+        orderId: firestoreOrderId,
+        paymentStatus: 'paid',
+        order: orderDetails,
       });
     } else {
-      console.warn(`[Payment Warn] Verification failed for gateway order: ${verification.gatewayOrderId}`);
-      return res.status(400).json({
+      // Payment not successful
+      console.warn(`[Payment] Order ${cashfreeOrderId} not paid. Status: ${verification.paymentStatus}`);
+      return res.status(200).json({
         success: false,
-        message: 'Payment verification failed.',
+        message: `Payment not completed. Status: ${verification.paymentStatus || 'UNKNOWN'}`,
+        paymentStatus: verification.paymentStatus || 'UNKNOWN',
       });
     }
   } catch (error) {
-    console.error('[Verification Error] Payment verification failed:', error);
+    console.error('[Verification Error]', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Internal verification process error.',
     });
+  }
+});
+
+/**
+ * CASHFREE WEBHOOK ENDPOINT
+ * POST /api/cashfree-webhook
+ * Receives Cashfree webhook notifications for payment events.
+ * Idempotent: if order already processed, skips.
+ */
+app.post('/api/cashfree-webhook', async (req, res) => {
+  try {
+    const { data, type, event_time } = req.body || {};
+
+    // Cashfree sends different event types; we care about payment success
+    if (!data || !data.order) {
+      return res.status(200).json({ success: true, message: 'Ignored: no order data.' });
+    }
+
+    const cashfreeOrderId = data.order.order_id;
+    const paymentStatus = data.payment?.payment_status || data.order.order_status;
+
+    console.log(`[Webhook] Received ${type || 'event'} for order ${cashfreeOrderId}, status: ${paymentStatus}`);
+
+    if (paymentStatus !== 'SUCCESS' && paymentStatus !== 'PAID') {
+      console.log(`[Webhook] Ignoring non-success status: ${paymentStatus}`);
+      return res.status(200).json({ success: true, message: 'Acknowledged.' });
+    }
+
+    if (!db) {
+      console.warn('[Webhook] Firestore not initialized, cannot process webhook.');
+      return res.status(200).json({ success: true, message: 'Acknowledged (no DB).' });
+    }
+
+    // Idempotency: check if already processed
+    const existing = await db.collection('orders')
+      .where('payment.cashfreeOrderId', '==', cashfreeOrderId)
+      .limit(1)
+      .get();
+
+    if (!existing.empty) {
+      console.log(`[Webhook] Order ${cashfreeOrderId} already processed. Skipping.`);
+      return res.status(200).json({ success: true, message: 'Already processed.' });
+    }
+
+    // Verify with Cashfree API (don't trust webhook data alone)
+    const verification = await gateway.verifyPayment({ orderId: cashfreeOrderId });
+
+    if (!verification.verified) {
+      console.warn(`[Webhook] Server-side verification failed for ${cashfreeOrderId}`);
+      return res.status(200).json({ success: true, message: 'Verification failed.' });
+    }
+
+    // Retrieve pending order
+    const pendingSnap = await db.collection('pendingOrders').doc(cashfreeOrderId).get();
+    const pendingData = pendingSnap.exists ? pendingSnap.data() : null;
+
+    if (!pendingData) {
+      console.warn(`[Webhook] No pending order for ${cashfreeOrderId}`);
+      return res.status(200).json({ success: true, message: 'No pending order found.' });
+    }
+
+    const items = pendingData.items || [];
+    const customer = pendingData.customer || {};
+    const shipping = pendingData.shipping || {};
+    const serverSubtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const serverTax = Math.round(serverSubtotal * 0.18 * 100) / 100;
+    const addressOk = (shipping.address || '').length > 5 && (shipping.pinCode || '').length === 6;
+    const serverShipping = addressOk ? 0 : 150;
+    const serverTotal = serverSubtotal + serverTax + serverShipping;
+
+    // Final idempotency guard
+    const doubleCheck = await db.collection('orders')
+      .where('payment.cashfreeOrderId', '==', cashfreeOrderId)
+      .limit(1)
+      .get();
+
+    if (!doubleCheck.empty) {
+      return res.status(200).json({ success: true, message: 'Already processed (race guard).' });
+    }
+
+    await db.collection('orders').add({
+      customer: {
+        email: sanitizeString(customer.email, 254),
+        firstName: sanitizeString(customer.name?.split(' ')[0] || '', 100),
+        lastName: sanitizeString(customer.name?.split(' ').slice(1).join(' ') || '', 100),
+        phone: sanitizeString(customer.phone, 20),
+      },
+      shipping: {
+        country: sanitizeString(shipping.country, 5),
+        address: sanitizeString(shipping.address, 500),
+        apartment: sanitizeString(shipping.apartment, 200),
+        city: sanitizeString(shipping.city, 100),
+        state: sanitizeString(shipping.state, 100),
+        pinCode: sanitizeString(shipping.pinCode, 10),
+      },
+      items: items.map(item => ({
+        id: sanitizeString(item.productId || item.id, 100),
+        name: sanitizeString(item.name, 200),
+        price: Number(item.price) || 0,
+        quantity: Number(item.quantity) || 1,
+        image: sanitizeString(item.image, 2000),
+      })),
+      pricing: { subtotal: serverSubtotal, tax: serverTax, shipping: serverShipping, total: serverTotal },
+      payment: {
+        gateway: gateway.gatewayName,
+        cashfreeOrderId,
+        transactionId: verification.gatewayPaymentId || data.payment?.cf_payment_id || '',
+        paymentStatus: 'PAID',
+      },
+      status: 'paid',
+      createdAt: new Date().toISOString(),
+      source: 'webhook',
+    });
+
+    console.log(`[Webhook] Order created for ${cashfreeOrderId}`);
+
+    // Clean up pending order
+    try { await db.collection('pendingOrders').doc(cashfreeOrderId).delete(); } catch (e) { /* ignore */ }
+
+    return res.status(200).json({ success: true, message: 'Order processed via webhook.' });
+  } catch (error) {
+    console.error('[Webhook Error]', error);
+    // Always return 200 to Cashfree so they don't retry indefinitely
+    return res.status(200).json({ success: false, message: 'Webhook processing error.' });
   }
 });
 /**
@@ -488,6 +774,16 @@ app.post('/api/subscribe', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`[Server] Backend running on port ${PORT}`);
-});
+// ============================================================================
+// EXPORT FOR FIREBASE CLOUD FUNCTIONS + LOCAL DEV
+// ============================================================================
+// When running locally via `node server.cjs`, start the Express server.
+// When deployed as a Cloud Function, the function wrapper imports `app`.
+// ============================================================================
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`[Server] Backend running on port ${PORT}`);
+  });
+}
+
+module.exports = { app };
