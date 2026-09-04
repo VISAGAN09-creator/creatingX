@@ -29,7 +29,6 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
   const [pinCode, setPinCode] = useState('');
   const [phone, setPhone] = useState('');
 
-  const [freeShipping, setFreeShipping] = useState(false);
   const [errors, setErrors] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<ToastState>(null);
   const [isPaying, setIsPaying] = useState(false);
@@ -38,7 +37,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
   const itemCount = useMemo(() => lines.reduce((total, line) => total + line.quantity, 0), [lines]);
   const taxable = subtotal;
   const tax = Math.round(taxable * 0.18 * 100) / 100;
-  const shipping = freeShipping ? 0 : 150;
+  const shipping = 0;
   const total = taxable + shipping + tax;
 
   const showToast = (message: string, type?: 'success' | 'error') => {
@@ -67,13 +66,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
     return isValid;
   };
 
-  const checkAddress = (nextAddress = address, nextPinCode = pinCode) => {
-    if (nextAddress.length > 5 && nextPinCode.length === 6) {
-      setFreeShipping(true);
-    } else {
-      setFreeShipping(false);
-    }
-  };
+
 
 
 
@@ -386,7 +379,6 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
                 onFocus={() => clearError('address')}
                 onChange={(event) => {
                   setAddress(event.target.value);
-                  checkAddress(event.target.value, pinCode);
                 }}
                 placeholder="Address"
                 className={`${inputClass('address')} pr-12`}
@@ -451,7 +443,6 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
                 onChange={(event) => {
                   const nextPinCode = event.target.value.replace(/[^0-9]/g, '');
                   setPinCode(nextPinCode);
-                  checkAddress(address, nextPinCode);
                 }}
                 placeholder="PIN code"
                 className={inputClass('pinCode')}
@@ -529,15 +520,14 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
                 Shipping
                 <button
                   type="button"
-                 
                   aria-label="Shipping information"
-                  onClick={() => showToast('Shipping calculated after address entered')}
+                  onClick={() => showToast('Free shipping on all orders', 'success')}
                 >
                   <HelpCircle size={14} strokeWidth={1.5} className="opacity-50 transition hover:opacity-100" />
                 </button>
               </span>
-              <span className={`font-medium ${freeShipping ? 'text-[#27ae60]' : 'text-black'}`}>
-                {freeShipping ? 'FREE' : formatPrice(150)}
+              <span className="font-medium text-[#27ae60]">
+                FREE
               </span>
             </div>
 

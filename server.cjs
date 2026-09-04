@@ -470,8 +470,7 @@ app.post('/api/verify-payment', async (req, res) => {
         // Server recomputes pricing from stored authoritative data
         const serverSubtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
         const serverTax = Math.round(serverSubtotal * 0.18 * 100) / 100;
-        const addressOk = (shipping.address || '').length > 5 && (shipping.pinCode || '').length === 6;
-        const serverShipping = addressOk ? 0 : 150;
+        const serverShipping = 0;
         const serverTotal = serverSubtotal + serverTax + serverShipping;
 
         const finalOrderData = {
@@ -661,8 +660,7 @@ app.post('/api/cashfree-webhook', async (req, res) => {
     const shipping = pendingData.shipping || {};
     const serverSubtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const serverTax = Math.round(serverSubtotal * 0.18 * 100) / 100;
-    const addressOk = (shipping.address || '').length > 5 && (shipping.pinCode || '').length === 6;
-    const serverShipping = addressOk ? 0 : 150;
+    const serverShipping = 0;
     const serverTotal = serverSubtotal + serverTax + serverShipping;
 
     // Final idempotency guard
