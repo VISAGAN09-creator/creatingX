@@ -315,8 +315,11 @@ app.post('/api/create-order', async (req, res) => {
       });
     }
 
-    // Round to 2 decimal places
-    totalAmount = Math.round(totalAmount * 100) / 100;
+    // Product prices are pre-tax: checkout displays 18% tax, so charge the
+    // same tax-inclusive total through Cashfree and retain its components.
+    const subtotalAmount = Math.round(totalAmount * 100) / 100;
+    const taxAmount = Math.round(subtotalAmount * 0.18 * 100) / 100;
+    totalAmount = subtotalAmount + taxAmount;
 
     if (totalAmount <= 0) {
       return res.status(400).json({
@@ -347,6 +350,8 @@ app.post('/api/create-order', async (req, res) => {
         lineTotal: i.lineTotal,
         image: i.image,
       })),
+      subtotalAmount,
+      taxAmount,
       totalAmount,
       customer: {
         name: customerName,
@@ -434,21 +439,19 @@ app.post('/api/verify-payment', async (req, res) => {
   }
 
   try {
-    // --- Idempotency check: has this order already been processed? ---
+    // --- Idempotency check: the Cashfree order ID is the Firestore document ID. ---
+    // A deterministic document lets return-page verification and the webhook
+    // converge on the same record.
+    const paidOrderRef = db ? db.collection('orders').doc(cashfreeOrderId) : null;
     if (db) {
-      const existingOrders = await db.collection('orders')
-        .where('payment.cashfreeOrderId', '==', cashfreeOrderId)
-        .limit(1)
-        .get();
-
-      if (!existingOrders.empty) {
-        const existingDoc = existingOrders.docs[0];
+      const existingDoc = await paidOrderRef.get();
+      if (existingDoc.exists) {
         const existingData = existingDoc.data();
-        console.log(`[Payment] Order ${cashfreeOrderId} already verified (idempotent). Doc: ${existingDoc.id}`);
+        console.log(`[Payment] Order ${cashfreeOrderId} already verified (idempotent).`);
         return res.status(200).json({
           success: true,
           message: 'Payment already verified.',
-          orderId: existingDoc.id,
+          orderId: cashfreeOrderId,
           paymentStatus: existingData.status,
           order: {
             items: existingData.items,
@@ -480,13 +483,25 @@ app.post('/api/verify-payment', async (req, res) => {
         const items = pendingData?.items || [];
         const customer = pendingData?.customer || {};
         const shipping = pendingData?.shipping || {};
-        const totalAmount = pendingData?.totalAmount || verification.orderAmount || 0;
-
-        // Server recomputes pricing from stored authoritative data
+        // Server recomputes pricing from stored authoritative data. New pending
+        // orders store the pre-tax subtotal and tax used for the Cashfree charge.
         const serverSubtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-        const serverTax = Math.round(serverSubtotal * 0.18 * 100) / 100;
+        const cashfreeTotal = Number(verification.orderAmount);
+        const storedTax = Number(pendingData?.taxAmount);
+        // Legacy pending orders predate tax-inclusive Cashfree charges. Preserve
+        // their actual Cashfree amount instead of recording a different total.
+        const serverTax = Number.isFinite(storedTax)
+          ? storedTax
+          : Math.max(0, Math.round((cashfreeTotal - serverSubtotal) * 100) / 100);
         const serverShipping = 0;
-        const serverTotal = serverSubtotal + serverTax + serverShipping;
+        const expectedTotal = Number.isFinite(Number(pendingData?.totalAmount))
+          ? Number(pendingData.totalAmount)
+          : serverSubtotal + serverTax + serverShipping;
+
+        if (!Number.isFinite(cashfreeTotal) || cashfreeTotal <= 0 ||
+          Math.round(cashfreeTotal * 100) !== Math.round(expectedTotal * 100)) {
+          throw new Error('Cashfree amount does not match the server-calculated order total.');
+        }
 
         const finalOrderData = {
           customer: {
@@ -511,40 +526,41 @@ app.post('/api/verify-payment', async (req, res) => {
             image: sanitizeString(item.image, 2000),
           })),
           pricing: {
-            subtotal: serverSubtotal || totalAmount,
+            subtotal: serverSubtotal,
             tax: serverTax,
             shipping: serverShipping,
-            total: serverTotal || totalAmount,
+            total: cashfreeTotal,
           },
           payment: {
             gateway: gateway.gatewayName,
             cashfreeOrderId: cashfreeOrderId,
-            transactionId: verification.gatewayPaymentId || '',
-            paymentStatus: verification.paymentStatus || 'PAID',
+            transactionId: verification.gatewayPaymentId,
+            paymentStatus: verification.paymentStatus,
           },
           status: 'paid',
           createdAt: new Date().toISOString(),
         };
 
-        // Double-check idempotency one more time (race condition guard)
-        const doubleCheck = await db.collection('orders')
-          .where('payment.cashfreeOrderId', '==', cashfreeOrderId)
-          .limit(1)
-          .get();
-
-        if (!doubleCheck.empty) {
-          const doc = doubleCheck.docs[0];
+        try {
+          await paidOrderRef.create(finalOrderData);
+        } catch (writeError) {
+          if (writeError?.code !== 6 && writeError?.code !== 'already-exists') throw writeError;
+          const existingDoc = await paidOrderRef.get();
+          const existingData = existingDoc.data();
           return res.status(200).json({
             success: true,
-            message: 'Payment already verified (race condition guard).',
-            orderId: doc.id,
-            paymentStatus: 'paid',
-            order: { items: finalOrderData.items, totalAmount: finalOrderData.pricing.total, customer: finalOrderData.customer },
+            message: 'Payment already verified.',
+            orderId: cashfreeOrderId,
+            paymentStatus: existingData?.status || 'paid',
+            order: {
+              items: existingData?.items || [],
+              totalAmount: existingData?.pricing?.total || 0,
+              customer: existingData?.customer || {},
+            },
           });
         }
 
-        const orderRef = await db.collection('orders').add(finalOrderData);
-        firestoreOrderId = orderRef.id;
+        firestoreOrderId = cashfreeOrderId;
         orderDetails = { items: finalOrderData.items, totalAmount: finalOrderData.pricing.total, customer: finalOrderData.customer };
         console.log(`[Firestore] Order document created: ${firestoreOrderId}`);
 
@@ -642,13 +658,12 @@ app.post('/api/cashfree-webhook', async (req, res) => {
       return res.status(200).json({ success: true, message: 'Acknowledged (no DB).' });
     }
 
-    // Idempotency: check if already processed
-    const existing = await db.collection('orders')
-      .where('payment.cashfreeOrderId', '==', cashfreeOrderId)
-      .limit(1)
-      .get();
+    // Idempotency: return-page verification and webhooks share this one
+    // deterministic document, keyed by Cashfree order ID.
+    const paidOrderRef = db.collection('orders').doc(cashfreeOrderId);
+    const existing = await paidOrderRef.get();
 
-    if (!existing.empty) {
+    if (existing.exists) {
       console.log(`[Webhook] Order ${cashfreeOrderId} already processed. Skipping.`);
       return res.status(200).json({ success: true, message: 'Already processed.' });
     }
@@ -674,21 +689,22 @@ app.post('/api/cashfree-webhook', async (req, res) => {
     const customer = pendingData.customer || {};
     const shipping = pendingData.shipping || {};
     const serverSubtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const serverTax = Math.round(serverSubtotal * 0.18 * 100) / 100;
+    const cashfreeTotal = Number(verification.orderAmount);
+    const storedTax = Number(pendingData?.taxAmount);
+    const serverTax = Number.isFinite(storedTax)
+      ? storedTax
+      : Math.max(0, Math.round((cashfreeTotal - serverSubtotal) * 100) / 100);
     const serverShipping = 0;
-    const serverTotal = serverSubtotal + serverTax + serverShipping;
+    const expectedTotal = Number.isFinite(Number(pendingData?.totalAmount))
+      ? Number(pendingData.totalAmount)
+      : serverSubtotal + serverTax + serverShipping;
 
-    // Final idempotency guard
-    const doubleCheck = await db.collection('orders')
-      .where('payment.cashfreeOrderId', '==', cashfreeOrderId)
-      .limit(1)
-      .get();
-
-    if (!doubleCheck.empty) {
-      return res.status(200).json({ success: true, message: 'Already processed (race guard).' });
+    if (!Number.isFinite(cashfreeTotal) || cashfreeTotal <= 0 ||
+      Math.round(cashfreeTotal * 100) !== Math.round(expectedTotal * 100)) {
+      throw new Error('Cashfree amount does not match the server-calculated order total.');
     }
 
-    await db.collection('orders').add({
+    const finalOrderData = {
       customer: {
         email: sanitizeString(customer.email, 254),
         firstName: sanitizeString(customer.name?.split(' ')[0] || '', 100),
@@ -710,17 +726,24 @@ app.post('/api/cashfree-webhook', async (req, res) => {
         quantity: Number(item.quantity) || 1,
         image: sanitizeString(item.image, 2000),
       })),
-      pricing: { subtotal: serverSubtotal, tax: serverTax, shipping: serverShipping, total: serverTotal },
+      pricing: { subtotal: serverSubtotal, tax: serverTax, shipping: serverShipping, total: cashfreeTotal },
       payment: {
         gateway: gateway.gatewayName,
         cashfreeOrderId,
-        transactionId: verification.gatewayPaymentId || data.payment?.cf_payment_id || '',
-        paymentStatus: 'PAID',
+        transactionId: verification.gatewayPaymentId,
+        paymentStatus: verification.paymentStatus,
       },
       status: 'paid',
       createdAt: new Date().toISOString(),
       source: 'webhook',
-    });
+    };
+
+    try {
+      await paidOrderRef.create(finalOrderData);
+    } catch (writeError) {
+      if (writeError?.code !== 6 && writeError?.code !== 'already-exists') throw writeError;
+      return res.status(200).json({ success: true, message: 'Already processed.' });
+    }
 
     console.log(`[Webhook] Order created for ${cashfreeOrderId}`);
 

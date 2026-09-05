@@ -149,7 +149,9 @@ async function verifyPayment({ orderId }) {
   const orderStatus = orderData.order_status;
   const isPaid = orderStatus === 'PAID';
 
-  // If paid, fetch payment details for transaction ID
+  // A PAID order is only verified after Cashfree also returns its successful
+  // payment record with a non-empty transaction ID. Never trust a client or
+  // webhook-provided payment ID as a fallback.
   let transactionId = '';
   if (isPaid) {
     try {
@@ -163,25 +165,29 @@ async function verifyPayment({ orderId }) {
         },
       });
 
-      if (paymentsResponse.ok) {
-        const paymentsData = await paymentsResponse.json();
-        // Cashfree returns an array of payments; find the successful one
-        const successfulPayment = Array.isArray(paymentsData)
-          ? paymentsData.find(p => p.payment_status === 'SUCCESS')
-          : null;
-        if (successfulPayment) {
-          transactionId = successfulPayment.cf_payment_id || successfulPayment.payment_id || '';
-        }
+      if (!paymentsResponse.ok) {
+        throw new Error(`Cashfree payment lookup failed (HTTP ${paymentsResponse.status})`);
+      }
+
+      const paymentsData = await paymentsResponse.json();
+      const successfulPayment = Array.isArray(paymentsData)
+        ? paymentsData.find(p => p.payment_status === 'SUCCESS')
+        : null;
+      const candidateId = successfulPayment?.cf_payment_id || successfulPayment?.payment_id;
+      transactionId = typeof candidateId === 'string' ? candidateId.trim() : '';
+
+      if (!transactionId) {
+        throw new Error('Cashfree did not return a transaction ID for the successful payment.');
       }
     } catch (err) {
-      console.warn('[Cashfree] Could not fetch payment details for transaction ID:', err.message);
+      console.warn('[Cashfree] Could not verify a successful payment transaction:', err.message);
     }
   }
 
   console.log(`[Cashfree] Order ${orderId} status: ${orderStatus}`);
 
   return {
-    verified: isPaid,
+    verified: isPaid && Boolean(transactionId),
     gatewayPaymentId: transactionId,
     gatewayOrderId: orderId,
     orderAmount: orderData.order_amount,
