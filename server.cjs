@@ -24,6 +24,11 @@ try {
       })
     });
     db = admin.firestore();
+  } else if (process.env.FUNCTION_TARGET || process.env.K_SERVICE) {
+    // Running inside Firebase Cloud Functions — use Application Default Credentials
+    console.log('[Firebase] Initializing Admin SDK using default credentials (Cloud Functions).');
+    admin.initializeApp();
+    db = admin.firestore();
   } else {
     const missing = [
       !privateKey && 'FIREBASE_PRIVATE_KEY',
@@ -210,6 +215,16 @@ async function resolveProductFromFirestore(productId) {
 
   return null;
 }
+
+// Health check endpoint to verify backend status
+app.get('/api/health', (req, res) => {
+  return res.status(200).json({
+    status: 'ok',
+    message: 'Backend server is running',
+    gateway: gateway.gatewayName,
+    time: new Date().toISOString(),
+  });
+});
 
 /**
  * STEP 1: CREATE ORDER ENDPOINT

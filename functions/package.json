@@ -3,7 +3,7 @@
   "description": "Firebase Cloud Functions for METALFLUX payment API",
   "private": true,
   "engines": {
-    "node": "18"
+    "node": "20"
   },
   "main": "index.js",
   "scripts": {

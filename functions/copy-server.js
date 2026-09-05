@@ -19,11 +19,16 @@ for (const file of fs.readdirSync(gatewayDir)) {
   console.log(`Copied gateway/${file}`);
 }
 
-// Copy .env (contains server-side credentials — never committed to git)
+// Copy .env, filtering out FIREBASE_ prefixed vars (reserved in Cloud Functions runtime)
 const envSrc = path.join(root, '.env');
 if (fs.existsSync(envSrc)) {
-  fs.copyFileSync(envSrc, path.join(dest, '.env'));
-  console.log('Copied .env');
+  const envContent = fs.readFileSync(envSrc, 'utf8');
+  const filtered = envContent
+    .split('\n')
+    .filter(line => !line.match(/^FIREBASE_/))
+    .join('\n');
+  fs.writeFileSync(path.join(dest, '.env'), filtered);
+  console.log('Copied .env (filtered FIREBASE_ reserved vars)');
 }
 
 console.log('Predeploy copy complete.');
