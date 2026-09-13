@@ -11,7 +11,7 @@ import type { Product } from '../types';
 
 const heroPosterUrl =
   (import.meta.env.VITE_HERO_POSTER_URL as string | undefined)?.trim() ||
-  'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=1600&h=1100&fit=crop';
+  'https://upload.wikimedia.org/wikipedia/commons/5/50/Black_colour.jpg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original';
 
 const heroVideoUrl = (import.meta.env.VITE_HERO_VIDEO_URL as string | undefined)?.trim() || heroVideo;
 
