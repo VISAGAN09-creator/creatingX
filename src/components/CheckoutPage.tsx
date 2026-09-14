@@ -2,6 +2,7 @@ import { HelpCircle, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { CartLine } from '../types';
 import { formatPrice } from '../utils/format';
+import { paymentApiPath } from '../lib/paymentApi';
 import { SmartImage } from './SmartImage';
 import { loadGatewayScript, openCheckout } from '../lib/paymentGateway';
 
@@ -113,7 +114,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
     try {
       // Step 1: Create order via backend — send items (product IDs + quantities)
       // The server will look up authoritative prices from Firestore.
-      const createResponse = await fetch('/api/create-order', {
+      const createResponse = await fetch(paymentApiPath('/create-order'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -176,7 +177,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
           onSuccess: async (paymentData) => {
             setIsPaying(true);
             try {
-              const verifyResponse = await fetch('/api/verify-payment', {
+              const verifyResponse = await fetch(paymentApiPath('/verify-payment'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ orderId: paymentData.order_id || orderData.gatewayData?.order_id }),

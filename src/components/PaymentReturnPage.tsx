@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatPrice } from '../utils/format';
+import { paymentApiPath } from '../lib/paymentApi';
 
 import logo from '../assets/logo.png';
 
@@ -30,7 +31,7 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
 
     async function verifyPayment() {
       try {
-        const response = await fetch('/api/verify-payment', {
+        const response = await fetch(paymentApiPath('/verify-payment'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ orderId }),

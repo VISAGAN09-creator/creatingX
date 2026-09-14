@@ -329,9 +329,12 @@ app.post('/api/create-order', async (req, res) => {
     }
 
     // --- Build return URL ---
-    // Detect the request origin for the return URL
+    // A reverse-proxied storefront can live below a path (for example,
+    // /varataaa). Origin headers never include that path, so Production uses
+    // an explicit server-side return URL when configured.
+    const configuredReturnUrl = process.env.PAYMENT_RETURN_URL?.trim();
     const origin = req.headers.origin || req.headers.referer?.replace(/\/[^/]*$/, '') || 'https://ecommerce-f1448.web.app';
-    const returnUrl = `${origin}/#payment-return`;
+    const returnUrl = configuredReturnUrl || `${origin}/#payment-return`;
 
     // --- Build customer info ---
     const customerName = typeof customer?.name === 'string' ? customer.name.trim() : 'Customer';
