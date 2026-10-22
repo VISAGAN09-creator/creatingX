@@ -95,7 +95,7 @@ app.use(cors({
     return callback(new Error(`CORS policy: Origin '${origin}' is not allowed.`));
   },
   methods: ['GET', 'POST'],           // Only methods your API actually uses
-  allowedHeaders: ['Content-Type'],    // Only headers your API actually needs
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: false,                  // Set to true if you add cookie-based auth later
   maxAge: 86400,                       // Cache preflight for 24h to reduce OPTIONS calls
 }));
@@ -136,12 +136,65 @@ const paymentLimiter = rateLimit({
   },
 });
 
+const adminLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Administrator request limit exceeded. Please try again later.',
+  },
+});
+
 // Apply general limiter to all /api/ routes
 app.use('/api/', apiLimiter);
 
 // Apply stricter limiter specifically to payment-sensitive endpoints
 app.use('/api/create-order', paymentLimiter);
 app.use('/api/verify-payment', paymentLimiter);
+// Keep all current and future administrator endpoints behind the same token
+// and role verification boundary.
+app.use('/api/admin', adminLimiter, requireAdmin);
+
+/**
+ * Verify a Firebase ID token and the server-authoritative custom admin claim.
+ * Every future /api/admin route must keep this middleware before its handler.
+ */
+async function requireAdmin(req, res, next) {
+  const authorization = req.get('authorization');
+  const match = authorization && authorization.match(/^Bearer\s+(.+)$/i);
+
+  if (!match) {
+    return res.status(401).json({ success: false, message: 'Administrator authentication is required.' });
+  }
+
+  if (!admin.apps.length) {
+    return res.status(503).json({ success: false, message: 'Administrator authentication is not configured on this server.' });
+  }
+
+  try {
+    // checkRevoked=true rejects expired and revoked sessions even if a client
+    // still presents an otherwise correctly signed token.
+    const decodedToken = await admin.auth().verifyIdToken(match[1], true);
+    if (decodedToken.admin !== true) {
+      return res.status(403).json({ success: false, message: 'Administrator access is required.' });
+    }
+
+    req.adminUser = decodedToken;
+    return next();
+  } catch (error) {
+    const code = error && error.code;
+    console.warn(`[Admin Auth] Rejected administrator token${code ? ` (${code})` : ''}.`);
+    return res.status(401).json({ success: false, message: 'Administrator session is invalid or has expired.' });
+  }
+}
+
+// A protected session check used by the admin landing page. It deliberately
+// returns no operational data; it proves the API boundary verifies the claim.
+app.get('/api/admin/session', (req, res) => {
+  return res.status(200).json({ success: true });
+});
 
 console.log(`[Payment Gateway] Active gateway: ${gateway.gatewayName}`);
 
