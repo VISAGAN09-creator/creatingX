@@ -190,10 +190,188 @@ async function requireAdmin(req, res, next) {
   }
 }
 
+const FULFILLMENT_STATUSES = Object.freeze(['production', 'out_for_delivery', 'delivered']);
+const FULFILLMENT_COLLECTIONS = Object.freeze({
+  production: 'orders_production',
+  out_for_delivery: 'orders_out_for_delivery',
+  delivered: 'orders_delivered',
+});
+
+function isFulfillmentStatus(value) {
+  return typeof value === 'string' && FULFILLMENT_STATUSES.includes(value);
+}
+
+function fulfillmentStatusFromOrder(order) {
+  // Paid orders written before fulfillment tracking are safely treated as
+  // production orders. Their canonical payment record remains unchanged.
+  return isFulfillmentStatus(order?.fulfillmentStatus) ? order.fulfillmentStatus : 'production';
+}
+
+function fulfillmentOrderRef(status, orderId) {
+  return db.collection(FULFILLMENT_COLLECTIONS[status]).doc(orderId);
+}
+
+function timestampToIso(value) {
+  if (!value) return null;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number') return new Date(value).toISOString();
+  if (typeof value.toDate === 'function') return value.toDate().toISOString();
+  return null;
+}
+
+function timestampSortValue(value) {
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value).getTime();
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (value && typeof value.toMillis === 'function') return value.toMillis();
+  return 0;
+}
+
+function adminOrderResponse(orderId, order) {
+  return {
+    orderId,
+    customer: order.customer || {},
+    shipping: order.shipping || {},
+    items: Array.isArray(order.items) ? order.items : [],
+    pricing: order.pricing || {},
+    payment: order.payment || {},
+    paymentStatus: order.payment?.paymentStatus || order.status || null,
+    fulfillmentStatus: fulfillmentStatusFromOrder(order),
+    createdAt: timestampToIso(order.createdAt),
+  };
+}
+
+/**
+ * Canonical paid orders must remain in /orders because Cashfree return-page
+ * verification and webhooks use that document ID as their idempotency key.
+ * The three fulfillment collections are server-managed mirrors. A transaction
+ * keeps exactly one current mirror while preserving the canonical order.
+ */
+async function createPaidOrderWithFulfillment(orderId, orderData) {
+  const orderRef = db.collection('orders').doc(orderId);
+  const now = new Date().toISOString();
+  const completedOrder = {
+    ...orderData,
+    fulfillmentStatus: 'production',
+    fulfillmentUpdatedAt: now,
+  };
+
+  return db.runTransaction(async (transaction) => {
+    const existing = await transaction.get(orderRef);
+    if (existing.exists) {
+      return { created: false, order: existing.data() };
+    }
+
+    transaction.create(orderRef, completedOrder);
+    transaction.set(fulfillmentOrderRef('production', orderId), completedOrder);
+    return { created: true, order: completedOrder };
+  });
+}
+
+async function transitionOrderFulfillment(orderId, nextStatus, adminUid) {
+  const orderRef = db.collection('orders').doc(orderId);
+
+  return db.runTransaction(async (transaction) => {
+    const orderSnapshot = await transaction.get(orderRef);
+    if (!orderSnapshot.exists) {
+      const error = new Error('Order not found.');
+      error.code = 'order-not-found';
+      throw error;
+    }
+
+    const currentOrder = orderSnapshot.data();
+    const previousStatus = fulfillmentStatusFromOrder(currentOrder);
+    const updatedOrder = {
+      ...currentOrder,
+      fulfillmentStatus: nextStatus,
+      fulfillmentUpdatedAt: new Date().toISOString(),
+      fulfillmentUpdatedBy: adminUid,
+    };
+
+    transaction.update(orderRef, {
+      fulfillmentStatus: updatedOrder.fulfillmentStatus,
+      fulfillmentUpdatedAt: updatedOrder.fulfillmentUpdatedAt,
+      fulfillmentUpdatedBy: updatedOrder.fulfillmentUpdatedBy,
+    });
+    transaction.set(fulfillmentOrderRef(nextStatus, orderId), updatedOrder);
+
+    for (const status of FULFILLMENT_STATUSES) {
+      if (status !== nextStatus) transaction.delete(fulfillmentOrderRef(status, orderId));
+    }
+
+    return { previousStatus, order: updatedOrder };
+  });
+}
+
 // A protected session check used by the admin landing page. It deliberately
 // returns no operational data; it proves the API boundary verifies the claim.
 app.get('/api/admin/session', (req, res) => {
   return res.status(200).json({ success: true });
+});
+
+app.get('/api/admin/orders', async (req, res) => {
+  const selectedStatus = typeof req.query.status === 'string' ? req.query.status : null;
+  if (selectedStatus && !isFulfillmentStatus(selectedStatus)) {
+    return res.status(400).json({ success: false, message: 'Invalid fulfillment status filter.' });
+  }
+
+  if (!db) {
+    return res.status(503).json({ success: false, message: 'Orders are unavailable because the database is not configured.' });
+  }
+
+  try {
+    const snapshot = await db.collection('orders').get();
+    const orders = snapshot.docs
+      .map((document) => ({ raw: document.data(), response: adminOrderResponse(document.id, document.data()) }))
+      .filter(({ response }) => !selectedStatus || response.fulfillmentStatus === selectedStatus)
+      .sort((a, b) => timestampSortValue(b.raw.createdAt) - timestampSortValue(a.raw.createdAt))
+      .map(({ response }) => response);
+
+    return res.status(200).json({ success: true, orders });
+  } catch (error) {
+    console.error('[Admin Orders] Failed to list orders:', error.message);
+    return res.status(500).json({ success: false, message: 'Unable to load orders.' });
+  }
+});
+
+app.post('/api/admin/orders/fulfillment-status', async (req, res) => {
+  const updates = req.body?.updates;
+  if (!Array.isArray(updates) || updates.length === 0 || updates.length > 50) {
+    return res.status(400).json({ success: false, message: 'Provide between 1 and 50 fulfillment updates.' });
+  }
+
+  const seenOrderIds = new Set();
+  const successful = [];
+  const failed = [];
+
+  for (const update of updates) {
+    const orderId = typeof update?.orderId === 'string' ? update.orderId.trim() : '';
+    const fulfillmentStatus = update?.fulfillmentStatus;
+
+    if (!orderId || !isFulfillmentStatus(fulfillmentStatus) || seenOrderIds.has(orderId)) {
+      failed.push({ orderId: orderId || null, message: 'Invalid or duplicate order update.' });
+      continue;
+    }
+    seenOrderIds.add(orderId);
+
+    try {
+      const result = await transitionOrderFulfillment(orderId, fulfillmentStatus, req.adminUser.uid);
+      successful.push({ orderId, fulfillmentStatus, previousStatus: result.previousStatus });
+    } catch (error) {
+      console.error(`[Admin Orders] Failed to update fulfillment for ${orderId}:`, error.message);
+      failed.push({
+        orderId,
+        message: error.code === 'order-not-found' ? 'Order no longer exists.' : 'Unable to save this order status.',
+      });
+    }
+  }
+
+  return res.status(failed.length ? 207 : 200).json({
+    success: failed.length === 0,
+    successful,
+    failed,
+  });
 });
 
 console.log(`[Payment Gateway] Active gateway: ${gateway.gatewayName}`);
@@ -597,12 +775,9 @@ app.post('/api/verify-payment', async (req, res) => {
           createdAt: new Date().toISOString(),
         };
 
-        try {
-          await paidOrderRef.create(finalOrderData);
-        } catch (writeError) {
-          if (writeError?.code !== 6 && writeError?.code !== 'already-exists') throw writeError;
-          const existingDoc = await paidOrderRef.get();
-          const existingData = existingDoc.data();
+        const orderWrite = await createPaidOrderWithFulfillment(cashfreeOrderId, finalOrderData);
+        if (!orderWrite.created) {
+          const existingData = orderWrite.order;
           return res.status(200).json({
             success: true,
             message: 'Payment already verified.',
@@ -794,10 +969,8 @@ app.post('/api/cashfree-webhook', async (req, res) => {
       source: 'webhook',
     };
 
-    try {
-      await paidOrderRef.create(finalOrderData);
-    } catch (writeError) {
-      if (writeError?.code !== 6 && writeError?.code !== 'already-exists') throw writeError;
+    const orderWrite = await createPaidOrderWithFulfillment(cashfreeOrderId, finalOrderData);
+    if (!orderWrite.created) {
       return res.status(200).json({ success: true, message: 'Already processed.' });
     }
 

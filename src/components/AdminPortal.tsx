@@ -1,4 +1,4 @@
-import { KeyRound, LoaderCircle, LogOut, ShieldCheck } from 'lucide-react';
+import { KeyRound, LoaderCircle } from 'lucide-react';
 import { FormEvent, useEffect, useId, useState } from 'react';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import { verifyAdminSession } from '../lib/adminApi';
@@ -7,6 +7,7 @@ import { Checkbox } from './ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { AdminOrders } from './AdminOrders';
 
 type AdminPortalProps = { onExit: () => void };
 
@@ -81,27 +82,7 @@ export function AdminPortal({ onExit }: AdminPortalProps) {
   }
 
   if (status === 'authorized' && serverAccess === 'allowed' && user) {
-    return (
-      <main className="relative z-[1] grid min-h-screen place-items-center px-5 py-10">
-        <section className="w-full max-w-xl border border-metal-mid bg-white p-7 shadow-metal sm:p-10" aria-labelledby="admin-title">
-          <div className="mb-8 flex size-12 items-center justify-center rounded-full border border-black bg-black text-white">
-            <ShieldCheck size={22} aria-hidden="true" />
-          </div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-metal-text">VARATAAA</p>
-          <h1 id="admin-title" className="font-display text-3xl font-bold text-black">Admin access verified</h1>
-          <p className="mt-3 max-w-md leading-6 text-metal-dark">
-            Signed in as {user.email || 'an authorized administrator'}. Administrative tools will appear here as they are implemented.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Button type="button" onClick={handleSignOut}>
-              <LogOut className="mr-2" size={16} aria-hidden="true" />
-              Sign out
-            </Button>
-            <Button type="button" variant="outline" onClick={onExit}>Return to storefront</Button>
-          </div>
-        </section>
-      </main>
-    );
+    return <AdminOrders adminEmail={user.email} onSignOut={handleSignOut} onExit={onExit} />;
   }
 
   if (status === 'unauthorized') {

@@ -9,7 +9,10 @@ service cloud.firestore {
       allow read: if collectionName != 'orders'
         && collectionName != 'mail'
         && collectionName != 'pendingOrders'
-        && collectionName != 'newsletter';
+        && collectionName != 'newsletter'
+        && collectionName != 'orders_production'
+        && collectionName != 'orders_out_for_delivery'
+        && collectionName != 'orders_delivered';
       allow write: if false;
     }
 
@@ -40,6 +43,20 @@ service cloud.firestore {
     }
 
     match /newsletter/{document} {
+      allow read, write: if false;
+    }
+
+    // Server-managed fulfillment mirrors for the canonical orders collection.
+    // They contain the same protected customer and payment data.
+    match /orders_production/{document} {
+      allow read, write: if false;
+    }
+
+    match /orders_out_for_delivery/{document} {
+      allow read, write: if false;
+    }
+
+    match /orders_delivered/{document} {
       allow read, write: if false;
     }
 
