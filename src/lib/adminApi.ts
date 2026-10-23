@@ -82,10 +82,18 @@ async function adminFetch(path: string, init: RequestInit = {}) {
       ...init.headers,
     },
   });
-  const body = await response.json().catch(() => null) as { message?: string } | null;
+  const responseBody = await response.text();
+  let body: { message?: string } | null = null;
+  try {
+    body = responseBody ? JSON.parse(responseBody) as { message?: string } : null;
+  } catch {
+    // Hosting fallback pages and proxy errors are HTML, not API JSON.
+  }
 
   if (!response.ok && response.status !== 207) {
-    throw new Error(body?.message || 'The administrator request failed.');
+    throw new Error(
+      body?.message || `Administrator API request failed (${response.status}) at ${paymentApiPath(path)}. Restart or redeploy the API if this route is new.`,
+    );
   }
 
   return { response, body };
@@ -111,6 +119,60 @@ export async function saveFulfillmentStatuses(
   const result = body as FulfillmentSaveResult | null;
   if (!result || !Array.isArray(result.successful) || !Array.isArray(result.failed)) {
     throw new Error('Unable to save fulfillment statuses.');
+  }
+  return result;
+}
+
+export const INVENTORY_SIZES = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'] as const;
+export type InventorySize = (typeof INVENTORY_SIZES)[number];
+
+export type InventoryProduct = {
+  productId: string;
+  collectionName: string;
+  documentId: string;
+  name: string;
+  version: string | null;
+  schema: string;
+  editable: boolean;
+  sizes: Record<InventorySize, number | null>;
+};
+
+type InventoryResponse = {
+  success: boolean;
+  products?: InventoryProduct[];
+  message?: string;
+};
+
+export type InventorySaveResult = {
+  success: boolean;
+  successful: Array<{ productId: string; changes: Partial<Record<InventorySize, number>> }>;
+  failed: Array<{ productId: string | null; message: string; code?: string }>;
+};
+
+export async function fetchInventory(signal?: AbortSignal): Promise<InventoryProduct[]> {
+  const { body } = await adminFetch('/admin/inventory', { signal });
+  const result = body as InventoryResponse | null;
+  if (!result?.success || !Array.isArray(result.products)) {
+    throw new Error(result?.message || 'Unable to load inventory.');
+  }
+  return result.products;
+}
+
+export async function saveInventory(
+  updates: Array<{
+    productId: string;
+    version: string;
+    changes: Partial<Record<InventorySize, number>>;
+  }>,
+): Promise<InventorySaveResult> {
+  const { body } = await adminFetch('/admin/inventory', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ updates }),
+  });
+  const result = body as InventorySaveResult | null;
+  if (!result || !Array.isArray(result.successful) || !Array.isArray(result.failed)) {
+    throw new Error('Unable to save inventory changes.');
   }
   return result;
 }

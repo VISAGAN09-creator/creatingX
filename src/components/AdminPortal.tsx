@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { AdminOrders } from './AdminOrders';
+import { InventoryManagement } from './InventoryManagement';
 
 type AdminPortalProps = { onExit: () => void };
 
@@ -20,6 +21,7 @@ export function AdminPortal({ onExit }: AdminPortalProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [serverAccess, setServerAccess] = useState<'idle' | 'checking' | 'allowed' | 'denied'>('idle');
+  const [adminPage, setAdminPage] = useState<'orders' | 'inventory'>('orders');
 
   useEffect(() => {
     if (status !== 'authorized' || !user) {
@@ -82,7 +84,9 @@ export function AdminPortal({ onExit }: AdminPortalProps) {
   }
 
   if (status === 'authorized' && serverAccess === 'allowed' && user) {
-    return <AdminOrders adminEmail={user.email} onSignOut={handleSignOut} onExit={onExit} />;
+    return adminPage === 'inventory'
+      ? <InventoryManagement adminEmail={user.email} onSignOut={handleSignOut} onExit={onExit} onOpenOrders={() => setAdminPage('orders')} />
+      : <AdminOrders adminEmail={user.email} onSignOut={handleSignOut} onExit={onExit} onOpenInventory={() => setAdminPage('inventory')} />;
   }
 
   if (status === 'unauthorized') {

@@ -14,6 +14,7 @@ type AdminOrdersProps = {
   adminEmail: string | null;
   onSignOut: () => Promise<void>;
   onExit: () => void;
+  onOpenInventory: () => void;
 };
 
 const statusLabels: Record<FulfillmentStatus, string> = {
@@ -55,7 +56,7 @@ function statusClass(status: FulfillmentStatus) {
   return 'border-amber-400/40 bg-amber-400/10 text-amber-100';
 }
 
-export function AdminOrders({ adminEmail, onSignOut, onExit }: AdminOrdersProps) {
+export function AdminOrders({ adminEmail, onSignOut, onExit, onOpenInventory }: AdminOrdersProps) {
   const [filter, setFilter] = useState<FulfillmentStatus>('production');
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [pending, setPending] = useState<Record<string, FulfillmentStatus>>({});
@@ -146,6 +147,7 @@ export function AdminOrders({ adminEmail, onSignOut, onExit }: AdminOrdersProps)
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <span className="max-w-[220px] truncate text-zinc-500">{adminEmail || 'Authorized administrator'}</span>
+            <button type="button" onClick={onOpenInventory} className="rounded-lg border border-white/15 px-3 py-2 text-zinc-300 transition hover:border-white/35 hover:text-white">Inventory</button>
             <button type="button" onClick={onExit} className="rounded-lg border border-white/15 px-3 py-2 text-zinc-300 transition hover:border-white/35 hover:text-white">Storefront</button>
             <button type="button" onClick={() => void onSignOut()} className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-zinc-300 transition hover:border-white/35 hover:text-white">
               <LogOut size={15} aria-hidden="true" /> Sign out

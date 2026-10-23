@@ -17,6 +17,10 @@
     ],
     "rewrites": [
       {
+        "source": "/varataaa/api/**",
+        "function": "api"
+      },
+      {
         "source": "/api/**",
         "function": "api"
       },

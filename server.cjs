@@ -101,6 +101,16 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '100kb' }));
 
+// The storefront is also served behind a /varataaa reverse-proxy mount. The
+// Firebase Hosting rewrite forwards that mounted path unchanged to this
+// function, while the application routes are defined under /api. Normalize
+// the prefix before rate limiting and route matching so both public URLs share
+// the same authentication and handlers.
+app.use((req, res, next) => {
+  req.url = req.url.replace(/^\/varataaa(?=\/|$)/, '');
+  next();
+});
+
 // ============================================================================
 // RATE LIMITING — ABUSE PREVENTION
 // ============================================================================
@@ -197,6 +207,159 @@ const FULFILLMENT_COLLECTIONS = Object.freeze({
   delivered: 'orders_delivered',
 });
 
+// These are the storefront's supported garment sizes. Inventory never creates
+// one of these fields implicitly: a size is editable only when it is already
+// configured in the product document's existing stock representation.
+const SUPPORTED_SIZES = Object.freeze(['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL']);
+
+function normalizeSize(value) {
+  const size = typeof value === 'string' ? value.trim().toUpperCase() : '';
+  return SUPPORTED_SIZES.includes(size) ? size : null;
+}
+
+function inventoryQuantity(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.floor(value));
+  if (typeof value === 'boolean') return value ? 1 : 0;
+  if (typeof value !== 'string') return 0;
+  const normalized = value.trim().toLowerCase();
+  if (['out', 'out of stock', 'sold out', 'unavailable'].includes(normalized)) return 0;
+  const parsed = Number(normalized.replace(/[^0-9.]/g, ''));
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
+}
+
+function recordValue(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+}
+
+function documentVersion(snapshot) {
+  const updateTime = snapshot?.updateTime;
+  if (!updateTime) return null;
+  return `${updateTime.seconds}.${String(updateTime.nanoseconds).padStart(9, '0')}`;
+}
+
+/**
+ * Maps the stock shapes already accepted by the storefront to a safe, minimal
+ * update operation. String-only size lists are intentionally read-only: they
+ * declare variants but provide no unambiguous field in which to store stock.
+ */
+function stockAdapter(data) {
+  const empty = { quantities: {}, configured: new Set(), editable: false, kind: 'none', field: null };
+
+  for (const field of ['sizes', 'sizeStock', 'stockBySize', 'stock']) {
+    const value = data?.[field];
+    if (Array.isArray(value)) {
+      const entries = [];
+      const quantities = {};
+      const configured = new Set();
+      let editable = true;
+
+      value.forEach((entry, index) => {
+        const item = recordValue(entry);
+        const size = normalizeSize(item?.name ?? item?.size ?? item?.label ?? entry);
+        if (!size) return;
+        if (!item) {
+          configured.add(size);
+          quantities[size] = 0;
+          editable = false;
+          return;
+        }
+        const quantityKey = ['stock', 'quantity', 'qty', 'available'].find((key) => Object.prototype.hasOwnProperty.call(item, key));
+        configured.add(size);
+        quantities[size] = inventoryQuantity(quantityKey ? item[quantityKey] : 0);
+        if (!quantityKey) editable = false;
+        entries.push({ index, size, quantityKey });
+      });
+
+      if (configured.size > 0) return { quantities, configured, editable, kind: 'array', field, entries };
+    }
+
+    const map = recordValue(value);
+    if (map) {
+      const quantities = {};
+      const configured = new Set();
+      const entries = {};
+      let editable = true;
+
+      Object.entries(map).forEach(([key, entry]) => {
+        const size = normalizeSize(key);
+        if (!size) return;
+        const nested = recordValue(entry);
+        const quantityKey = nested && ['stock', 'quantity', 'qty', 'available'].find((name) => Object.prototype.hasOwnProperty.call(nested, name));
+        configured.add(size);
+        quantities[size] = inventoryQuantity(quantityKey ? nested[quantityKey] : entry);
+        if (nested && !quantityKey) editable = false;
+        entries[size] = { key, quantityKey };
+      });
+
+      if (configured.size > 0) return { quantities, configured, editable, kind: 'map', field, entries };
+    }
+
+    if (typeof value === 'string') {
+      const configured = new Set(value.split(/[,|/;]+/).map(normalizeSize).filter(Boolean));
+      if (configured.size > 0) return { ...empty, configured, kind: 'declared-only', field };
+    }
+  }
+
+  const quantities = {};
+  const configured = new Set();
+  SUPPORTED_SIZES.forEach((size) => {
+    if (Object.prototype.hasOwnProperty.call(data || {}, size)) {
+      configured.add(size);
+      quantities[size] = inventoryQuantity(data[size]);
+    }
+  });
+  if (configured.size > 0) return { quantities, configured, editable: true, kind: 'top-level', field: null };
+  return empty;
+}
+
+function stockSummary(data) {
+  const adapter = stockAdapter(data);
+  return {
+    schema: adapter.kind,
+    editable: adapter.editable,
+    sizes: Object.fromEntries(SUPPORTED_SIZES.map((size) => [size, adapter.configured.has(size) ? adapter.quantities[size] ?? 0 : null])),
+  };
+}
+
+function applyStockChanges(data, adapter, changes) {
+  if (!adapter.editable) {
+    const error = new Error('This product declares sizes but has no editable stock field.');
+    error.code = 'stock-schema-readonly';
+    throw error;
+  }
+
+  for (const size of Object.keys(changes)) {
+    if (!adapter.configured.has(size)) {
+      const error = new Error(`${size} is not configured for this product.`);
+      error.code = 'size-not-configured';
+      throw error;
+    }
+  }
+
+  if (adapter.kind === 'top-level') return { ...changes };
+  if (adapter.kind === 'map') {
+    const next = { ...data[adapter.field] };
+    Object.entries(changes).forEach(([size, quantity]) => {
+      const entry = adapter.entries[size];
+      const current = next[entry.key];
+      next[entry.key] = entry.quantityKey ? { ...current, [entry.quantityKey]: quantity } : quantity;
+    });
+    return { [adapter.field]: next };
+  }
+  if (adapter.kind === 'array') {
+    const next = [...data[adapter.field]];
+    Object.entries(changes).forEach(([size, quantity]) => {
+      const entry = adapter.entries.find((candidate) => candidate.size === size);
+      next[entry.index] = { ...next[entry.index], [entry.quantityKey]: quantity };
+    });
+    return { [adapter.field]: next };
+  }
+
+  const error = new Error('This product has no editable stock field.');
+  error.code = 'stock-schema-readonly';
+  throw error;
+}
+
 function isFulfillmentStatus(value) {
   return typeof value === 'string' && FULFILLMENT_STATUSES.includes(value);
 }
@@ -248,7 +411,27 @@ function adminOrderResponse(orderId, order) {
  * The three fulfillment collections are server-managed mirrors. A transaction
  * keeps exactly one current mirror while preserving the canonical order.
  */
-async function createPaidOrderWithFulfillment(orderId, orderData) {
+function inventoryGroups(items) {
+  const groups = new Map();
+  for (const item of items || []) {
+    const collectionName = typeof item?.collectionName === 'string' ? item.collectionName : '';
+    const documentId = typeof item?.firestoreDocId === 'string' ? item.firestoreDocId : '';
+    const size = normalizeSize(item?.selectedSize);
+    const quantity = Number(item?.quantity);
+    if (!collectionName || !documentId || !size || !Number.isSafeInteger(quantity) || quantity < 1) {
+      const error = new Error('Order inventory details are incomplete.');
+      error.code = 'inventory-invalid-order';
+      throw error;
+    }
+    const key = `${collectionName}\u0000${documentId}`;
+    const group = groups.get(key) || { collectionName, documentId, quantities: {} };
+    group.quantities[size] = (group.quantities[size] || 0) + quantity;
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
+
+async function createPaidOrderWithFulfillment(orderId, orderData, inventoryItems = []) {
   const orderRef = db.collection('orders').doc(orderId);
   const now = new Date().toISOString();
   const completedOrder = {
@@ -261,6 +444,34 @@ async function createPaidOrderWithFulfillment(orderId, orderData) {
     const existing = await transaction.get(orderRef);
     if (existing.exists) {
       return { created: false, order: existing.data() };
+    }
+
+    const groups = inventoryGroups(inventoryItems);
+    const stockDocuments = await Promise.all(groups.map(async (group) => ({
+      group,
+      ref: db.collection(group.collectionName).doc(group.documentId),
+      snapshot: await transaction.get(db.collection(group.collectionName).doc(group.documentId)),
+    })));
+
+    for (const stockDocument of stockDocuments) {
+      if (!stockDocument.snapshot.exists) {
+        const error = new Error('A purchased product no longer exists.');
+        error.code = 'inventory-insufficient';
+        throw error;
+      }
+      const data = stockDocument.snapshot.data();
+      const adapter = stockAdapter(data);
+      const nextQuantities = {};
+      for (const [size, requested] of Object.entries(stockDocument.group.quantities)) {
+        const available = adapter.configured.has(size) ? adapter.quantities[size] ?? 0 : 0;
+        if (!adapter.editable || available < requested) {
+          const error = new Error(`${data.name || data.title || stockDocument.group.documentId} (${size}) is no longer in stock.`);
+          error.code = 'inventory-insufficient';
+          throw error;
+        }
+        nextQuantities[size] = available - requested;
+      }
+      transaction.update(stockDocument.ref, applyStockChanges(data, adapter, nextQuantities));
     }
 
     transaction.create(orderRef, completedOrder);
@@ -393,7 +604,7 @@ function slugify(value) {
  * Tries all known collections and returns the first match.
  *
  * @param {string} productId — Compound ID like "products-Connar McGregor"
- * @returns {Promise<{ collectionName: string, docId: string, data: object } | null>}
+ * @returns {Promise<{ collectionName: string, docId: string, data: object, selectedSize: string | null } | null>}
  */
 async function resolveProductFromFirestore(productId) {
   if (!db) return null;
@@ -426,16 +637,17 @@ async function resolveProductFromFirestore(productId) {
       try {
         let docSnap = await db.collection(colName).doc(docId).get();
         if (docSnap.exists) {
-          return { collectionName: colName, docId, data: docSnap.data() };
+          return { collectionName: colName, docId, data: docSnap.data(), selectedSize: null };
         }
         
         // If not found, try removing the appended size (e.g., "-S", "-XXL")
         const lastDashIndex = docId.lastIndexOf('-');
-        if (lastDashIndex > 0) {
+        const selectedSize = normalizeSize(docId.slice(lastDashIndex + 1));
+        if (lastDashIndex > 0 && selectedSize) {
           const docIdWithoutSize = docId.substring(0, lastDashIndex);
           docSnap = await db.collection(colName).doc(docIdWithoutSize).get();
           if (docSnap.exists) {
-            return { collectionName: colName, docId: docIdWithoutSize, data: docSnap.data() };
+            return { collectionName: colName, docId: docIdWithoutSize, data: docSnap.data(), selectedSize };
           }
         }
       } catch (e) {
@@ -446,6 +658,137 @@ async function resolveProductFromFirestore(productId) {
 
   return null;
 }
+
+async function inventoryCollectionNames() {
+  const names = ['products', 'TOTD'];
+  const configSnap = await db.doc('_config/collections').get();
+  if (configSnap.exists) {
+    const config = configSnap.data();
+    const configured = config.productCollections || config.collections || config.names;
+    if (Array.isArray(configured)) {
+      configured.forEach((name) => {
+        const normalized = typeof name === 'string' ? name.trim() : '';
+        if (normalized) names.push(normalized);
+      });
+    }
+  }
+  return [...new Set(names)];
+}
+
+function inventoryProductResponse(collectionName, document) {
+  const data = document.data();
+  return {
+    productId: `${slugify(collectionName)}-${document.id}`,
+    collectionName,
+    documentId: document.id,
+    name: typeof data.name === 'string' && data.name.trim() ? data.name.trim()
+      : typeof data.title === 'string' && data.title.trim() ? data.title.trim()
+        : document.id,
+    version: documentVersion(document),
+    ...stockSummary(data),
+  };
+}
+
+app.get('/api/admin/inventory', async (req, res) => {
+  if (!db) return res.status(503).json({ success: false, message: 'Inventory is unavailable because the database is not configured.' });
+
+  try {
+    const collectionNames = await inventoryCollectionNames();
+    const snapshots = await Promise.all(collectionNames.map((name) => db.collection(name).get()));
+    const products = snapshots
+      .flatMap((snapshot, index) => snapshot.docs.map((document) => inventoryProductResponse(collectionNames[index], document)))
+      .sort((a, b) => a.name.localeCompare(b.name) || a.productId.localeCompare(b.productId));
+    return res.status(200).json({ success: true, products });
+  } catch (error) {
+    console.error('[Admin Inventory] Failed to list products:', error.message);
+    return res.status(500).json({ success: false, message: 'Unable to load inventory.' });
+  }
+});
+
+function parseInventoryChanges(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const changes = {};
+  for (const [rawSize, rawQuantity] of Object.entries(value)) {
+    const size = normalizeSize(rawSize);
+    if (!size || !Number.isSafeInteger(rawQuantity) || rawQuantity < 0) return null;
+    changes[size] = rawQuantity;
+  }
+  return Object.keys(changes).length > 0 ? changes : null;
+}
+
+async function updateInventoryProduct(update, adminUid) {
+  const productId = typeof update?.productId === 'string' ? update.productId.trim() : '';
+  const expectedVersion = typeof update?.version === 'string' ? update.version : '';
+  const changes = parseInventoryChanges(update?.changes);
+  if (!productId || !expectedVersion || !changes) {
+    const error = new Error('Invalid inventory update.');
+    error.code = 'invalid-inventory-update';
+    throw error;
+  }
+
+  const product = await resolveProductFromFirestore(productId);
+  if (!product || product.selectedSize) {
+    const error = new Error('Product no longer exists.');
+    error.code = 'product-not-found';
+    throw error;
+  }
+  const reference = db.collection(product.collectionName).doc(product.docId);
+
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    if (!snapshot.exists) {
+      const error = new Error('Product no longer exists.');
+      error.code = 'product-not-found';
+      throw error;
+    }
+    if (documentVersion(snapshot) !== expectedVersion) {
+      const error = new Error('This product changed after you loaded it. Refresh before saving your stock changes.');
+      error.code = 'inventory-conflict';
+      throw error;
+    }
+
+    const data = snapshot.data();
+    const adapter = stockAdapter(data);
+    const patch = applyStockChanges(data, adapter, changes);
+    transaction.update(reference, patch);
+    return { productId, changes, previous: stockSummary(data), adminUid };
+  });
+}
+
+app.post('/api/admin/inventory', async (req, res) => {
+  const updates = req.body?.updates;
+  if (!Array.isArray(updates) || updates.length === 0 || updates.length > 50) {
+    return res.status(400).json({ success: false, message: 'Provide between 1 and 50 inventory updates.' });
+  }
+
+  const successful = [];
+  const failed = [];
+  const seenProducts = new Set();
+  for (const update of updates) {
+    const productId = typeof update?.productId === 'string' ? update.productId.trim() : '';
+    if (!productId || seenProducts.has(productId)) {
+      failed.push({ productId: productId || null, message: 'Invalid or duplicate product update.' });
+      continue;
+    }
+    seenProducts.add(productId);
+    try {
+      const result = await updateInventoryProduct(update, req.adminUser.uid);
+      successful.push({ productId: result.productId, changes: result.changes });
+    } catch (error) {
+      console.error(`[Admin Inventory] Failed to update ${productId}:`, error.message);
+      const message = error.code === 'inventory-conflict'
+        ? error.message
+        : error.code === 'size-not-configured' || error.code === 'stock-schema-readonly'
+          ? error.message
+          : error.code === 'product-not-found'
+            ? 'Product no longer exists.'
+            : 'Unable to save this product inventory.';
+      failed.push({ productId, message, code: error.code || 'inventory-save-failed' });
+    }
+  }
+
+  return res.status(failed.length ? 207 : 200).json({ success: failed.length === 0, successful, failed });
+});
 
 // Health check endpoint to verify backend status
 app.get('/api/health', (req, res) => {
@@ -522,6 +865,13 @@ app.post('/api/create-order', async (req, res) => {
         });
       }
 
+      if (!product.selectedSize) {
+        return res.status(400).json({
+          success: false,
+          message: `Select an in-stock size for "${productId}" before checkout.`,
+        });
+      }
+
       // Extract price from Firestore document (server-authoritative)
       const firestorePrice = Number(product.data.price);
       if (!Number.isFinite(firestorePrice) || firestorePrice <= 0) {
@@ -538,12 +888,31 @@ app.post('/api/create-order', async (req, res) => {
         productId,
         firestoreDocId: product.docId,
         collectionName: product.collectionName,
+        selectedSize: product.selectedSize,
         name: product.data.name || product.data.title || product.docId,
         price: firestorePrice,
         quantity,
         lineTotal,
         image: product.data.img1 || product.data.image || '',
       });
+    }
+
+    // This is a checkout-time validation only; inventory is deducted atomically
+    // after Cashfree confirms payment. The paid-order transaction repeats this
+    // check so concurrent shoppers cannot oversell a size.
+    const requestedByVariant = new Map();
+    for (const item of resolvedItems) {
+      const key = `${item.collectionName}\u0000${item.firestoreDocId}\u0000${item.selectedSize}`;
+      requestedByVariant.set(key, (requestedByVariant.get(key) || 0) + item.quantity);
+    }
+    for (const [key, requested] of requestedByVariant) {
+      const [, , size] = key.split('\u0000');
+      const item = resolvedItems.find((candidate) => `${candidate.collectionName}\u0000${candidate.firestoreDocId}\u0000${candidate.selectedSize}` === key);
+      const adapter = stockAdapter(item && (await db.collection(item.collectionName).doc(item.firestoreDocId).get()).data());
+      const available = adapter.configured.has(size) ? adapter.quantities[size] ?? 0 : 0;
+      if (!adapter.editable || available < requested) {
+        return res.status(409).json({ success: false, message: `${item.name} (${size}) is out of stock or has insufficient stock.` });
+      }
     }
 
     // Product prices are pre-tax: checkout displays 18% tax, so charge the
@@ -578,6 +947,9 @@ app.post('/api/create-order', async (req, res) => {
     const pendingOrderData = {
       items: resolvedItems.map(i => ({
         productId: i.productId,
+        firestoreDocId: i.firestoreDocId,
+        collectionName: i.collectionName,
+        selectedSize: i.selectedSize,
         name: i.name,
         price: i.price,
         quantity: i.quantity,
@@ -755,6 +1127,7 @@ app.post('/api/verify-payment', async (req, res) => {
           items: items.map(item => ({
             id: sanitizeString(item.productId || item.id, 100),
             name: sanitizeString(item.name, 200),
+            size: normalizeSize(item.selectedSize) || undefined,
             price: Number(item.price) || 0,
             quantity: Number(item.quantity) || 1,
             image: sanitizeString(item.image, 2000),
@@ -775,7 +1148,22 @@ app.post('/api/verify-payment', async (req, res) => {
           createdAt: new Date().toISOString(),
         };
 
-        const orderWrite = await createPaidOrderWithFulfillment(cashfreeOrderId, finalOrderData);
+        let orderWrite;
+        try {
+          orderWrite = await createPaidOrderWithFulfillment(cashfreeOrderId, finalOrderData, items);
+        } catch (inventoryError) {
+          if (inventoryError.code === 'inventory-insufficient' || inventoryError.code === 'inventory-invalid-order') {
+            console.error(`[Inventory] Paid order ${cashfreeOrderId} requires manual resolution:`, inventoryError.message);
+            return res.status(409).json({
+              success: false,
+              message: `Payment was confirmed, but inventory could not be allocated. Please contact support with order ${cashfreeOrderId}.`,
+              orderId: cashfreeOrderId,
+              paymentStatus: 'paid',
+              inventoryConflict: true,
+            });
+          }
+          throw inventoryError;
+        }
         if (!orderWrite.created) {
           const existingData = orderWrite.order;
           return res.status(200).json({
@@ -953,6 +1341,7 @@ app.post('/api/cashfree-webhook', async (req, res) => {
       items: items.map(item => ({
         id: sanitizeString(item.productId || item.id, 100),
         name: sanitizeString(item.name, 200),
+        size: normalizeSize(item.selectedSize) || undefined,
         price: Number(item.price) || 0,
         quantity: Number(item.quantity) || 1,
         image: sanitizeString(item.image, 2000),
@@ -969,7 +1358,7 @@ app.post('/api/cashfree-webhook', async (req, res) => {
       source: 'webhook',
     };
 
-    const orderWrite = await createPaidOrderWithFulfillment(cashfreeOrderId, finalOrderData);
+    const orderWrite = await createPaidOrderWithFulfillment(cashfreeOrderId, finalOrderData, items);
     if (!orderWrite.created) {
       return res.status(200).json({ success: true, message: 'Already processed.' });
     }

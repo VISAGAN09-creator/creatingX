@@ -22,17 +22,6 @@ const DEFAULT_COLORS = [
   { name: 'Graphite', value: 'linear-gradient(135deg, #444444, #666666)' },
 ];
 
-const DEFAULT_SIZES = [
-  { name: 'XXS', stock: 1 },
-  { name: 'XS', stock: 1 },
-  { name: 'S', stock: 1 },
-  { name: 'M', stock: 1 },
-  { name: 'L', stock: 1 },
-  { name: 'XL', stock: 1 },
-  { name: 'XXL', stock: 1 },
-  { name: 'XXXL', stock: 1 },
-];
-
 const DEFAULT_SIZE_GUIDE = [
   { size: 'XXS', toFitChest: '34', Chest: '40', Length: '28', shoulder: '19' },
   { size: 'XS', toFitChest: '36', Chest: '42', Length: '28.5', shoulder: '20' },
@@ -155,7 +144,7 @@ export function ProductDetailsPage({
 
   const images = useMemo(() => (product ? productImages(product) : []), [product]);
   const colors = useMemo(() => (product?.colors?.length ? product.colors : DEFAULT_COLORS), [product]);
-  const sizes = useMemo(() => (product?.sizes?.length ? product.sizes : DEFAULT_SIZES), [product]);
+  const sizes = useMemo(() => product?.sizes ?? [], [product]);
   const sizeGuide = product?.sizeGuide?.length ? product.sizeGuide : DEFAULT_SIZE_GUIDE;
   const selectedSizeData = sizes.find((size) => size.name === selectedSize);
   const canAddToCart = Boolean(product && selectedSizeData && selectedSizeData.stock > 0 && product.price !== null);
@@ -437,6 +426,7 @@ export function ProductDetailsPage({
               </div>
 
               <div className="flex flex-wrap gap-2.5">
+                {sizes.length === 0 && <p className="text-sm text-metal-text">No sizes are currently configured for this product.</p>}
                 {sizes.map((size) => {
                   const isOutOfStock = size.stock <= 0;
                   return (

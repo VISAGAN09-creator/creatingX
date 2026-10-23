@@ -162,7 +162,9 @@ function sizeList(value: unknown): ProductSize[] {
   }
 
   if (typeof value === 'string') {
-    return textList(value).map((name) => ({ name, stock: 1 }));
+    // A string list only declares which sizes exist. It does not contain an
+    // inventory quantity, so it must never make a size purchasable by default.
+    return textList(value).map((name) => ({ name, stock: 0 }));
   }
 
   const record = objectValue(value);
@@ -193,7 +195,12 @@ function sizeList(value: unknown): ProductSize[] {
 }
 
 function sizeFields(data: DocumentData): ProductSize[] {
-  return sizeFieldNames.map((name) => ({ name, stock: stockValue(data[name], 0) }));
+  // Missing top-level fields mean the size is not configured. Do not fabricate
+  // a full size run: it would make the UI imply variant availability that the
+  // product document does not define.
+  return sizeFieldNames
+    .filter((name) => Object.prototype.hasOwnProperty.call(data, name))
+    .map((name) => ({ name, stock: stockValue(data[name], 0) }));
 }
 
 function sizeGuideList(value: unknown): ProductSizeGuideRow[] {
