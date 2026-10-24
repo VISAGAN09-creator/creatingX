@@ -56,7 +56,7 @@ Firebase Hosting (dist)
 
 **Product ID contract (client + server):** `${slugify(collectionName)}-${documentId}`. Cart size variants append `-<SIZE>`. Server strips trailing size when resolving.
 
-**Price authority:** server reads Firestore `price` (numeric). Client amounts are not trusted. Tax **18%** and shipping **0** are hardcoded in both `CheckoutPage.tsx` and `server.cjs` — change together.
+**Price authority:** server reads Firestore `price` (numeric). Client amounts are not trusted. The current policy charges no additional tax and shipping is **0**; checkout display and `server.cjs` must remain aligned.
 
 **Paid order doc id** = Cashfree `order_id` (idempotency key).
 

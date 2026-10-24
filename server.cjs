@@ -915,11 +915,12 @@ app.post('/api/create-order', async (req, res) => {
       }
     }
 
-    // Product prices are pre-tax: checkout displays 18% tax, so charge the
-    // same tax-inclusive total through Cashfree and retain its components.
+    // Catalog prices are the intended payable prices. Shipping is currently
+    // free and no additional tax is charged at checkout.
     const subtotalAmount = Math.round(totalAmount * 100) / 100;
-    const taxAmount = Math.round(subtotalAmount * 0.18 * 100) / 100;
-    totalAmount = subtotalAmount + taxAmount;
+    const taxAmount = 0;
+    const shippingAmount = 0;
+    totalAmount = Math.round((subtotalAmount + shippingAmount) * 100) / 100;
 
     if (totalAmount <= 0) {
       return res.status(400).json({
@@ -1083,15 +1084,22 @@ app.post('/api/verify-payment', async (req, res) => {
         const pendingData = pendingSnap.exists ? pendingSnap.data() : null;
 
         if (!pendingData) {
-          console.warn(`[Payment] No pending order found for ${cashfreeOrderId}, creating minimal record.`);
+          console.warn(`[Payment] No pending order found for ${cashfreeOrderId}; refusing to persist it.`);
+          return res.status(409).json({
+            success: false,
+            message: 'Payment order context is missing. Please contact support with your order ID.',
+            orderId: cashfreeOrderId,
+            paymentStatus: verification.paymentStatus,
+          });
         }
 
         const items = pendingData?.items || [];
         const customer = pendingData?.customer || {};
         const shipping = pendingData?.shipping || {};
-        // Server recomputes pricing from stored authoritative data. New pending
-        // orders store the pre-tax subtotal and tax used for the Cashfree charge.
-        const serverSubtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        // New orders have zero additional tax. Legacy pending orders retain
+        // their stored amount so a previously created Cashfree order can still
+        // be verified accurately.
+        const serverSubtotal = Math.round(items.reduce((sum, item) => sum + (item.price * item.quantity), 0) * 100) / 100;
         const cashfreeTotal = Number(verification.orderAmount);
         const storedTax = Number(pendingData?.taxAmount);
         // Legacy pending orders predate tax-inclusive Cashfree charges. Preserve
@@ -1104,7 +1112,7 @@ app.post('/api/verify-payment', async (req, res) => {
           ? Number(pendingData.totalAmount)
           : serverSubtotal + serverTax + serverShipping;
 
-        if (!Number.isFinite(cashfreeTotal) || cashfreeTotal <= 0 ||
+        if (verification.orderCurrency !== 'INR' || !Number.isFinite(cashfreeTotal) || cashfreeTotal <= 0 ||
           Math.round(cashfreeTotal * 100) !== Math.round(expectedTotal * 100)) {
           throw new Error('Cashfree amount does not match the server-calculated order total.');
         }
@@ -1307,7 +1315,7 @@ app.post('/api/cashfree-webhook', async (req, res) => {
     const items = pendingData.items || [];
     const customer = pendingData.customer || {};
     const shipping = pendingData.shipping || {};
-    const serverSubtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const serverSubtotal = Math.round(items.reduce((sum, item) => sum + (item.price * item.quantity), 0) * 100) / 100;
     const cashfreeTotal = Number(verification.orderAmount);
     const storedTax = Number(pendingData?.taxAmount);
     const serverTax = Number.isFinite(storedTax)
@@ -1318,7 +1326,7 @@ app.post('/api/cashfree-webhook', async (req, res) => {
       ? Number(pendingData.totalAmount)
       : serverSubtotal + serverTax + serverShipping;
 
-    if (!Number.isFinite(cashfreeTotal) || cashfreeTotal <= 0 ||
+    if (verification.orderCurrency !== 'INR' || !Number.isFinite(cashfreeTotal) || cashfreeTotal <= 0 ||
       Math.round(cashfreeTotal * 100) !== Math.round(expectedTotal * 100)) {
       throw new Error('Cashfree amount does not match the server-calculated order total.');
     }

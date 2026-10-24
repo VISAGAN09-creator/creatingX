@@ -35,10 +35,8 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
   const [successOrderId, setSuccessOrderId] = useState<string | null>(null);
 
   const itemCount = useMemo(() => lines.reduce((total, line) => total + line.quantity, 0), [lines]);
-  const taxable = subtotal;
-  const tax = Math.round(taxable * 0.18 * 100) / 100;
   const shipping = 0;
-  const total = taxable + shipping + tax;
+  const total = Math.round((subtotal + shipping) * 100) / 100;
 
   const showToast = (message: string, type?: 'success' | 'error') => {
     setToast({ message, type });
@@ -562,8 +560,6 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
                 <span className="font-display text-[22px] font-bold tracking-normal">{formatPrice(total)}</span>
               </div>
             </div>
-            <p className="mb-6 text-right text-xs text-[#666666]">Including {formatPrice(tax)} in taxes</p>
-
             <button
               type="button"
              

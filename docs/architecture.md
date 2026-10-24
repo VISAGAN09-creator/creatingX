@@ -164,7 +164,7 @@ Middleware: `helmet()`, CORS allowlist (`CORS_ALLOWED_ORIGINS` + localhost Vite 
 
 1. Client posts `{ items: [{id, quantity}], customer, shipping }` (no client amount).
 2. Server `resolveProductFromFirestore` (config collections + `products` + `TOTD`, strip trailing size).
-3. Charge `subtotal + round(subtotal * 0.18, 2)`; shipping 0.
+3. Charge the authoritative product subtotal; additional tax and shipping are currently 0.
 4. Cashfree order created; pending doc id = Cashfree `order_id`.
 5. Client `cashfree.checkout({ paymentSessionId, redirectTarget: '_self' })`.
 6. Return to `#payment-return?order_id=…`; `PaymentReturnPage` posts verify.
@@ -188,7 +188,7 @@ Actual live document contents in the Firebase project are **UNVERIFIED** from th
 
 ### 5.4 Order document shapes (from write paths)
 
-**`pendingOrders/{cashfreeOrderId}`** includes: items (`productId`, `name`, `price`, `quantity`, `lineTotal`, `image`), `subtotalAmount`, `taxAmount`, `totalAmount`, `customer`, `shipping`, `status: 'pending'`, `createdAt`, Cashfree ids.
+**`pendingOrders/{cashfreeOrderId}`** includes: items (`productId`, `name`, `price`, `quantity`, `lineTotal`, `image`), `subtotalAmount`, `taxAmount` (0 for current orders; retained for historical compatibility), `totalAmount`, `customer`, `shipping`, `status: 'pending'`, `createdAt`, Cashfree ids.
 
 **`orders/{cashfreeOrderId}`** includes: `customer` (email, first/last name, phone), `shipping`, `items` (id, name, price, quantity, image), `pricing`, `payment`, `status: 'paid'`, `createdAt`, optional `source: 'webhook'`.
 
