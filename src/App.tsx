@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { About } from './components/About';
+import { AdminPortal } from './components/AdminPortal';
 import { CartDrawer } from './components/CartDrawer';
 import { CheckoutPage } from './components/CheckoutPage';
 import { CookieConsent } from './components/CookieConsent';
@@ -64,6 +65,15 @@ export default function App() {
 
   const effectiveActivePage =
     isTotdProduct && router.activePage === 'productDetail' ? 'totd' : router.activePage;
+
+  if (router.activePage === 'admin') {
+    return (
+      <>
+        <LiquidCanvas />
+        <AdminPortal onExit={router.exitAdmin} />
+      </>
+    );
+  }
 
   // ---- Render --------------------------------------------------------------
   return (

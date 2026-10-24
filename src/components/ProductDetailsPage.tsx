@@ -15,24 +15,6 @@ type ProductDetailsPageProps = {
   onBack: () => void;
 };
 
-const DEFAULT_COLORS = [
-  { name: 'White', value: '#f5f5f5' },
-  { name: 'Black', value: '#000000' },
-  { name: 'Silver', value: 'linear-gradient(135deg, #c0c0c0, #e8e8e8)' },
-  { name: 'Graphite', value: 'linear-gradient(135deg, #444444, #666666)' },
-];
-
-const DEFAULT_SIZES = [
-  { name: 'XXS', stock: 1 },
-  { name: 'XS', stock: 1 },
-  { name: 'S', stock: 1 },
-  { name: 'M', stock: 1 },
-  { name: 'L', stock: 1 },
-  { name: 'XL', stock: 1 },
-  { name: 'XXL', stock: 1 },
-  { name: 'XXXL', stock: 1 },
-];
-
 const DEFAULT_SIZE_GUIDE = [
   { size: 'XXS', toFitChest: '34', Chest: '40', Length: '28', shoulder: '19' },
   { size: 'XS', toFitChest: '36', Chest: '42', Length: '28.5', shoulder: '20' },
@@ -121,6 +103,9 @@ export function ProductDetailsPage({
   const [currentImage, setCurrentImage] = useState(0);
   const [isZoomed, setIsZoomed] = useState(false);
   const [selectedSize, setSelectedSize] = useState('');
+  const [selectedMensSize, setSelectedMensSize] = useState('');
+  const [selectedWomensSize, setSelectedWomensSize] = useState('');
+  const [selectedColor, setSelectedColor] = useState('');
   const [openAccordion, setOpenAccordion] = useState('description');
   const [sizeGuideOpen, setSizeGuideOpen] = useState(false);
 
@@ -154,18 +139,37 @@ export function ProductDetailsPage({
   };
 
   const images = useMemo(() => (product ? productImages(product) : []), [product]);
-  const colors = useMemo(() => (product?.colors?.length ? product.colors : DEFAULT_COLORS), [product]);
-  const sizes = useMemo(() => (product?.sizes?.length ? product.sizes : DEFAULT_SIZES), [product]);
+  const colors = useMemo(() => product?.colors ?? [], [product]);
+  const sizes = useMemo(() => product?.sizes ?? [], [product]);
   const sizeGuide = product?.sizeGuide?.length ? product.sizeGuide : DEFAULT_SIZE_GUIDE;
   const selectedSizeData = sizes.find((size) => size.name === selectedSize);
-  const canAddToCart = Boolean(product && selectedSizeData && selectedSizeData.stock > 0 && product.price !== null);
+  const selectedMensSizeData = sizes.find((size) => size.name === selectedMensSize);
+  const selectedWomensSizeData = sizes.find((size) => size.name === selectedWomensSize);
+  const isCoupleProduct = product?.isCouple === true;
+  const coupleSizesInStock = Boolean(
+    selectedMensSizeData &&
+    selectedWomensSizeData &&
+    selectedMensSizeData.stock > 0 &&
+    selectedWomensSizeData.stock > 0 &&
+    (selectedMensSize !== selectedWomensSize || selectedMensSizeData.stock >= 2),
+  );
+  const hasColorOptions = colors.length > 0;
+  const canAddToCart = Boolean(
+    product &&
+      product.price !== null &&
+      (isCoupleProduct ? coupleSizesInStock : selectedSizeData && selectedSizeData.stock > 0) &&
+      (!hasColorOptions || selectedColor),
+  );
   const related = useMemo(() => (product ? relatedProducts(products, product) : []), [product, products]);
 
   useEffect(() => {
     if (!product) return;
     setCurrentImage(0);
     setIsZoomed(false);
-    setSelectedSize(sizes.find((size) => size.stock > 0)?.name ?? sizes[0]?.name ?? '');
+    setSelectedSize(isCoupleProduct ? '' : sizes.find((size) => size.stock > 0)?.name ?? sizes[0]?.name ?? '');
+    setSelectedMensSize('');
+    setSelectedWomensSize('');
+    setSelectedColor('');
     setOpenAccordion('description');
   }, [product, colors, sizes]);
 
@@ -225,12 +229,27 @@ export function ProductDetailsPage({
   }, [sizeGuideOpen]);
 
   const addSelectedProduct = () => {
-    if (!product || !selectedSizeData || selectedSizeData.stock <= 0) return;
+    if (!product || !canAddToCart) return;
+
+    const checkoutProductId = isCoupleProduct ? product.id : `${product.id}-${selectedSizeData?.name}`;
+    const sizeVariant = isCoupleProduct
+      ? `--mens-${encodeURIComponent(selectedMensSize)}--womens-${encodeURIComponent(selectedWomensSize)}`
+      : '';
+    const colorVariant = selectedColor ? `--color-${encodeURIComponent(selectedColor.toLocaleLowerCase())}` : '';
+    const cartId = `${checkoutProductId}${sizeVariant}${colorVariant}`;
+    const selectedLabel = isCoupleProduct
+      ? `Men: ${selectedMensSize}, Women: ${selectedWomensSize}`
+      : selectedSizeData?.name;
 
     onAddToCart({
       ...product,
-      id: `${product.id}-${selectedSizeData.name}`,
-      name: `${product.name} (${selectedSizeData.name})`,
+      id: cartId,
+      checkoutProductId,
+      selectedSize: isCoupleProduct ? undefined : selectedSizeData?.name,
+      selectedMensSize: isCoupleProduct ? selectedMensSize : undefined,
+      selectedWomensSize: isCoupleProduct ? selectedWomensSize : undefined,
+      selectedColor: selectedColor || undefined,
+      name: `${product.name} (${selectedLabel})`,
       image: images[currentImage] ?? product.image,
     });
   };
@@ -420,14 +439,48 @@ export function ProductDetailsPage({
 
             <div className="my-7 h-px w-full bg-metal-light" />
 
+            {hasColorOptions && (
+              <div className="mb-7 border-b border-metal-light pb-7">
+                <p className="mb-3.5 text-[11px] font-bold uppercase tracking-[0.16em] text-black">
+                  Color - <span className="text-metal-text">{selectedColor || 'Select'}</span>
+                </p>
+                <div className="flex flex-wrap gap-2.5">
+                  {colors.map((color) => {
+                    const isSelected = selectedColor === color.name;
+                    return (
+                      <button
+                        key={color.name}
+                        type="button"
+                        aria-pressed={isSelected}
+                        onClick={() => setSelectedColor(color.name)}
+                        className={`inline-flex min-h-11 items-center gap-2.5 border px-3 text-xs font-semibold tracking-[0.04em] transition ${
+                          isSelected
+                            ? 'border-black bg-black text-white'
+                            : 'border-metal-light bg-transparent text-black hover:border-black'
+                        }`}
+                      >
+                        {color.value && (
+                          <span
+                            className="h-4 w-4 rounded-full border border-black/20 bg-white"
+                            style={{ backgroundColor: color.value }}
+                            aria-hidden="true"
+                          />
+                        )}
+                        {color.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="mb-7">
               <div className="mb-3.5 flex items-center justify-between gap-4">
                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-black">
-                  Size - <span className="text-metal-text">{selectedSize || 'Select'}</span>
+                  {isCoupleProduct ? 'Select both sizes' : <>Size - <span className="text-metal-text">{selectedSize || 'Select'}</span></>}
                 </p>
                 <button
                   type="button"
-                 
                   className="inline-flex items-center gap-2 text-[11px] font-medium text-metal-text underline underline-offset-4 transition hover:text-black"
                   onClick={() => setSizeGuideOpen(true)}
                 >
@@ -436,29 +489,67 @@ export function ProductDetailsPage({
                 </button>
               </div>
 
-              <div className="flex flex-wrap gap-2.5">
-                {sizes.map((size) => {
-                  const isOutOfStock = size.stock <= 0;
-                  return (
-                    <button
-                      key={size.name}
-                      type="button"
-                     
-                      disabled={isOutOfStock}
-                      aria-pressed={selectedSize === size.name}
-                      title={isOutOfStock ? `${size.name} out of stock` : undefined}
-                      className={`min-h-11 min-w-[52px] border px-4 text-xs font-semibold tracking-[0.04em] transition ${
-                        selectedSize === size.name
-                          ? 'border-black bg-black text-white'
-                          : 'border-metal-light bg-transparent text-black enabled:hover:border-black'
-                      } ${isOutOfStock ? 'cursor-not-allowed opacity-30 line-through' : ''}`}
-                      onClick={() => setSelectedSize(size.name)}
-                    >
-                      {size.name}
-                    </button>
-                  );
-                })}
-              </div>
+              {sizes.length === 0 ? (
+                <p className="text-sm text-metal-text">No sizes are currently configured for this product.</p>
+              ) : isCoupleProduct ? (
+                <div className="space-y-5">
+                  {[
+                    { label: "Men's Size", selected: selectedMensSize, setSelected: setSelectedMensSize, otherSelected: selectedWomensSize },
+                    { label: "Women's Size", selected: selectedWomensSize, setSelected: setSelectedWomensSize, otherSelected: selectedMensSize },
+                  ].map(({ label, selected, setSelected, otherSelected }) => (
+                    <div key={label}>
+                      <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.16em] text-black">
+                        {label} - <span className="text-metal-text">{selected || 'Select'}</span>
+                      </p>
+                      <div className="flex flex-wrap gap-2.5">
+                        {sizes.map((size) => {
+                          const isOutOfStock = size.stock <= 0 || (otherSelected === size.name && size.stock < 2);
+                          return (
+                            <button
+                              key={size.name}
+                              type="button"
+                              disabled={isOutOfStock}
+                              aria-pressed={selected === size.name}
+                              title={isOutOfStock ? `${size.name} is unavailable for this pair` : undefined}
+                              className={`min-h-11 min-w-[52px] border px-4 text-xs font-semibold tracking-[0.04em] transition ${
+                                selected === size.name
+                                  ? 'border-black bg-black text-white'
+                                  : 'border-metal-light bg-transparent text-black enabled:hover:border-black'
+                              } ${isOutOfStock ? 'cursor-not-allowed opacity-30 line-through' : ''}`}
+                              onClick={() => setSelected(size.name)}
+                            >
+                              {size.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2.5">
+                  {sizes.map((size) => {
+                    const isOutOfStock = size.stock <= 0;
+                    return (
+                      <button
+                        key={size.name}
+                        type="button"
+                        disabled={isOutOfStock}
+                        aria-pressed={selectedSize === size.name}
+                        title={isOutOfStock ? `${size.name} out of stock` : undefined}
+                        className={`min-h-11 min-w-[52px] border px-4 text-xs font-semibold tracking-[0.04em] transition ${
+                          selectedSize === size.name
+                            ? 'border-black bg-black text-white'
+                            : 'border-metal-light bg-transparent text-black enabled:hover:border-black'
+                        } ${isOutOfStock ? 'cursor-not-allowed opacity-30 line-through' : ''}`}
+                        onClick={() => setSelectedSize(size.name)}
+                      >
+                        {size.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="mb-8 grid grid-cols-2 gap-3">

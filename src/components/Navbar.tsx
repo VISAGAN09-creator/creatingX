@@ -3,8 +3,8 @@ import { Menu, ShoppingBag, X, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { navLinks } from '../data/siteData';
 import { scrollToHash } from '../utils/scroll';
+import { BrandLogo } from './BrandLogo';
 import { MagneticButton } from './Magnetic';
-import logo from '../assets/logo.png';
 
 type NavbarProps = {
   cartCount: number;
@@ -58,7 +58,11 @@ export function Navbar({ cartCount, onCartOpen, onSearchOpen, onNavigate, active
               Thoughts Of The Day
             </span>
           ) : (
-            <img src={logo} alt="METALFLUX" className="h-9 sm:h-11 w-auto object-contain" />
+            <BrandLogo
+              containerClassName="h-12 w-[145px] sm:h-14"
+              imageClassName="h-full w-full object-contain"
+              fallbackClassName="flex h-full w-full items-center font-display text-xl font-bold tracking-wider text-black sm:text-2xl"
+            />
           )}
         </button>
 

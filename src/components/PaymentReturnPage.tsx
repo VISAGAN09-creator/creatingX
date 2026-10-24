@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatPrice } from '../utils/format';
-
-import logo from '../assets/logo.png';
+import { paymentApiPath } from '../lib/paymentApi';
+import { BrandLogo } from './BrandLogo';
 
 type PaymentReturnPageProps = {
   orderId: string | null;
@@ -10,7 +10,7 @@ type PaymentReturnPageProps = {
 
 type VerificationState =
   | { status: 'loading' }
-  | { status: 'success'; firestoreOrderId: string; order: { items: { id: string; name: string; price: number; quantity: number }[]; totalAmount: number; customer: { firstName: string; lastName: string; email: string } } | null }
+  | { status: 'success'; firestoreOrderId: string; order: { items: { id: string; name: string; price: number; quantity: number }[]; totalAmount: number; customer: { name?: string; firstName?: string; lastName?: string; email: string } } | null }
   | { status: 'failed'; message: string; paymentStatus?: string }
   | { status: 'error'; message: string };
 
@@ -30,7 +30,7 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
 
     async function verifyPayment() {
       try {
-        const response = await fetch('/api/verify-payment', {
+        const response = await fetch(paymentApiPath('/verify-payment'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ orderId }),
@@ -78,7 +78,7 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
   try {
     const ctx = JSON.parse(sessionStorage.getItem('cashfree_checkout_context') || '{}');
     checkoutEmail = ctx.email || '';
-    checkoutName = [ctx.firstName, ctx.lastName].filter(Boolean).join(' ');
+    checkoutName = ctx.fullName || [ctx.firstName, ctx.lastName].filter(Boolean).join(' ');
   } catch { /* ignore */ }
 
   return (
@@ -89,7 +89,11 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
           className="flex items-center justify-center"
           onClick={onBack}
         >
-          <img src={logo} alt="METALFLUX" className="h-8 sm:h-9 w-auto object-contain" />
+          <BrandLogo
+            containerClassName="h-10 w-[140px] sm:h-11"
+            imageClassName="h-full w-full object-contain"
+            fallbackClassName="flex h-full w-full items-center font-display text-lg font-bold tracking-wider text-black sm:text-xl"
+          />
         </button>
       </header>
 
@@ -140,12 +144,12 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
                     <span className="font-semibold">{state.order.customer?.email || checkoutEmail}</span>
                   </div>
                 )}
-                {(state.order.customer?.firstName || checkoutName) && (
+                {(state.order.customer?.name || state.order.customer?.firstName || checkoutName) && (
                   <div className="flex justify-between text-[13px]">
                     <span className="text-[#666666]">Customer</span>
                     <span className="font-semibold">
                       {state.order.customer
-                        ? `${state.order.customer.firstName} ${state.order.customer.lastName}`.trim()
+                        ? state.order.customer.name || `${state.order.customer.firstName || ''} ${state.order.customer.lastName || ''}`.trim()
                         : checkoutName}
                     </span>
                   </div>

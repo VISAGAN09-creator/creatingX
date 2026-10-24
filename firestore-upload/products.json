@@ -1,12 +1,14 @@
 [
   {
-    "id": "Connar McGregor",
-    "S": 10, "M": 10, "L": 10,
-    "XL": 10, "XXL": 10, "XXXL": 10
-  },
-  {
-    "id": "UFC x Venam",
-    "S": 10, "M": 10, "L": 10,
-    "XL": 10, "XXL": 10, "XXXL": 10
+    "id": "Arnold- Pumping iron",
+    "category": "Gym Freak",
+    "XXS": 10,
+    "XS": 10,
+    "S": 10,
+    "M": 10,
+    "L": 10,
+    "XL": 10,
+    "XXL": 10,
+    "XXXL": 10
   }
 ]

@@ -143,7 +143,7 @@ export const features: Feature[] = [
 export const stats = [
   { value: '50K+', label: 'Happy Customers' },
   { value: '200+', label: 'Unique Designs' },
-  { value: '15', label: 'Countries' },
+  { value: '15 Years', label: 'Experience' },
 ];
 
 export const footerColumns: FooterColumn[] = [
