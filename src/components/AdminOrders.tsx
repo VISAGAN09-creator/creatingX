@@ -47,7 +47,7 @@ function itemSummary(order: AdminOrder) {
   if (order.items.length === 0) return 'Items unavailable';
   const first = order.items[0];
   const firstName = first.name || 'Unnamed item';
-  return order.items.length === 1 ? `${firstName} Ã— ${first.quantity ?? 1}` : `${firstName} + ${order.items.length - 1} more`;
+  return order.items.length === 1 ? `${firstName} × ${first.quantity ?? 1}` : `${firstName} + ${order.items.length - 1} more`;
 }
 
 function statusClass(status: FulfillmentStatus) {
@@ -121,7 +121,7 @@ export function AdminOrders({ adminEmail, onSignOut, onExit, onOpenInventory }: 
       }
 
       if (result.failed.length > 0) {
-        setError(`${result.failed.length} status update${result.failed.length === 1 ? '' : 's'} failed. Pending changes were kept: ${result.failed.map((failure) => `${failure.orderId || 'unknown order'} â€” ${failure.message}`).join('; ')}`);
+        setError(`${result.failed.length} status update${result.failed.length === 1 ? '' : 's'} failed. Pending changes were kept: ${result.failed.map((failure) => `${failure.orderId || 'unknown order'} — ${failure.message}`).join('; ')}`);
       }
       if (result.successful.length > 0) {
         setNotice(`${result.successful.length} fulfillment status update${result.successful.length === 1 ? '' : 's'} saved.`);
@@ -218,7 +218,7 @@ export function AdminOrders({ adminEmail, onSignOut, onExit, onOpenInventory }: 
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={8} className="px-5 py-14 text-center text-zinc-400"><LoaderCircle className="mx-auto mb-3 animate-spin" size={20} aria-hidden="true" />Loading {statusLabels[filter].toLowerCase()} ordersâ€¦</td></tr>
+                  <tr><td colSpan={8} className="px-5 py-14 text-center text-zinc-400"><LoaderCircle className="mx-auto mb-3 animate-spin" size={20} aria-hidden="true" />Loading {statusLabels[filter].toLowerCase()} orders...</td></tr>
                 ) : orders.length === 0 ? (
                   <tr><td colSpan={8} className="px-5 py-14 text-center text-zinc-400">No orders are currently in {statusLabels[filter].toLowerCase()}.</td></tr>
                 ) : orders.map((order) => {
@@ -242,7 +242,7 @@ export function AdminOrders({ adminEmail, onSignOut, onExit, onOpenInventory }: 
                           </button>
                         </td>
                         <td className="px-5 py-4 align-top font-medium text-zinc-100">{formatPrice(order.pricing.total)}</td>
-                        <td className="px-5 py-4 align-top"><p className="capitalize text-zinc-200">{order.payment.gateway || 'â€”'}</p><p className="mt-1 text-xs text-zinc-500">{order.paymentStatus || 'â€”'}</p></td>
+                        <td className="px-5 py-4 align-top"><p className="capitalize text-zinc-200">{order.payment.gateway || '—'}</p><p className="mt-1 text-xs text-zinc-500">{order.paymentStatus || '—'}</p></td>
                         <td className="px-5 py-4 align-top whitespace-nowrap text-zinc-300">{formatOrderDate(order.createdAt)}</td>
                         <td className="px-2 py-4 align-top">
                           <button type="button" onClick={() => setEditingOrderId(isEditing ? null : order.orderId)} aria-label={`Edit fulfillment status for order ${order.orderId}`} aria-expanded={isEditing} className="grid size-9 place-items-center rounded-lg border border-white/15 text-zinc-300 transition hover:border-white/40 hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/30">
@@ -255,7 +255,7 @@ export function AdminOrders({ adminEmail, onSignOut, onExit, onOpenInventory }: 
                           ) : <div><span className={cn('inline-flex rounded-full border px-2.5 py-1 text-xs font-medium', statusClass(proposedStatus))}>{statusLabels[proposedStatus]}</span>{pending[order.orderId] && <p className="mt-1.5 text-xs text-amber-200">Unsaved change</p>}</div>}
                         </td>
                       </tr>
-                      {isExpanded && <tr className="border-b border-white/[0.07] bg-black/20"><td colSpan={8} className="px-5 py-5"><div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]"><div><h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">Complete order items</h2><ul className="space-y-2">{order.items.map((item, index) => <li key={`${item.id || item.name || 'item'}-${index}`} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-white/[0.025] px-3 py-2.5 text-sm"><span className="min-w-0 text-zinc-200"><span className="block truncate">{item.name || 'Unnamed item'} <span className="text-zinc-500">Ã— {item.quantity ?? 1}</span></span>{(item.size || item.mensSize || item.womensSize || item.color) && <span className="mt-1 block text-xs text-zinc-500">{[item.size && `Size: ${item.size}`, item.mensSize && `Men's size: ${item.mensSize}`, item.womensSize && `Women's size: ${item.womensSize}`, item.color && `Color: ${item.color}`].filter(Boolean).join(' Â· ')}</span>}</span><span className="whitespace-nowrap text-zinc-400">{formatPrice(item.price)}</span></li>)}</ul></div><div><h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">Delivery details</h2><p className="text-sm leading-6 text-zinc-300">{[order.shipping.doorNo, order.shipping.addressLine1 ?? order.shipping.address, order.shipping.addressLine2 ?? order.shipping.apartment, order.shipping.city, order.shipping.state, order.shipping.pinCode, order.shipping.country].filter(Boolean).join(', ') || 'Delivery details unavailable'}</p>{order.customer.phone && <p className="mt-2 text-sm text-zinc-400">{order.customer.phone}</p>}</div></div></td></tr>}
+                      {isExpanded && <tr className="border-b border-white/[0.07] bg-black/20"><td colSpan={8} className="px-5 py-5"><div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]"><div><h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">Complete order items</h2><ul className="space-y-2">{order.items.map((item, index) => <li key={`${item.id || item.name || 'item'}-${index}`} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-white/[0.025] px-3 py-2.5 text-sm"><span className="min-w-0 text-zinc-200"><span className="block truncate">{item.name || 'Unnamed item'} <span className="text-zinc-500">× {item.quantity ?? 1}</span></span>{(item.size || item.mensSize || item.womensSize || item.color) && <span className="mt-1 block text-xs text-zinc-500">{[item.size && `Size: ${item.size}`, item.mensSize && `Men's size: ${item.mensSize}`, item.womensSize && `Women's size: ${item.womensSize}`, item.color && `Color: ${item.color}`].filter(Boolean).join(' · ')}</span>}</span><span className="whitespace-nowrap text-zinc-400">{formatPrice(item.price)}</span></li>)}</ul></div><div><h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">Delivery details</h2><p className="text-sm leading-6 text-zinc-300">{[order.shipping.doorNo, order.shipping.addressLine1 ?? order.shipping.address, order.shipping.addressLine2 ?? order.shipping.apartment, order.shipping.city, order.shipping.state, order.shipping.pinCode, order.shipping.country].filter(Boolean).join(', ') || 'Delivery details unavailable'}</p>{order.customer.phone && <p className="mt-2 text-sm text-zinc-400">{order.customer.phone}</p>}</div></div></td></tr>}
                     </Fragment>
                   );
                 })}
