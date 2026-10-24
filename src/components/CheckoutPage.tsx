@@ -116,8 +116,9 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           items: lines.map((line) => ({
-            id: line.id,
+            id: line.checkoutProductId ?? line.id,
             quantity: line.quantity,
+            color: line.selectedColor,
           })),
           customer: {
             email,
@@ -515,6 +516,13 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
                     <div className="min-w-0 flex-1">
                       <h3 className="truncate text-sm font-semibold">{line.name}</h3>
                       <p className="text-xs text-[#666666]">{line.model ?? line.theme ?? line.tag ?? 'Selected item'}</p>
+                      {(line.selectedSize || line.selectedColor) && (
+                        <p className="mt-1 text-xs text-[#666666]">
+                          {[line.selectedSize && `Size: ${line.selectedSize}`, line.selectedColor && `Color: ${line.selectedColor}`]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </p>
+                      )}
                     </div>
                     <p className="whitespace-nowrap text-right text-sm font-semibold">
                       {formatPrice((line.price ?? 0) * line.quantity)}

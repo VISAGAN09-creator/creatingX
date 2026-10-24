@@ -32,6 +32,10 @@ export type Product = {
   collectionOrder?: number;
   createdAt?: number;
   hero?: string;
+  /** Cart-variant metadata; catalog data never needs to populate these fields. */
+  checkoutProductId?: string;
+  selectedSize?: string;
+  selectedColor?: string;
 };
 
 export type CartLine = Product & {
@@ -42,7 +46,8 @@ export type DataStatus = 'loading' | 'ready' | 'error';
 
 export type ProductColor = {
   name: string;
-  value: string;
+  /** A CSS color only when the source value is safe to render as a swatch. */
+  value?: string;
 };
 
 export type ProductSize = {

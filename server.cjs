@@ -599,6 +599,36 @@ function slugify(value) {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
+function colorLabelsFromValue(value) {
+  if (Array.isArray(value)) return value.flatMap(colorLabelsFromValue);
+  if (typeof value === 'string') return value.split(/[,|/;]+/).map((entry) => entry.trim()).filter(Boolean);
+  if (!value || typeof value !== 'object') return [];
+
+  const record = value;
+  const label = typeof record.name === 'string' ? record.name : typeof record.label === 'string' ? record.label : '';
+  if (label.trim()) return [label.trim()];
+
+  return Object.values(record).flatMap(colorLabelsFromValue);
+}
+
+/** Returns only labels explicitly configured in the product document. */
+function configuredColorLabels(data) {
+  const numberedFields = Object.keys(data)
+    .map((key) => ({ key, match: /^color(\d+)$/i.exec(key) }))
+    .filter((entry) => entry.match)
+    .sort((a, b) => Number(a.match[1]) - Number(b.match[1]))
+    .flatMap((entry) => colorLabelsFromValue(data[entry.key]));
+  const namedFields = colorLabelsFromValue(data.colors ?? data.colorOptions ?? data.color);
+  const seen = new Set();
+
+  return [...namedFields, ...numberedFields].filter((label) => {
+    const normalized = label.trim().toLocaleLowerCase();
+    if (!normalized || seen.has(normalized)) return false;
+    seen.add(normalized);
+    return true;
+  });
+}
+
 /**
  * Resolve a compound React product ID to a Firestore collection + doc.
  * Tries all known collections and returns the first match.
@@ -881,6 +911,34 @@ app.post('/api/create-order', async (req, res) => {
         });
       }
 
+      const configuredColors = configuredColorLabels(product.data);
+      const submittedColor = sanitizeString(item.color ?? item.selectedColor, 100);
+      let selectedColor;
+
+      if (configuredColors.length > 0) {
+        if (!submittedColor) {
+          return res.status(400).json({
+            success: false,
+            message: `Select a color for "${productId}" before checkout.`,
+          });
+        }
+
+        selectedColor = configuredColors.find(
+          (color) => color.toLocaleLowerCase() === submittedColor.toLocaleLowerCase(),
+        );
+        if (!selectedColor) {
+          return res.status(400).json({
+            success: false,
+            message: `Selected color for "${productId}" is unavailable.`,
+          });
+        }
+      } else if (submittedColor) {
+        return res.status(400).json({
+          success: false,
+          message: `Product "${productId}" does not have configurable colors.`,
+        });
+      }
+
       const lineTotal = firestorePrice * quantity;
       totalAmount += lineTotal;
 
@@ -889,6 +947,7 @@ app.post('/api/create-order', async (req, res) => {
         firestoreDocId: product.docId,
         collectionName: product.collectionName,
         selectedSize: product.selectedSize,
+        selectedColor,
         name: product.data.name || product.data.title || product.docId,
         price: firestorePrice,
         quantity,
@@ -951,6 +1010,7 @@ app.post('/api/create-order', async (req, res) => {
         firestoreDocId: i.firestoreDocId,
         collectionName: i.collectionName,
         selectedSize: i.selectedSize,
+        selectedColor: i.selectedColor,
         name: i.name,
         price: i.price,
         quantity: i.quantity,
@@ -1136,6 +1196,7 @@ app.post('/api/verify-payment', async (req, res) => {
             id: sanitizeString(item.productId || item.id, 100),
             name: sanitizeString(item.name, 200),
             size: normalizeSize(item.selectedSize) || undefined,
+            color: sanitizeString(item.selectedColor, 100) || undefined,
             price: Number(item.price) || 0,
             quantity: Number(item.quantity) || 1,
             image: sanitizeString(item.image, 2000),
@@ -1350,6 +1411,7 @@ app.post('/api/cashfree-webhook', async (req, res) => {
         id: sanitizeString(item.productId || item.id, 100),
         name: sanitizeString(item.name, 200),
         size: normalizeSize(item.selectedSize) || undefined,
+        color: sanitizeString(item.selectedColor, 100) || undefined,
         price: Number(item.price) || 0,
         quantity: Number(item.quantity) || 1,
         image: sanitizeString(item.image, 2000),

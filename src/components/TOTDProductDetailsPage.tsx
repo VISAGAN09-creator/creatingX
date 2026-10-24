@@ -17,13 +17,6 @@ type TOTDProductDetailsPageProps = {
   onBack: () => void;
 };
 
-const DEFAULT_COLORS = [
-  { name: 'White', value: '#f5f5f5' },
-  { name: 'Black', value: '#000000' },
-  { name: 'Silver', value: 'linear-gradient(135deg, #c0c0c0, #e8e8e8)' },
-  { name: 'Graphite', value: 'linear-gradient(135deg, #444444, #666666)' },
-];
-
 const DEFAULT_SIZES = [
   { name: 'XXS', stock: 1 },
   { name: 'XS', stock: 1 },
@@ -87,6 +80,7 @@ export function TOTDProductDetailsPage({
   const [currentImage, setCurrentImage] = useState(0);
   const [isZoomed, setIsZoomed] = useState(false);
   const [selectedSize, setSelectedSize] = useState('');
+  const [selectedColor, setSelectedColor] = useState('');
   const [openAccordion, setOpenAccordion] = useState('description');
   const [sizeGuideOpen, setSizeGuideOpen] = useState(false);
 
@@ -120,11 +114,14 @@ export function TOTDProductDetailsPage({
   };
 
   const images = useMemo(() => (product ? productImages(product) : []), [product]);
-  const colors = useMemo(() => (product?.colors?.length ? product.colors : DEFAULT_COLORS), [product]);
+  const colors = useMemo(() => product?.colors ?? [], [product]);
   const sizes = useMemo(() => (product?.sizes?.length ? product.sizes : DEFAULT_SIZES), [product]);
   const sizeGuide = product?.sizeGuide?.length ? product.sizeGuide : DEFAULT_SIZE_GUIDE;
   const selectedSizeData = sizes.find((size) => size.name === selectedSize);
-  const canAddToCart = Boolean(product && selectedSizeData && selectedSizeData.stock > 0 && product.price !== null);
+  const hasColorOptions = colors.length > 0;
+  const canAddToCart = Boolean(
+    product && selectedSizeData && selectedSizeData.stock > 0 && product.price !== null && (!hasColorOptions || selectedColor),
+  );
 
   // Show only other TOTD products in related section
   const relatedTotdProducts = useMemo(() => {
@@ -137,6 +134,7 @@ export function TOTDProductDetailsPage({
     setCurrentImage(0);
     setIsZoomed(false);
     setSelectedSize(sizes.find((size) => size.stock > 0)?.name ?? sizes[0]?.name ?? '');
+    setSelectedColor('');
     setOpenAccordion('description');
   }, [product, colors, sizes]);
 
@@ -176,11 +174,19 @@ export function TOTDProductDetailsPage({
   }, [sizeGuideOpen]);
 
   const addSelectedProduct = () => {
-    if (!product || !selectedSizeData || selectedSizeData.stock <= 0) return;
+    if (!product || !selectedSizeData || selectedSizeData.stock <= 0 || (hasColorOptions && !selectedColor)) return;
+
+    const checkoutProductId = `${product.id}-${selectedSizeData.name}`;
+    const cartId = selectedColor
+      ? `${checkoutProductId}--color-${encodeURIComponent(selectedColor.toLocaleLowerCase())}`
+      : checkoutProductId;
 
     onAddToCart({
       ...product,
-      id: `${product.id}-${selectedSizeData.name}`,
+      id: cartId,
+      checkoutProductId,
+      selectedSize: selectedSizeData.name,
+      selectedColor: selectedColor || undefined,
       name: `${product.name} (${selectedSizeData.name})`,
       image: images[currentImage] ?? product.image,
     });
@@ -380,24 +386,40 @@ export function TOTDProductDetailsPage({
                 </div>
               </div>
 
-              {/* Color Selector */}
-              <div className="mt-6 border-b border-white/10 pb-6">
-                <span className="text-xs font-semibold uppercase tracking-wider text-neutral-400">Color Options</span>
-                <div className="mt-3 flex flex-wrap gap-3">
-                  {colors.map((color) => (
-                    <div
-                      key={color.name}
-                      className="flex items-center gap-2 rounded border border-white/20 bg-neutral-900/60 px-3 py-1.5 text-xs text-white"
-                    >
-                      <span
-                        className="h-3.5 w-3.5 rounded-full border border-white/30"
-                        style={{ background: color.value }}
-                      />
-                      <span>{color.name}</span>
-                    </div>
-                  ))}
+              {hasColorOptions && (
+                <div className="mt-6 border-b border-white/10 pb-6">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
+                    Select Color: <strong className="text-white">{selectedColor || 'None'}</strong>
+                  </span>
+                  <div className="mt-3 flex flex-wrap gap-2.5">
+                    {colors.map((color) => {
+                      const isSelected = selectedColor === color.name;
+                      return (
+                        <button
+                          key={color.name}
+                          type="button"
+                          aria-pressed={isSelected}
+                          onClick={() => setSelectedColor(color.name)}
+                          className={`inline-flex min-h-11 items-center gap-2.5 border px-3 text-xs font-semibold transition ${
+                            isSelected
+                              ? 'border-white bg-white text-black'
+                              : 'border-white/20 bg-neutral-900 text-white hover:border-white'
+                          }`}
+                        >
+                          {color.value && (
+                            <span
+                              className="h-4 w-4 rounded-full border border-white/30 bg-black"
+                              style={{ backgroundColor: color.value }}
+                              aria-hidden="true"
+                            />
+                          )}
+                          {color.name}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Size Selector */}
               <div className="mt-6 border-b border-white/10 pb-6">
@@ -458,6 +480,8 @@ export function TOTDProductDetailsPage({
                     ? 'Out of Stock'
                     : canAddToCart
                     ? `Add to Cart — ${priceText(product)}`
+                    : hasColorOptions && !selectedColor
+                    ? 'Select a color'
                     : 'Select a size'}
                 </MagneticButton>
               </div>

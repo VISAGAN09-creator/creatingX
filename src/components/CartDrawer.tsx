@@ -115,6 +115,13 @@ export function CartDrawer({
                           <div>
                             <h3 className="font-display text-lg font-semibold text-black">{line.name}</h3>
                             <p className="text-sm text-metal-text">{formatPrice(line.price)}</p>
+                            {(line.selectedSize || line.selectedColor) && (
+                              <p className="mt-1 text-xs text-metal-text">
+                                {[line.selectedSize && `Size: ${line.selectedSize}`, line.selectedColor && `Color: ${line.selectedColor}`]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              </p>
+                            )}
                           </div>
                           <button
                             type="button"

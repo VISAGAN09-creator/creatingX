@@ -15,13 +15,6 @@ type ProductDetailsPageProps = {
   onBack: () => void;
 };
 
-const DEFAULT_COLORS = [
-  { name: 'White', value: '#f5f5f5' },
-  { name: 'Black', value: '#000000' },
-  { name: 'Silver', value: 'linear-gradient(135deg, #c0c0c0, #e8e8e8)' },
-  { name: 'Graphite', value: 'linear-gradient(135deg, #444444, #666666)' },
-];
-
 const DEFAULT_SIZE_GUIDE = [
   { size: 'XXS', toFitChest: '34', Chest: '40', Length: '28', shoulder: '19' },
   { size: 'XS', toFitChest: '36', Chest: '42', Length: '28.5', shoulder: '20' },
@@ -110,6 +103,7 @@ export function ProductDetailsPage({
   const [currentImage, setCurrentImage] = useState(0);
   const [isZoomed, setIsZoomed] = useState(false);
   const [selectedSize, setSelectedSize] = useState('');
+  const [selectedColor, setSelectedColor] = useState('');
   const [openAccordion, setOpenAccordion] = useState('description');
   const [sizeGuideOpen, setSizeGuideOpen] = useState(false);
 
@@ -143,11 +137,14 @@ export function ProductDetailsPage({
   };
 
   const images = useMemo(() => (product ? productImages(product) : []), [product]);
-  const colors = useMemo(() => (product?.colors?.length ? product.colors : DEFAULT_COLORS), [product]);
+  const colors = useMemo(() => product?.colors ?? [], [product]);
   const sizes = useMemo(() => product?.sizes ?? [], [product]);
   const sizeGuide = product?.sizeGuide?.length ? product.sizeGuide : DEFAULT_SIZE_GUIDE;
   const selectedSizeData = sizes.find((size) => size.name === selectedSize);
-  const canAddToCart = Boolean(product && selectedSizeData && selectedSizeData.stock > 0 && product.price !== null);
+  const hasColorOptions = colors.length > 0;
+  const canAddToCart = Boolean(
+    product && selectedSizeData && selectedSizeData.stock > 0 && product.price !== null && (!hasColorOptions || selectedColor),
+  );
   const related = useMemo(() => (product ? relatedProducts(products, product) : []), [product, products]);
 
   useEffect(() => {
@@ -155,6 +152,7 @@ export function ProductDetailsPage({
     setCurrentImage(0);
     setIsZoomed(false);
     setSelectedSize(sizes.find((size) => size.stock > 0)?.name ?? sizes[0]?.name ?? '');
+    setSelectedColor('');
     setOpenAccordion('description');
   }, [product, colors, sizes]);
 
@@ -214,11 +212,19 @@ export function ProductDetailsPage({
   }, [sizeGuideOpen]);
 
   const addSelectedProduct = () => {
-    if (!product || !selectedSizeData || selectedSizeData.stock <= 0) return;
+    if (!product || !selectedSizeData || selectedSizeData.stock <= 0 || (hasColorOptions && !selectedColor)) return;
+
+    const checkoutProductId = `${product.id}-${selectedSizeData.name}`;
+    const cartId = selectedColor
+      ? `${checkoutProductId}--color-${encodeURIComponent(selectedColor.toLocaleLowerCase())}`
+      : checkoutProductId;
 
     onAddToCart({
       ...product,
-      id: `${product.id}-${selectedSizeData.name}`,
+      id: cartId,
+      checkoutProductId,
+      selectedSize: selectedSizeData.name,
+      selectedColor: selectedColor || undefined,
       name: `${product.name} (${selectedSizeData.name})`,
       image: images[currentImage] ?? product.image,
     });
@@ -408,6 +414,41 @@ export function ProductDetailsPage({
             </div>
 
             <div className="my-7 h-px w-full bg-metal-light" />
+
+            {hasColorOptions && (
+              <div className="mb-7 border-b border-metal-light pb-7">
+                <p className="mb-3.5 text-[11px] font-bold uppercase tracking-[0.16em] text-black">
+                  Color - <span className="text-metal-text">{selectedColor || 'Select'}</span>
+                </p>
+                <div className="flex flex-wrap gap-2.5">
+                  {colors.map((color) => {
+                    const isSelected = selectedColor === color.name;
+                    return (
+                      <button
+                        key={color.name}
+                        type="button"
+                        aria-pressed={isSelected}
+                        onClick={() => setSelectedColor(color.name)}
+                        className={`inline-flex min-h-11 items-center gap-2.5 border px-3 text-xs font-semibold tracking-[0.04em] transition ${
+                          isSelected
+                            ? 'border-black bg-black text-white'
+                            : 'border-metal-light bg-transparent text-black hover:border-black'
+                        }`}
+                      >
+                        {color.value && (
+                          <span
+                            className="h-4 w-4 rounded-full border border-black/20 bg-white"
+                            style={{ backgroundColor: color.value }}
+                            aria-hidden="true"
+                          />
+                        )}
+                        {color.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="mb-7">
               <div className="mb-3.5 flex items-center justify-between gap-4">

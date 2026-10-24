@@ -41,6 +41,8 @@ export type AdminOrder = {
     image?: string;
     price?: number;
     quantity?: number;
+    size?: string;
+    color?: string;
   }>;
   pricing: {
     subtotal?: number;
