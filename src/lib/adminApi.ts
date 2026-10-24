@@ -22,12 +22,16 @@ export type FulfillmentStatus = 'production' | 'out_for_delivery' | 'delivered';
 export type AdminOrder = {
   orderId: string;
   customer: {
+    name?: string;
     firstName?: string;
     lastName?: string;
     email?: string;
     phone?: string;
   };
   shipping: {
+    doorNo?: string;
+    addressLine1?: string;
+    addressLine2?: string;
     address?: string;
     apartment?: string;
     city?: string;

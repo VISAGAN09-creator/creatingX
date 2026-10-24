@@ -873,6 +873,11 @@ app.post('/api/create-order', async (req, res) => {
     });
   }
 
+  const checkoutDetails = validateCheckoutDetails(customer, shipping);
+  if (!checkoutDetails.valid) {
+    return res.status(400).json({ success: false, message: `Validation Error: ${checkoutDetails.message}` });
+  }
+
   try {
     // --- Resolve each item from Firestore and compute authoritative prices ---
     const resolvedItems = [];
@@ -1028,9 +1033,9 @@ app.post('/api/create-order', async (req, res) => {
     const returnUrl = configuredReturnUrl || `${origin}/#payment-return`;
 
     // --- Build customer info ---
-    const customerName = typeof customer?.name === 'string' ? customer.name.trim() : 'Customer';
-    const customerEmail = typeof customer?.email === 'string' ? customer.email.trim() : '';
-    const customerPhone = typeof customer?.phone === 'string' ? customer.phone.replace(/[^0-9+]/g, '') : '';
+    const customerName = checkoutDetails.customer.name;
+    const customerEmail = checkoutDetails.customer.email;
+    const customerPhone = checkoutDetails.customer.phone;
 
     console.log(`[Payment] Creating order: ${resolvedItems.length} item(s), total: ${totalAmount} INR`);
 
@@ -1059,7 +1064,7 @@ app.post('/api/create-order', async (req, res) => {
         email: customerEmail,
         phone: customerPhone,
       },
-      shipping: shipping || {},
+      shipping: checkoutDetails.shipping,
       status: 'pending',
       createdAt: new Date().toISOString(),
     };
@@ -1109,6 +1114,47 @@ app.post('/api/create-order', async (req, res) => {
 function sanitizeString(value, maxLength = 500) {
   if (typeof value !== 'string') return '';
   return value.replace(/<[^>]*>/g, '').trim().slice(0, maxLength);
+}
+
+function validateCheckoutDetails(customer, shipping) {
+  const name = sanitizeString(customer?.name, 200).replace(/\s+/g, ' ');
+  const email = sanitizeString(customer?.email, 254).toLowerCase();
+  const phone = typeof customer?.phone === 'string' ? customer.phone.trim() : '';
+  const country = sanitizeString(shipping?.country, 5).toUpperCase();
+  const doorNo = sanitizeString(shipping?.doorNo, 100);
+  const addressLine1 = sanitizeString(shipping?.addressLine1, 500);
+  const addressLine2 = sanitizeString(shipping?.addressLine2, 500);
+  const city = sanitizeString(shipping?.city, 100);
+  const state = sanitizeString(shipping?.state, 100);
+  const pinCode = typeof shipping?.pinCode === 'string' ? shipping.pinCode.trim() : '';
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { valid: false, message: 'Provide a valid email address.' };
+  if (!name) return { valid: false, message: 'Name is required.' };
+  if (!doorNo) return { valid: false, message: 'Door No. is required.' };
+  if (!addressLine1) return { valid: false, message: 'Address Line 1 is required.' };
+  if (!city) return { valid: false, message: 'City is required.' };
+  if (!state) return { valid: false, message: 'State is required.' };
+  if (!country) return { valid: false, message: 'Country/Region is required.' };
+  if (!/^\d{10}$/.test(phone)) return { valid: false, message: 'Phone number must contain exactly 10 digits.' };
+  if (country === 'IN' && !/^\d{6}$/.test(pinCode)) return { valid: false, message: 'Indian pincode must contain exactly 6 digits.' };
+  if (!pinCode) return { valid: false, message: 'Pincode is required.' };
+
+  return {
+    valid: true,
+    customer: { name, email, phone },
+    shipping: {
+      country,
+      doorNo,
+      addressLine1,
+      addressLine2,
+      city,
+      state,
+      pinCode,
+      // Retain aliases while downstream readers migrate to the explicit fields.
+      address: addressLine1,
+      apartment: addressLine2,
+    },
+  };
 }
 
 function escapeHtml(str) {
@@ -1214,14 +1260,18 @@ app.post('/api/verify-payment', async (req, res) => {
         const finalOrderData = {
           customer: {
             email: sanitizeString(customer.email, 254),
+            name: sanitizeString(customer.name, 200),
             firstName: sanitizeString(customer.name?.split(' ')[0] || customer.firstName || '', 100),
             lastName: sanitizeString(customer.name?.split(' ').slice(1).join(' ') || customer.lastName || '', 100),
             phone: sanitizeString(customer.phone, 20),
           },
           shipping: {
             country: sanitizeString(shipping.country, 5),
-            address: sanitizeString(shipping.address, 500),
-            apartment: sanitizeString(shipping.apartment, 200),
+            doorNo: sanitizeString(shipping.doorNo, 100),
+            addressLine1: sanitizeString(shipping.addressLine1 ?? shipping.address, 500),
+            addressLine2: sanitizeString(shipping.addressLine2 ?? shipping.apartment, 500),
+            address: sanitizeString(shipping.addressLine1 ?? shipping.address, 500),
+            apartment: sanitizeString(shipping.addressLine2 ?? shipping.apartment, 500),
             city: sanitizeString(shipping.city, 100),
             state: sanitizeString(shipping.state, 100),
             pinCode: sanitizeString(shipping.pinCode, 10),
@@ -1432,14 +1482,18 @@ app.post('/api/cashfree-webhook', async (req, res) => {
     const finalOrderData = {
       customer: {
         email: sanitizeString(customer.email, 254),
+        name: sanitizeString(customer.name, 200),
         firstName: sanitizeString(customer.name?.split(' ')[0] || '', 100),
         lastName: sanitizeString(customer.name?.split(' ').slice(1).join(' ') || '', 100),
         phone: sanitizeString(customer.phone, 20),
       },
       shipping: {
         country: sanitizeString(shipping.country, 5),
-        address: sanitizeString(shipping.address, 500),
-        apartment: sanitizeString(shipping.apartment, 200),
+        doorNo: sanitizeString(shipping.doorNo, 100),
+        addressLine1: sanitizeString(shipping.addressLine1 ?? shipping.address, 500),
+        addressLine2: sanitizeString(shipping.addressLine2 ?? shipping.apartment, 500),
+        address: sanitizeString(shipping.addressLine1 ?? shipping.address, 500),
+        apartment: sanitizeString(shipping.addressLine2 ?? shipping.apartment, 500),
         city: sanitizeString(shipping.city, 100),
         state: sanitizeString(shipping.state, 100),
         pinCode: sanitizeString(shipping.pinCode, 10),

@@ -10,7 +10,7 @@ type PaymentReturnPageProps = {
 
 type VerificationState =
   | { status: 'loading' }
-  | { status: 'success'; firestoreOrderId: string; order: { items: { id: string; name: string; price: number; quantity: number }[]; totalAmount: number; customer: { firstName: string; lastName: string; email: string } } | null }
+  | { status: 'success'; firestoreOrderId: string; order: { items: { id: string; name: string; price: number; quantity: number }[]; totalAmount: number; customer: { name?: string; firstName?: string; lastName?: string; email: string } } | null }
   | { status: 'failed'; message: string; paymentStatus?: string }
   | { status: 'error'; message: string };
 
@@ -78,7 +78,7 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
   try {
     const ctx = JSON.parse(sessionStorage.getItem('cashfree_checkout_context') || '{}');
     checkoutEmail = ctx.email || '';
-    checkoutName = [ctx.firstName, ctx.lastName].filter(Boolean).join(' ');
+    checkoutName = ctx.fullName || [ctx.firstName, ctx.lastName].filter(Boolean).join(' ');
   } catch { /* ignore */ }
 
   return (
@@ -144,12 +144,12 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
                     <span className="font-semibold">{state.order.customer?.email || checkoutEmail}</span>
                   </div>
                 )}
-                {(state.order.customer?.firstName || checkoutName) && (
+                {(state.order.customer?.name || state.order.customer?.firstName || checkoutName) && (
                   <div className="flex justify-between text-[13px]">
                     <span className="text-[#666666]">Customer</span>
                     <span className="font-semibold">
                       {state.order.customer
-                        ? `${state.order.customer.firstName} ${state.order.customer.lastName}`.trim()
+                        ? state.order.customer.name || `${state.order.customer.firstName || ''} ${state.order.customer.lastName || ''}`.trim()
                         : checkoutName}
                     </span>
                   </div>

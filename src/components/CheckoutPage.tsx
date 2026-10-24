@@ -1,4 +1,4 @@
-import { HelpCircle, Search } from 'lucide-react';
+import { HelpCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { CartLine } from '../types';
 import { formatPrice } from '../utils/format';
@@ -16,15 +16,31 @@ type CheckoutPageProps = {
 
 type ToastState = { message: string; type?: 'success' | 'error' } | null;
 
+type CheckoutDetails = {
+  email: string;
+  fullName: string;
+  phone: string;
+  country: string;
+  doorNo: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  pinCode: string;
+};
+
+function trimText(value: string) {
+  return value.trim().replace(/\s+/g, ' ');
+}
+
 export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutPageProps) {
   const [email, setEmail] = useState('');
-  const [marketingOptIn, setMarketingOptIn] = useState(true);
   const [country, setCountry] = useState('IN');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [address, setAddress] = useState('');
-  const [apartment, setApartment] = useState('');
-  const [city, setCity] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [doorNo, setDoorNo] = useState('');
+  const [addressLine1, setAddressLine1] = useState('');
+  const [addressLine2, setAddressLine2] = useState('');
+  const [city, setCity] = useState('Chennai');
   const [state, setState] = useState('TN');
   const [pinCode, setPinCode] = useState('');
   const [phone, setPhone] = useState('');
@@ -53,46 +69,81 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
   };
 
   const validateEmail = () => {
-    if (!email) return true;
-
-    const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    const normalizedEmail = trimText(email);
+    setEmail(normalizedEmail);
+    const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
     if (!isValid) {
       setErrors((current) => new Set(current).add('email'));
-      showToast('Please enter a valid email address', 'error');
+      showToast('Enter a valid email address.', 'error');
     }
 
     return isValid;
   };
 
+  const validateRequiredFields = (): CheckoutDetails | null => {
+    const details: CheckoutDetails = {
+      email: trimText(email),
+      fullName: trimText(fullName),
+      phone: phone.replace(/\D/g, ''),
+      country,
+      doorNo: trimText(doorNo),
+      addressLine1: trimText(addressLine1),
+      addressLine2: trimText(addressLine2),
+      city: trimText(city),
+      state,
+      pinCode: pinCode.replace(/\D/g, ''),
+    };
+    const nextErrors = new Set<string>();
+    let message = '';
+    const requireField = (field: keyof CheckoutDetails, label: string) => {
+      if (!details[field]) {
+        nextErrors.add(field);
+        message ||= `${label} is required.`;
+      }
+    };
 
+    requireField('email', 'Email');
+    requireField('fullName', 'Name');
+    requireField('doorNo', 'Door No.');
+    requireField('addressLine1', 'Address Line 1');
+    requireField('city', 'City');
+    requireField('state', 'State');
+    requireField('pinCode', 'Pincode');
+    requireField('phone', 'Phone number');
 
-
-
-  const validateRequiredFields = () => {
-    const requiredFields = [
-      ['email', email],
-      ['firstName', firstName],
-      ['lastName', lastName],
-      ['address', address],
-      ['city', city],
-      ['pinCode', pinCode],
-      ['phone', phone],
-    ];
-    const nextErrors = new Set(
-      requiredFields.filter(([, value]) => !value.trim()).map(([field]) => field),
-    );
+    if (details.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(details.email)) {
+      nextErrors.add('email');
+      message ||= 'Enter a valid email address.';
+    }
+    if (details.phone && !/^\d{10}$/.test(details.phone)) {
+      nextErrors.add('phone');
+      message ||= 'Phone number must contain exactly 10 digits.';
+    }
+    if (details.country === 'IN' && details.pinCode && !/^\d{6}$/.test(details.pinCode)) {
+      nextErrors.add('pinCode');
+      message ||= 'Indian pincode must contain exactly 6 digits.';
+    }
 
     setErrors(nextErrors);
     if (nextErrors.size > 0) {
-      showToast('Please fill in all required fields', 'error');
-      return false;
+      showToast(message || 'Please check the highlighted fields.', 'error');
+      return null;
     }
 
-    return validateEmail();
+    setEmail(details.email);
+    setFullName(details.fullName);
+    setDoorNo(details.doorNo);
+    setAddressLine1(details.addressLine1);
+    setAddressLine2(details.addressLine2);
+    setCity(details.city);
+    setPinCode(details.pinCode);
+    setPhone(details.phone);
+    return details;
   };
 
   const handlePayNow = async () => {
-    if (!validateRequiredFields()) return;
+    const details = validateRequiredFields();
+    if (!details) return;
     if (lines.length === 0 || total <= 0) {
       showToast('Your cart is empty', 'error');
       return;
@@ -123,11 +174,19 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
             color: line.selectedColor,
           })),
           customer: {
-            email,
-            phone,
-            name: [firstName, lastName].filter(Boolean).join(' '),
+            email: details.email,
+            phone: details.phone,
+            name: details.fullName,
           },
-          shipping: { country, address, apartment, city, state, pinCode },
+          shipping: {
+            country: details.country,
+            doorNo: details.doorNo,
+            addressLine1: details.addressLine1,
+            addressLine2: details.addressLine2,
+            city: details.city,
+            state: details.state,
+            pinCode: details.pinCode,
+          },
         }),
       });
 
@@ -152,9 +211,8 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
         sessionStorage.setItem(
           'cashfree_checkout_context',
           JSON.stringify({
-            email,
-            firstName,
-            lastName,
+            email: details.email,
+            fullName: details.fullName,
             orderId: orderData.gatewayData?.order_id,
           }),
         );
@@ -165,9 +223,9 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
       // Step 2: Open the gateway's checkout UI (this will redirect for Cashfree)
       openCheckout(
         {
-          email,
-          phone,
-          name: [firstName, lastName].filter(Boolean).join(' '),
+          email: details.email,
+          phone: details.phone,
+          name: details.fullName,
           itemCount,
           orderData,
         },
@@ -262,7 +320,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
             </div>
             <div className="flex justify-between text-[13px]">
               <span className="text-[#666666]">Shipping To</span>
-              <span className="font-semibold">{firstName} {lastName}</span>
+              <span className="font-semibold">{fullName}</span>
             </div>
           </div>
 
@@ -319,16 +377,8 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
 
       <div className="grid min-h-[calc(100vh-73px)] grid-cols-1 lg:grid-cols-2">
         <div className="order-1 w-full px-6 py-8 sm:px-8 lg:ml-auto lg:max-w-[640px] lg:px-12 lg:py-10">
-          <div className="mb-5 flex items-center justify-between">
+          <div className="mb-5">
             <h2 className="font-display text-[22px] font-bold tracking-normal">Contact</h2>
-            <button
-              type="button"
-             
-              className="text-[13px] text-[#0066cc] transition hover:underline"
-              onClick={() => showToast('Sign in modal coming soon')}
-            >
-              Sign in
-            </button>
           </div>
 
           <div className="mb-4">
@@ -342,16 +392,6 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
               className={inputClass('email')}
             />
           </div>
-
-          <label className="mb-7 flex cursor-pointer items-center gap-2.5">
-            <input
-              type="checkbox"
-              checked={marketingOptIn}
-              onChange={(event) => setMarketingOptIn(event.target.checked)}
-              className="h-[18px] w-[18px] cursor-pointer accent-[#1a1a1a]"
-            />
-            <span className="cursor-pointer text-[13px]">Email me with news and offers</span>
-          </label>
 
           <div className="mb-5 mt-8">
             <h2 className="font-display text-[22px] font-bold tracking-normal">Delivery</h2>
@@ -374,56 +414,46 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
             </select>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="mb-4">
-              <input
-                value={firstName}
-                onFocus={() => clearError('firstName')}
-                onChange={(event) => setFirstName(event.target.value)}
-                placeholder="First name"
-                className={inputClass('firstName')}
-              />
-            </div>
-            <div className="mb-4">
-              <input
-                value={lastName}
-                onFocus={() => clearError('lastName')}
-                onChange={(event) => setLastName(event.target.value)}
-                placeholder="Last name"
-                className={inputClass('lastName')}
-              />
-            </div>
-          </div>
-
           <div className="mb-4">
-            <div className="relative">
-              <input
-                value={address}
-                onFocus={() => clearError('address')}
-                onChange={(event) => {
-                  setAddress(event.target.value);
-                }}
-                placeholder="Address"
-                className={`${inputClass('address')} pr-12`}
-              />
-              <button
-                type="button"
-               
-                aria-label="Search address"
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#999999]"
-                onClick={() => showToast('Search address')}
-              >
-                <Search size={18} strokeWidth={1.5} />
-              </button>
-            </div>
+            <input
+              value={fullName}
+              onFocus={() => clearError('fullName')}
+              onChange={(event) => setFullName(event.target.value)}
+              placeholder="Name"
+              autoComplete="name"
+              className={inputClass('fullName')}
+            />
           </div>
 
           <div className="mb-4">
             <input
-              value={apartment}
-              onChange={(event) => setApartment(event.target.value)}
-              placeholder="Apartment, suite, etc. (optional)"
-              className={inputClass('apartment')}
+              value={doorNo}
+              onFocus={() => clearError('doorNo')}
+              onChange={(event) => setDoorNo(event.target.value)}
+              placeholder="Door No."
+              autoComplete="address-line1"
+              className={inputClass('doorNo')}
+            />
+          </div>
+
+          <div className="mb-4">
+            <input
+              value={addressLine1}
+              onFocus={() => clearError('addressLine1')}
+              onChange={(event) => setAddressLine1(event.target.value)}
+              placeholder="Address Line 1"
+              autoComplete="street-address"
+              className={inputClass('addressLine1')}
+            />
+          </div>
+
+          <div className="mb-4">
+            <input
+              value={addressLine2}
+              onChange={(event) => setAddressLine2(event.target.value)}
+              placeholder="Address Line 2 (optional)"
+              autoComplete="address-line2"
+              className={inputClass('addressLine2')}
             />
           </div>
 
@@ -434,14 +464,19 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
                 onFocus={() => clearError('city')}
                 onChange={(event) => setCity(event.target.value)}
                 placeholder="City"
+                autoComplete="address-level2"
                 className={inputClass('city')}
               />
             </div>
             <div className="mb-4">
               <select
                 value={state}
-                onChange={(event) => setState(event.target.value)}
-                className="h-12 w-full rounded-lg border border-[#e0e0e0] bg-white px-3.5 text-sm text-[#1a1a1a] outline-none transition focus:border-[#1a1a1a] focus:shadow-[0_0_0_3px_rgba(0,0,0,0.04)]"
+                onFocus={() => clearError('state')}
+                onChange={(event) => {
+                  clearError('state');
+                  setState(event.target.value);
+                }}
+                className={inputClass('state')}
               >
                 <option value="" disabled>
                   Select state
@@ -462,12 +497,14 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
               <input
                 value={pinCode}
                 maxLength={6}
+                inputMode="numeric"
+                autoComplete="postal-code"
                 onFocus={() => clearError('pinCode')}
                 onChange={(event) => {
                   const nextPinCode = event.target.value.replace(/[^0-9]/g, '');
                   setPinCode(nextPinCode);
                 }}
-                placeholder="PIN code"
+                placeholder="Pincode"
                 className={inputClass('pinCode')}
               />
             </div>
@@ -478,9 +515,12 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
               <input
                 type="tel"
                 value={phone}
+                inputMode="numeric"
+                autoComplete="tel-national"
+                maxLength={10}
                 onFocus={() => clearError('phone')}
-                onChange={(event) => setPhone(event.target.value.replace(/[^0-9+\-\s]/g, ''))}
-                placeholder="Phone"
+                onChange={(event) => setPhone(event.target.value.replace(/\D/g, '').slice(0, 10))}
+                placeholder="Phone Number"
                 className={`${inputClass('phone')} pr-12`}
               />
               <button
