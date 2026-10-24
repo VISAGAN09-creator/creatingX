@@ -3,8 +3,8 @@ import { Menu, ShoppingBag, X, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { navLinks } from '../data/siteData';
 import { scrollToHash } from '../utils/scroll';
+import { BrandLogo } from './BrandLogo';
 import { MagneticButton } from './Magnetic';
-import logo from '../assets/logo.png';
 
 type NavbarProps = {
   cartCount: number;
@@ -45,7 +45,7 @@ export function Navbar({ cartCount, onCartOpen, onSearchOpen, onNavigate, active
   };
 
   return (
-    <header className="fixed left-0 top-0 z-[1000] w-full border-b border-metal-light bg-white/90 px-5 py-5 backdrop-blur-xl sm:px-8 lg:px-12">
+    <header className="fixed left-0 top-0 z-[1000] w-full border-b border-metal-light bg-white/90 px-5 py-2  backdrop-blur-xl sm:px-8 lg:px-12">
       <nav className="mx-auto flex max-w-shell items-center justify-between gap-5">
         <button
           type="button"
@@ -58,7 +58,11 @@ export function Navbar({ cartCount, onCartOpen, onSearchOpen, onNavigate, active
               Thoughts Of The Day
             </span>
           ) : (
-            <img src={logo} alt="METALFLUX" className="h-9 sm:h-11 w-auto object-contain" />
+            <BrandLogo
+              containerClassName="h-12 w-[145px] sm:h-14"
+              imageClassName="h-full w-full object-contain"
+              fallbackClassName="flex h-full w-full items-center font-display text-xl font-bold tracking-wider text-black sm:text-2xl"
+            />
           )}
         </button>
 
