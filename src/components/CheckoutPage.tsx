@@ -118,6 +118,8 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
           items: lines.map((line) => ({
             id: line.checkoutProductId ?? line.id,
             quantity: line.quantity,
+            mensSize: line.selectedMensSize,
+            womensSize: line.selectedWomensSize,
             color: line.selectedColor,
           })),
           customer: {
@@ -516,9 +518,14 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
                     <div className="min-w-0 flex-1">
                       <h3 className="truncate text-sm font-semibold">{line.name}</h3>
                       <p className="text-xs text-[#666666]">{line.model ?? line.theme ?? line.tag ?? 'Selected item'}</p>
-                      {(line.selectedSize || line.selectedColor) && (
+                      {(line.selectedSize || line.selectedMensSize || line.selectedWomensSize || line.selectedColor) && (
                         <p className="mt-1 text-xs text-[#666666]">
-                          {[line.selectedSize && `Size: ${line.selectedSize}`, line.selectedColor && `Color: ${line.selectedColor}`]
+                          {[
+                            line.selectedSize && `Size: ${line.selectedSize}`,
+                            line.selectedMensSize && `Men's size: ${line.selectedMensSize}`,
+                            line.selectedWomensSize && `Women's size: ${line.selectedWomensSize}`,
+                            line.selectedColor && `Color: ${line.selectedColor}`,
+                          ]
                             .filter(Boolean)
                             .join(' · ')}
                         </p>

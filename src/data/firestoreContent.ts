@@ -376,6 +376,7 @@ function toProduct(id: string, data: DocumentData, sourceCollectionName = produc
     galleryImages,
     colors,
     sizes: mappedSizes,
+    isCouple: booleanValue(data.couple) === true,
     sizeGuide: sizeGuideList(data.sizeGuide),
     theme: sourceLabel,
     collectionImage:

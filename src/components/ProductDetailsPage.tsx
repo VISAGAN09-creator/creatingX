@@ -103,6 +103,8 @@ export function ProductDetailsPage({
   const [currentImage, setCurrentImage] = useState(0);
   const [isZoomed, setIsZoomed] = useState(false);
   const [selectedSize, setSelectedSize] = useState('');
+  const [selectedMensSize, setSelectedMensSize] = useState('');
+  const [selectedWomensSize, setSelectedWomensSize] = useState('');
   const [selectedColor, setSelectedColor] = useState('');
   const [openAccordion, setOpenAccordion] = useState('description');
   const [sizeGuideOpen, setSizeGuideOpen] = useState(false);
@@ -141,9 +143,22 @@ export function ProductDetailsPage({
   const sizes = useMemo(() => product?.sizes ?? [], [product]);
   const sizeGuide = product?.sizeGuide?.length ? product.sizeGuide : DEFAULT_SIZE_GUIDE;
   const selectedSizeData = sizes.find((size) => size.name === selectedSize);
+  const selectedMensSizeData = sizes.find((size) => size.name === selectedMensSize);
+  const selectedWomensSizeData = sizes.find((size) => size.name === selectedWomensSize);
+  const isCoupleProduct = product?.isCouple === true;
+  const coupleSizesInStock = Boolean(
+    selectedMensSizeData &&
+    selectedWomensSizeData &&
+    selectedMensSizeData.stock > 0 &&
+    selectedWomensSizeData.stock > 0 &&
+    (selectedMensSize !== selectedWomensSize || selectedMensSizeData.stock >= 2),
+  );
   const hasColorOptions = colors.length > 0;
   const canAddToCart = Boolean(
-    product && selectedSizeData && selectedSizeData.stock > 0 && product.price !== null && (!hasColorOptions || selectedColor),
+    product &&
+      product.price !== null &&
+      (isCoupleProduct ? coupleSizesInStock : selectedSizeData && selectedSizeData.stock > 0) &&
+      (!hasColorOptions || selectedColor),
   );
   const related = useMemo(() => (product ? relatedProducts(products, product) : []), [product, products]);
 
@@ -151,7 +166,9 @@ export function ProductDetailsPage({
     if (!product) return;
     setCurrentImage(0);
     setIsZoomed(false);
-    setSelectedSize(sizes.find((size) => size.stock > 0)?.name ?? sizes[0]?.name ?? '');
+    setSelectedSize(isCoupleProduct ? '' : sizes.find((size) => size.stock > 0)?.name ?? sizes[0]?.name ?? '');
+    setSelectedMensSize('');
+    setSelectedWomensSize('');
     setSelectedColor('');
     setOpenAccordion('description');
   }, [product, colors, sizes]);
@@ -212,20 +229,27 @@ export function ProductDetailsPage({
   }, [sizeGuideOpen]);
 
   const addSelectedProduct = () => {
-    if (!product || !selectedSizeData || selectedSizeData.stock <= 0 || (hasColorOptions && !selectedColor)) return;
+    if (!product || !canAddToCart) return;
 
-    const checkoutProductId = `${product.id}-${selectedSizeData.name}`;
-    const cartId = selectedColor
-      ? `${checkoutProductId}--color-${encodeURIComponent(selectedColor.toLocaleLowerCase())}`
-      : checkoutProductId;
+    const checkoutProductId = isCoupleProduct ? product.id : `${product.id}-${selectedSizeData?.name}`;
+    const sizeVariant = isCoupleProduct
+      ? `--mens-${encodeURIComponent(selectedMensSize)}--womens-${encodeURIComponent(selectedWomensSize)}`
+      : '';
+    const colorVariant = selectedColor ? `--color-${encodeURIComponent(selectedColor.toLocaleLowerCase())}` : '';
+    const cartId = `${checkoutProductId}${sizeVariant}${colorVariant}`;
+    const selectedLabel = isCoupleProduct
+      ? `Men: ${selectedMensSize}, Women: ${selectedWomensSize}`
+      : selectedSizeData?.name;
 
     onAddToCart({
       ...product,
       id: cartId,
       checkoutProductId,
-      selectedSize: selectedSizeData.name,
+      selectedSize: isCoupleProduct ? undefined : selectedSizeData?.name,
+      selectedMensSize: isCoupleProduct ? selectedMensSize : undefined,
+      selectedWomensSize: isCoupleProduct ? selectedWomensSize : undefined,
       selectedColor: selectedColor || undefined,
-      name: `${product.name} (${selectedSizeData.name})`,
+      name: `${product.name} (${selectedLabel})`,
       image: images[currentImage] ?? product.image,
     });
   };
@@ -453,11 +477,10 @@ export function ProductDetailsPage({
             <div className="mb-7">
               <div className="mb-3.5 flex items-center justify-between gap-4">
                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-black">
-                  Size - <span className="text-metal-text">{selectedSize || 'Select'}</span>
+                  {isCoupleProduct ? 'Select both sizes' : <>Size - <span className="text-metal-text">{selectedSize || 'Select'}</span></>}
                 </p>
                 <button
                   type="button"
-                 
                   className="inline-flex items-center gap-2 text-[11px] font-medium text-metal-text underline underline-offset-4 transition hover:text-black"
                   onClick={() => setSizeGuideOpen(true)}
                 >
@@ -466,30 +489,67 @@ export function ProductDetailsPage({
                 </button>
               </div>
 
-              <div className="flex flex-wrap gap-2.5">
-                {sizes.length === 0 && <p className="text-sm text-metal-text">No sizes are currently configured for this product.</p>}
-                {sizes.map((size) => {
-                  const isOutOfStock = size.stock <= 0;
-                  return (
-                    <button
-                      key={size.name}
-                      type="button"
-                     
-                      disabled={isOutOfStock}
-                      aria-pressed={selectedSize === size.name}
-                      title={isOutOfStock ? `${size.name} out of stock` : undefined}
-                      className={`min-h-11 min-w-[52px] border px-4 text-xs font-semibold tracking-[0.04em] transition ${
-                        selectedSize === size.name
-                          ? 'border-black bg-black text-white'
-                          : 'border-metal-light bg-transparent text-black enabled:hover:border-black'
-                      } ${isOutOfStock ? 'cursor-not-allowed opacity-30 line-through' : ''}`}
-                      onClick={() => setSelectedSize(size.name)}
-                    >
-                      {size.name}
-                    </button>
-                  );
-                })}
-              </div>
+              {sizes.length === 0 ? (
+                <p className="text-sm text-metal-text">No sizes are currently configured for this product.</p>
+              ) : isCoupleProduct ? (
+                <div className="space-y-5">
+                  {[
+                    { label: "Men's Size", selected: selectedMensSize, setSelected: setSelectedMensSize, otherSelected: selectedWomensSize },
+                    { label: "Women's Size", selected: selectedWomensSize, setSelected: setSelectedWomensSize, otherSelected: selectedMensSize },
+                  ].map(({ label, selected, setSelected, otherSelected }) => (
+                    <div key={label}>
+                      <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.16em] text-black">
+                        {label} - <span className="text-metal-text">{selected || 'Select'}</span>
+                      </p>
+                      <div className="flex flex-wrap gap-2.5">
+                        {sizes.map((size) => {
+                          const isOutOfStock = size.stock <= 0 || (otherSelected === size.name && size.stock < 2);
+                          return (
+                            <button
+                              key={size.name}
+                              type="button"
+                              disabled={isOutOfStock}
+                              aria-pressed={selected === size.name}
+                              title={isOutOfStock ? `${size.name} is unavailable for this pair` : undefined}
+                              className={`min-h-11 min-w-[52px] border px-4 text-xs font-semibold tracking-[0.04em] transition ${
+                                selected === size.name
+                                  ? 'border-black bg-black text-white'
+                                  : 'border-metal-light bg-transparent text-black enabled:hover:border-black'
+                              } ${isOutOfStock ? 'cursor-not-allowed opacity-30 line-through' : ''}`}
+                              onClick={() => setSelected(size.name)}
+                            >
+                              {size.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2.5">
+                  {sizes.map((size) => {
+                    const isOutOfStock = size.stock <= 0;
+                    return (
+                      <button
+                        key={size.name}
+                        type="button"
+                        disabled={isOutOfStock}
+                        aria-pressed={selectedSize === size.name}
+                        title={isOutOfStock ? `${size.name} out of stock` : undefined}
+                        className={`min-h-11 min-w-[52px] border px-4 text-xs font-semibold tracking-[0.04em] transition ${
+                          selectedSize === size.name
+                            ? 'border-black bg-black text-white'
+                            : 'border-metal-light bg-transparent text-black enabled:hover:border-black'
+                        } ${isOutOfStock ? 'cursor-not-allowed opacity-30 line-through' : ''}`}
+                        onClick={() => setSelectedSize(size.name)}
+                      >
+                        {size.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="mb-8 grid grid-cols-2 gap-3">

@@ -23,6 +23,8 @@ export type Product = {
   galleryImages?: string[];
   colors?: ProductColor[];
   sizes?: ProductSize[];
+  /** True only when the Firestore `couple` field explicitly enables paired sizing. */
+  isCouple?: boolean;
   sizeGuide?: ProductSizeGuideRow[];
   theme?: string;
   collectionImage?: string;
@@ -35,6 +37,8 @@ export type Product = {
   /** Cart-variant metadata; catalog data never needs to populate these fields. */
   checkoutProductId?: string;
   selectedSize?: string;
+  selectedMensSize?: string;
+  selectedWomensSize?: string;
   selectedColor?: string;
 };
 

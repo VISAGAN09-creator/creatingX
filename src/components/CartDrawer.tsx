@@ -115,9 +115,14 @@ export function CartDrawer({
                           <div>
                             <h3 className="font-display text-lg font-semibold text-black">{line.name}</h3>
                             <p className="text-sm text-metal-text">{formatPrice(line.price)}</p>
-                            {(line.selectedSize || line.selectedColor) && (
+                            {(line.selectedSize || line.selectedMensSize || line.selectedWomensSize || line.selectedColor) && (
                               <p className="mt-1 text-xs text-metal-text">
-                                {[line.selectedSize && `Size: ${line.selectedSize}`, line.selectedColor && `Color: ${line.selectedColor}`]
+                                {[
+                                  line.selectedSize && `Size: ${line.selectedSize}`,
+                                  line.selectedMensSize && `Men's size: ${line.selectedMensSize}`,
+                                  line.selectedWomensSize && `Women's size: ${line.selectedWomensSize}`,
+                                  line.selectedColor && `Color: ${line.selectedColor}`,
+                                ]
                                   .filter(Boolean)
                                   .join(' · ')}
                               </p>

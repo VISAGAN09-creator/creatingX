@@ -217,6 +217,11 @@ function normalizeSize(value) {
   return SUPPORTED_SIZES.includes(size) ? size : null;
 }
 
+function isCoupleProduct(data) {
+  if (data?.couple === true || data?.couple === 1) return true;
+  return typeof data?.couple === 'string' && ['yes', 'true', '1'].includes(data.couple.trim().toLowerCase());
+}
+
 function inventoryQuantity(value) {
   if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.floor(value));
   if (typeof value === 'boolean') return value ? 1 : 0;
@@ -416,16 +421,20 @@ function inventoryGroups(items) {
   for (const item of items || []) {
     const collectionName = typeof item?.collectionName === 'string' ? item.collectionName : '';
     const documentId = typeof item?.firestoreDocId === 'string' ? item.firestoreDocId : '';
-    const size = normalizeSize(item?.selectedSize);
     const quantity = Number(item?.quantity);
-    if (!collectionName || !documentId || !size || !Number.isSafeInteger(quantity) || quantity < 1) {
+    const sizes = item?.couple
+      ? [normalizeSize(item?.selectedMensSize), normalizeSize(item?.selectedWomensSize)]
+      : [normalizeSize(item?.selectedSize)];
+    if (!collectionName || !documentId || sizes.some((size) => !size) || !Number.isSafeInteger(quantity) || quantity < 1) {
       const error = new Error('Order inventory details are incomplete.');
       error.code = 'inventory-invalid-order';
       throw error;
     }
     const key = `${collectionName}\u0000${documentId}`;
     const group = groups.get(key) || { collectionName, documentId, quantities: {} };
-    group.quantities[size] = (group.quantities[size] || 0) + quantity;
+    for (const size of sizes) {
+      group.quantities[size] = (group.quantities[size] || 0) + quantity;
+    }
     groups.set(key, group);
   }
   return [...groups.values()];
@@ -895,7 +904,18 @@ app.post('/api/create-order', async (req, res) => {
         });
       }
 
-      if (!product.selectedSize) {
+      const couple = isCoupleProduct(product.data);
+      const selectedMensSize = couple ? normalizeSize(item.mensSize ?? item.selectedMensSize) : null;
+      const selectedWomensSize = couple ? normalizeSize(item.womensSize ?? item.selectedWomensSize) : null;
+
+      if (couple && (!selectedMensSize || !selectedWomensSize)) {
+        return res.status(400).json({
+          success: false,
+          message: `Select both men's and women's sizes for "${productId}" before checkout.`,
+        });
+      }
+
+      if (!couple && !product.selectedSize) {
         return res.status(400).json({
           success: false,
           message: `Select an in-stock size for "${productId}" before checkout.`,
@@ -946,7 +966,10 @@ app.post('/api/create-order', async (req, res) => {
         productId,
         firestoreDocId: product.docId,
         collectionName: product.collectionName,
-        selectedSize: product.selectedSize,
+        couple,
+        selectedSize: couple ? undefined : product.selectedSize,
+        selectedMensSize: selectedMensSize || undefined,
+        selectedWomensSize: selectedWomensSize || undefined,
         selectedColor,
         name: product.data.name || product.data.title || product.docId,
         price: firestorePrice,
@@ -961,12 +984,20 @@ app.post('/api/create-order', async (req, res) => {
     // check so concurrent shoppers cannot oversell a size.
     const requestedByVariant = new Map();
     for (const item of resolvedItems) {
-      const key = `${item.collectionName}\u0000${item.firestoreDocId}\u0000${item.selectedSize}`;
-      requestedByVariant.set(key, (requestedByVariant.get(key) || 0) + item.quantity);
+      const selectedSizes = item.couple
+        ? [item.selectedMensSize, item.selectedWomensSize]
+        : [item.selectedSize];
+      for (const size of selectedSizes) {
+        const key = `${item.collectionName}\u0000${item.firestoreDocId}\u0000${size}`;
+        requestedByVariant.set(key, (requestedByVariant.get(key) || 0) + item.quantity);
+      }
     }
     for (const [key, requested] of requestedByVariant) {
       const [, , size] = key.split('\u0000');
-      const item = resolvedItems.find((candidate) => `${candidate.collectionName}\u0000${candidate.firestoreDocId}\u0000${candidate.selectedSize}` === key);
+      const item = resolvedItems.find((candidate) =>
+        candidate.collectionName === key.split('\u0000')[0] &&
+        candidate.firestoreDocId === key.split('\u0000')[1],
+      );
       const adapter = stockAdapter(item && (await db.collection(item.collectionName).doc(item.firestoreDocId).get()).data());
       const available = adapter.configured.has(size) ? adapter.quantities[size] ?? 0 : 0;
       if (!adapter.editable || available < requested) {
@@ -1009,7 +1040,10 @@ app.post('/api/create-order', async (req, res) => {
         productId: i.productId,
         firestoreDocId: i.firestoreDocId,
         collectionName: i.collectionName,
+        couple: i.couple,
         selectedSize: i.selectedSize,
+        selectedMensSize: i.selectedMensSize,
+        selectedWomensSize: i.selectedWomensSize,
         selectedColor: i.selectedColor,
         name: i.name,
         price: i.price,
@@ -1196,6 +1230,9 @@ app.post('/api/verify-payment', async (req, res) => {
             id: sanitizeString(item.productId || item.id, 100),
             name: sanitizeString(item.name, 200),
             size: normalizeSize(item.selectedSize) || undefined,
+            couple: item.couple === true || undefined,
+            mensSize: normalizeSize(item.selectedMensSize) || undefined,
+            womensSize: normalizeSize(item.selectedWomensSize) || undefined,
             color: sanitizeString(item.selectedColor, 100) || undefined,
             price: Number(item.price) || 0,
             quantity: Number(item.quantity) || 1,
@@ -1411,6 +1448,9 @@ app.post('/api/cashfree-webhook', async (req, res) => {
         id: sanitizeString(item.productId || item.id, 100),
         name: sanitizeString(item.name, 200),
         size: normalizeSize(item.selectedSize) || undefined,
+        couple: item.couple === true || undefined,
+        mensSize: normalizeSize(item.selectedMensSize) || undefined,
+        womensSize: normalizeSize(item.selectedWomensSize) || undefined,
         color: sanitizeString(item.selectedColor, 100) || undefined,
         price: Number(item.price) || 0,
         quantity: Number(item.quantity) || 1,

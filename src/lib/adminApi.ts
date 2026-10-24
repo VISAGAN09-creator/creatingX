@@ -42,6 +42,9 @@ export type AdminOrder = {
     price?: number;
     quantity?: number;
     size?: string;
+    couple?: boolean;
+    mensSize?: string;
+    womensSize?: string;
     color?: string;
   }>;
   pricing: {

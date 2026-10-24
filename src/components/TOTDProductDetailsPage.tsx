@@ -80,6 +80,8 @@ export function TOTDProductDetailsPage({
   const [currentImage, setCurrentImage] = useState(0);
   const [isZoomed, setIsZoomed] = useState(false);
   const [selectedSize, setSelectedSize] = useState('');
+  const [selectedMensSize, setSelectedMensSize] = useState('');
+  const [selectedWomensSize, setSelectedWomensSize] = useState('');
   const [selectedColor, setSelectedColor] = useState('');
   const [openAccordion, setOpenAccordion] = useState('description');
   const [sizeGuideOpen, setSizeGuideOpen] = useState(false);
@@ -115,12 +117,30 @@ export function TOTDProductDetailsPage({
 
   const images = useMemo(() => (product ? productImages(product) : []), [product]);
   const colors = useMemo(() => product?.colors ?? [], [product]);
-  const sizes = useMemo(() => (product?.sizes?.length ? product.sizes : DEFAULT_SIZES), [product]);
+  const isCoupleProduct = product?.isCouple === true;
+  // Legacy TOTD products use a display fallback, but a couple product must
+  // have explicit stock for both garments before it can be purchased.
+  const sizes = useMemo(
+    () => (product?.sizes?.length ? product.sizes : isCoupleProduct ? [] : DEFAULT_SIZES),
+    [product, isCoupleProduct],
+  );
   const sizeGuide = product?.sizeGuide?.length ? product.sizeGuide : DEFAULT_SIZE_GUIDE;
   const selectedSizeData = sizes.find((size) => size.name === selectedSize);
+  const selectedMensSizeData = sizes.find((size) => size.name === selectedMensSize);
+  const selectedWomensSizeData = sizes.find((size) => size.name === selectedWomensSize);
+  const coupleSizesInStock = Boolean(
+    selectedMensSizeData &&
+    selectedWomensSizeData &&
+    selectedMensSizeData.stock > 0 &&
+    selectedWomensSizeData.stock > 0 &&
+    (selectedMensSize !== selectedWomensSize || selectedMensSizeData.stock >= 2),
+  );
   const hasColorOptions = colors.length > 0;
   const canAddToCart = Boolean(
-    product && selectedSizeData && selectedSizeData.stock > 0 && product.price !== null && (!hasColorOptions || selectedColor),
+    product &&
+      product.price !== null &&
+      (isCoupleProduct ? coupleSizesInStock : selectedSizeData && selectedSizeData.stock > 0) &&
+      (!hasColorOptions || selectedColor),
   );
 
   // Show only other TOTD products in related section
@@ -133,7 +153,9 @@ export function TOTDProductDetailsPage({
     if (!product) return;
     setCurrentImage(0);
     setIsZoomed(false);
-    setSelectedSize(sizes.find((size) => size.stock > 0)?.name ?? sizes[0]?.name ?? '');
+    setSelectedSize(isCoupleProduct ? '' : sizes.find((size) => size.stock > 0)?.name ?? sizes[0]?.name ?? '');
+    setSelectedMensSize('');
+    setSelectedWomensSize('');
     setSelectedColor('');
     setOpenAccordion('description');
   }, [product, colors, sizes]);
@@ -174,20 +196,27 @@ export function TOTDProductDetailsPage({
   }, [sizeGuideOpen]);
 
   const addSelectedProduct = () => {
-    if (!product || !selectedSizeData || selectedSizeData.stock <= 0 || (hasColorOptions && !selectedColor)) return;
+    if (!product || !canAddToCart) return;
 
-    const checkoutProductId = `${product.id}-${selectedSizeData.name}`;
-    const cartId = selectedColor
-      ? `${checkoutProductId}--color-${encodeURIComponent(selectedColor.toLocaleLowerCase())}`
-      : checkoutProductId;
+    const checkoutProductId = isCoupleProduct ? product.id : `${product.id}-${selectedSizeData?.name}`;
+    const sizeVariant = isCoupleProduct
+      ? `--mens-${encodeURIComponent(selectedMensSize)}--womens-${encodeURIComponent(selectedWomensSize)}`
+      : '';
+    const colorVariant = selectedColor ? `--color-${encodeURIComponent(selectedColor.toLocaleLowerCase())}` : '';
+    const cartId = `${checkoutProductId}${sizeVariant}${colorVariant}`;
+    const selectedLabel = isCoupleProduct
+      ? `Men: ${selectedMensSize}, Women: ${selectedWomensSize}`
+      : selectedSizeData?.name;
 
     onAddToCart({
       ...product,
       id: cartId,
       checkoutProductId,
-      selectedSize: selectedSizeData.name,
+      selectedSize: isCoupleProduct ? undefined : selectedSizeData?.name,
+      selectedMensSize: isCoupleProduct ? selectedMensSize : undefined,
+      selectedWomensSize: isCoupleProduct ? selectedWomensSize : undefined,
       selectedColor: selectedColor || undefined,
-      name: `${product.name} (${selectedSizeData.name})`,
+      name: `${product.name} (${selectedLabel})`,
       image: images[currentImage] ?? product.image,
     });
   };
@@ -273,7 +302,9 @@ export function TOTDProductDetailsPage({
   ];
 
   const activeImage = images[currentImage] ?? product.image;
-  const isOutOfStock = Boolean(selectedSizeData && selectedSizeData.stock <= 0);
+  const isOutOfStock = isCoupleProduct
+    ? Boolean(selectedMensSize && selectedWomensSize && !coupleSizesInStock)
+    : Boolean(selectedSizeData && selectedSizeData.stock <= 0);
 
   return (
     <>
@@ -425,7 +456,7 @@ export function TOTDProductDetailsPage({
               <div className="mt-6 border-b border-white/10 pb-6">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
-                    Select Size: <strong className="text-white">{selectedSize || 'None'}</strong>
+                    {isCoupleProduct ? 'Select both sizes' : <>Select Size: <strong className="text-white">{selectedSize || 'None'}</strong></>}
                   </span>
                   <button
                     type="button"
@@ -437,30 +468,69 @@ export function TOTDProductDetailsPage({
                   </button>
                 </div>
 
-                <div className="mt-4 flex flex-wrap gap-2.5">
-                  {sizes.map((size) => {
-                    const isSelected = selectedSize === size.name;
-                    const outOfStock = size.stock <= 0;
+                {sizes.length === 0 ? (
+                  <p className="mt-4 text-sm text-neutral-400">No in-stock sizes are configured for this product.</p>
+                ) : isCoupleProduct ? (
+                  <div className="mt-4 space-y-5">
+                    {[
+                      { label: "Men's Size", selected: selectedMensSize, setSelected: setSelectedMensSize, otherSelected: selectedWomensSize },
+                      { label: "Women's Size", selected: selectedWomensSize, setSelected: setSelectedWomensSize, otherSelected: selectedMensSize },
+                    ].map(({ label, selected, setSelected, otherSelected }) => (
+                      <div key={label}>
+                        <p className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-neutral-400">
+                          {label}: <strong className="text-white">{selected || 'None'}</strong>
+                        </p>
+                        <div className="flex flex-wrap gap-2.5">
+                          {sizes.map((size) => {
+                            const outOfStock = size.stock <= 0 || (otherSelected === size.name && size.stock < 2);
+                            return (
+                              <button
+                                key={size.name}
+                                type="button"
+                                disabled={outOfStock}
+                                onClick={() => setSelected(size.name)}
+                                className={`flex h-12 items-center justify-center border text-xs font-bold transition ${
+                                  selected === size.name
+                                    ? 'border-white bg-white text-black'
+                                    : outOfStock
+                                    ? 'border-white/10 bg-neutral-900/40 text-neutral-600 line-through cursor-not-allowed'
+                                    : 'border-white/20 bg-neutral-900 text-white hover:border-white'
+                                }`}
+                              >
+                                {size.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-4 flex flex-wrap gap-2.5">
+                    {sizes.map((size) => {
+                      const isSelected = selectedSize === size.name;
+                      const outOfStock = size.stock <= 0;
 
-                    return (
-                      <button
-                        key={size.name}
-                        type="button"
-                        disabled={outOfStock}
-                        onClick={() => setSelectedSize(size.name)}
-                        className={`flex h-12 items-center justify-center border text-xs font-bold transition ${
-                          isSelected
-                            ? 'border-white bg-white text-black'
-                            : outOfStock
-                            ? 'border-white/10 bg-neutral-900/40 text-neutral-600 line-through cursor-not-allowed'
-                            : 'border-white/20 bg-neutral-900 text-white hover:border-white'
-                        }`}
-                      >
-                        {size.name}
-                      </button>
-                    );
-                  })}
-                </div>
+                      return (
+                        <button
+                          key={size.name}
+                          type="button"
+                          disabled={outOfStock}
+                          onClick={() => setSelectedSize(size.name)}
+                          className={`flex h-12 items-center justify-center border text-xs font-bold transition ${
+                            isSelected
+                              ? 'border-white bg-white text-black'
+                              : outOfStock
+                              ? 'border-white/10 bg-neutral-900/40 text-neutral-600 line-through cursor-not-allowed'
+                              : 'border-white/20 bg-neutral-900 text-white hover:border-white'
+                          }`}
+                        >
+                          {size.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Add to Cart CTA */}
@@ -482,6 +552,8 @@ export function TOTDProductDetailsPage({
                     ? `Add to Cart — ${priceText(product)}`
                     : hasColorOptions && !selectedColor
                     ? 'Select a color'
+                    : isCoupleProduct
+                    ? 'Select both sizes'
                     : 'Select a size'}
                 </MagneticButton>
               </div>
