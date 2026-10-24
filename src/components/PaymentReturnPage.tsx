@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatPrice } from '../utils/format';
 import { paymentApiPath } from '../lib/paymentApi';
-
-import logo from '../assets/logo.png';
+import { BrandLogo } from './BrandLogo';
 
 type PaymentReturnPageProps = {
   orderId: string | null;
@@ -90,7 +89,11 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
           className="flex items-center justify-center"
           onClick={onBack}
         >
-          <img src={logo} alt="METALFLUX" className="h-8 sm:h-9 w-auto object-contain" />
+          <BrandLogo
+            containerClassName="h-10 w-[140px] sm:h-11"
+            imageClassName="h-full w-full object-contain"
+            fallbackClassName="flex h-full w-full items-center font-display text-lg font-bold tracking-wider text-black sm:text-xl"
+          />
         </button>
       </header>
 

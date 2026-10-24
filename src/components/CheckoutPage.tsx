@@ -3,10 +3,9 @@ import { useMemo, useState } from 'react';
 import type { CartLine } from '../types';
 import { formatPrice } from '../utils/format';
 import { paymentApiPath } from '../lib/paymentApi';
+import { BrandLogo } from './BrandLogo';
 import { SmartImage } from './SmartImage';
 import { loadGatewayScript, openCheckout } from '../lib/paymentGateway';
-
-import logo from '../assets/logo.png';
 
 type CheckoutPageProps = {
   lines: CartLine[];
@@ -236,7 +235,11 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
             className="flex items-center justify-center"
             onClick={onBack}
           >
-            <img src={logo} alt="METALFLUX" className="h-8 sm:h-9 w-auto object-contain" />
+            <BrandLogo
+              containerClassName="h-10 w-[140px] sm:h-11"
+              imageClassName="h-full w-full object-contain"
+              fallbackClassName="flex h-full w-full items-center font-display text-lg font-bold tracking-wider text-black sm:text-xl"
+            />
           </button>
         </header>
 
@@ -305,7 +308,11 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
           className="flex items-center justify-center"
           onClick={onBack}
         >
-          <img src={logo} alt="METALFLUX" className="h-8 sm:h-9 w-auto object-contain" />
+          <BrandLogo
+            containerClassName="h-10 w-[140px] sm:h-11"
+            imageClassName="h-full w-full object-contain"
+            fallbackClassName="flex h-full w-full items-center font-display text-lg font-bold tracking-wider text-black sm:text-xl"
+          />
         </button>
       </header>
 
