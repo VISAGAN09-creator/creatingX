@@ -41,6 +41,7 @@ export default function App() {
   const catalog = useCatalog();
   const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [checkoutPending, setCheckoutPending] = useState(false);
 
   // ---- Cross-concern derived value: selected product from both catalogs ----
   const selectedProduct = useMemo(
@@ -60,7 +61,16 @@ export default function App() {
 
   // ---- Cross-concern handler: checkout closes cart drawer, then navigates --
   const handleOpenCheckout = () => {
+    // The cart's fixed exit layer covers the viewport until its motion exit
+    // completes. Navigate only after that layer unmounts so it cannot capture
+    // pointer or focus events intended for checkout fields.
+    setCheckoutPending(true);
     cart.setCartOpen(false);
+  };
+
+  const handleCartExitComplete = () => {
+    if (!checkoutPending) return;
+    setCheckoutPending(false);
     router.openCheckoutPage();
   };
 
@@ -191,6 +201,8 @@ export default function App() {
         onDecrement={cart.decrement}
         onRemove={cart.remove}
         onCheckout={handleOpenCheckout}
+        onExitComplete={handleCartExitComplete}
+        checkoutPending={checkoutPending}
       />
       <SearchDrawer
         isOpen={searchOpen}
