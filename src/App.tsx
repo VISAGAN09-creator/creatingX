@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { TOTD_ENABLED } from './config/features';
 import { About } from './components/About';
 import { AdminPortal } from './components/AdminPortal';
 import { CartDrawer } from './components/CartDrawer';
@@ -40,17 +41,18 @@ export default function App() {
   const catalog = useCatalog();
   const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [checkoutPending, setCheckoutPending] = useState(false);
 
   // ---- Cross-concern derived value: selected product from both catalogs ----
   const selectedProduct = useMemo(
     () =>
       catalog.catalogProducts.find((p) => p.id === router.selectedProductId) ||
-      catalog.totdProducts.find((p) => p.id === router.selectedProductId),
+      (TOTD_ENABLED ? catalog.totdProducts.find((p) => p.id === router.selectedProductId) : undefined),
     [catalog.catalogProducts, catalog.totdProducts, router.selectedProductId],
   );
 
   const isTotdProduct = useMemo(() => {
-    if (!selectedProduct) return router.productReturnPage === 'totd';
+    if (!TOTD_ENABLED || !selectedProduct) return TOTD_ENABLED && router.productReturnPage === 'totd';
     return (
       catalog.totdProducts.some((p) => p.id === selectedProduct.id) ||
       router.productReturnPage === 'totd'
@@ -59,7 +61,16 @@ export default function App() {
 
   // ---- Cross-concern handler: checkout closes cart drawer, then navigates --
   const handleOpenCheckout = () => {
+    // The cart's fixed exit layer covers the viewport until its motion exit
+    // completes. Navigate only after that layer unmounts so it cannot capture
+    // pointer or focus events intended for checkout fields.
+    setCheckoutPending(true);
     cart.setCartOpen(false);
+  };
+
+  const handleCartExitComplete = () => {
+    if (!checkoutPending) return;
+    setCheckoutPending(false);
     router.openCheckoutPage();
   };
 
@@ -108,7 +119,7 @@ export default function App() {
             }}
           />
         ) : router.activePage === 'productDetail' ? (
-          isTotdProduct ? (
+          TOTD_ENABLED && isTotdProduct ? (
             <TOTDProductDetailsPage
               product={selectedProduct}
               products={catalog.totdProducts}
@@ -136,7 +147,7 @@ export default function App() {
             onOpenProduct={router.openProductDetail}
             onBack={() => router.navigateToHomeSection('#hero')}
           />
-        ) : router.activePage === 'totd' ? (
+        ) : TOTD_ENABLED && router.activePage === 'totd' ? (
           <TOTD
             products={catalog.totdProducts}
             status={catalog.totdStatus}
@@ -190,6 +201,8 @@ export default function App() {
         onDecrement={cart.decrement}
         onRemove={cart.remove}
         onCheckout={handleOpenCheckout}
+        onExitComplete={handleCartExitComplete}
+        checkoutPending={checkoutPending}
       />
       <SearchDrawer
         isOpen={searchOpen}

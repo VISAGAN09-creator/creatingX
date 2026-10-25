@@ -335,7 +335,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
         </div>
 
         <footer className="border-t border-[#e0e0e0] py-6 text-center text-xs text-[#999999]">
-          &copy; {new Date().getFullYear()} METALFLUX. All rights reserved.
+          &copy; {new Date().getFullYear()} VARATAAA. All rights reserved.
         </footer>
       </section>
     );

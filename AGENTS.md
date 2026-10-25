@@ -17,7 +17,7 @@ Do **not** invent Firestore schemas, API endpoints, or security guarantees. Pref
 
 ## What this repo is
 
-- **VARATAAA** storefront (also branded METALFLUX / TOTD in places): Vite + React 18 + TypeScript SPA.
+- **VARATAAA** storefront (with a separate TOTD product section): Vite + React 18 + TypeScript SPA.
 - Catalog from **Firestore** (public client reads). Checkout via **Express API** (`server.cjs`) → **Cashfree** hosted checkout.
 - API is exposed as Firebase Cloud Function `api` with Hosting rewrite `/api/**`.
 - **No Firebase Auth, no Storage usage, no admin UI, no automated tests** in the current codebase.

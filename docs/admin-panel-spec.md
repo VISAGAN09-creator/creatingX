@@ -140,7 +140,7 @@ Do not implement until you explicitly choose:
 | D9 | Order lifecycle | Only `paid` vs add `processing` / `shipped` / `cancelled` / `refunded` |
 | D10 | Refunds | Out of scope vs Cashfree refund API integration |
 | D11 | Email | Depend on Trigger Email extension vs other provider; webhook path should also mail? |
-| D12 | Branding in admin | VARATAAA vs METALFLUX naming |
+| D12 | Branding in admin | Use the established VARATAAA customer-facing name |
 | D13 | Who can access production admin | Named UIDs / emails list |
 | D14 | Rules deploy ownership | Add to `firebase.json` + CI vs manual Console paste |
 | D15 | Admin base URL | Under `/varataaa/admin` vs root `/admin` vs separate subdomain |

@@ -1,6 +1,6 @@
 import { motion, useMotionValue, useReducedMotion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
-import { useEffect, useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { useWebsiteAssets } from '../hooks/useWebsiteAssets';
 import { scrollToHash } from '../utils/scroll';
 import { MagneticAnchor } from './Magnetic';
@@ -14,7 +14,6 @@ function shouldPreferStillHero() {
   }).connection;
 
   return (
-    window.matchMedia('(max-width: 767px)').matches ||
     connection?.saveData === true ||
     connection?.effectiveType === 'slow-2g' ||
     connection?.effectiveType === '2g'
@@ -31,26 +30,55 @@ export function Hero({
   const shouldReduceMotion = useReducedMotion();
   const { assets } = useWebsiteAssets();
   const [videoFailed, setVideoFailed] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
   const [posterFailed, setPosterFailed] = useState(false);
   const [saleFailed, setSaleFailed] = useState(false);
   const [preferStillHero, setPreferStillHero] = useState(shouldPreferStillHero);
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(max-width: 767px)');
-    const updatePreference = () => setPreferStillHero(shouldPreferStillHero());
-
-    mediaQuery.addEventListener('change', updatePreference);
-    return () => mediaQuery.removeEventListener('change', updatePreference);
-  }, []);
-
-  useEffect(() => setVideoFailed(false), [assets.heroVideo]);
+    setVideoFailed(false);
+    setVideoReady(false);
+  }, [assets.heroVideo]);
   useEffect(() => setPosterFailed(false), [assets.heroPoster]);
   useEffect(() => setSaleFailed(false), [assets.sale]);
 
   const showVideo = Boolean(assets.heroVideo) && !videoFailed && !shouldReduceMotion && !preferStillHero;
   const showPoster = Boolean(assets.heroPoster) && !posterFailed;
+
+  useEffect(() => {
+    if (!showVideo) return undefined;
+
+    const video = videoRef.current;
+    if (!video) return undefined;
+
+    let active = true;
+    const attemptPlayback = () => {
+      // iOS Safari requires the element to be muted before play() is called.
+      video.muted = true;
+      video.defaultMuted = true;
+      const playback = video.play();
+      if (playback) {
+        playback
+          .then(() => {
+            if (active) setVideoReady(true);
+          })
+          .catch(() => {
+            if (active) setVideoFailed(true);
+          });
+      }
+    };
+
+    if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) attemptPlayback();
+    else video.addEventListener('canplay', attemptPlayback, { once: true });
+
+    return () => {
+      active = false;
+      video.removeEventListener('canplay', attemptPlayback);
+    };
+  }, [showVideo, assets.heroVideo]);
 
   const heroProducts = (products ?? [])
     .filter((p) => p.hero?.toLowerCase() === 'yes')
@@ -78,9 +106,19 @@ export function Hero({
       onMouseLeave={handleMouseLeave}
     >
       <div className="absolute inset-0 z-0">
-        {showVideo ? (
+        {showPoster && (
+          <img
+            src={assets.heroPoster}
+            alt="VARATAAA editorial campaign"
+            className="absolute inset-0 h-full w-full object-cover"
+            loading="eager"
+            onError={() => setPosterFailed(true)}
+          />
+        )}
+        {showVideo && (
           <video
-            className="h-full w-full object-cover"
+            ref={videoRef}
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${videoReady || !showPoster ? 'opacity-100' : 'opacity-0'}`}
             autoPlay
             muted
             loop
@@ -88,19 +126,12 @@ export function Hero({
             preload="metadata"
             poster={assets.heroPoster}
             aria-hidden="true"
+            onPlaying={() => setVideoReady(true)}
             onError={() => setVideoFailed(true)}
           >
             <source src={assets.heroVideo} type="video/mp4" />
           </video>
-        ) : showPoster ? (
-          <img
-            src={assets.heroPoster}
-            alt="MetalFlux editorial campaign"
-            className="h-full w-full object-cover"
-            loading="eager"
-            onError={() => setPosterFailed(true)}
-          />
-        ) : null}
+        )}
         <div className="absolute inset-0 bg-black/65" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.22),transparent_28%),linear-gradient(90deg,rgba(0,0,0,0.25),rgba(0,0,0,0.78))]" />
       </div>

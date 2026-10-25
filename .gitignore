@@ -19,3 +19,4 @@ functions/server.cjs
 functions/gateway/
 functions/.env
 functions/node_modules/
+src/assets/
