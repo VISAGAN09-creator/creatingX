@@ -49,31 +49,35 @@ export function CartDrawer({
   }, [isOpen, onClose]);
 
   return (
-    <AnimatePresence onExitComplete={onExitComplete}>
-      {isOpen && (
-        <motion.aside
-          className="fixed inset-0 z-[3000]"
-          aria-modal="true"
-          role="dialog"
-          aria-label="Shopping cart"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.25 }}
-        >
-          <button
+    <>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.button
+            key="cart-backdrop"
             type="button"
             aria-label="Close cart"
-            className="absolute inset-0 bg-black/45 backdrop-blur-sm"
+            className="fixed inset-0 z-[3000] bg-black/45 backdrop-blur-sm"
             onClick={onClose}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
           />
+        )}
+      </AnimatePresence>
 
-          <motion.div
+      <AnimatePresence mode="wait" onExitComplete={onExitComplete}>
+        {isOpen && (
+          <motion.aside
+            key="cart-drawer"
+            className="fixed right-0 top-0 z-[3001] flex h-full w-full max-w-[440px] flex-col bg-white shadow-drawer"
+            aria-modal="true"
+            role="dialog"
+            aria-label="Shopping cart"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute right-0 top-0 flex h-full w-full max-w-[440px] flex-col bg-white shadow-drawer"
           >
             <div className="flex items-center justify-between border-b border-metal-light px-5 py-5 sm:px-6">
               <div>
@@ -105,10 +109,8 @@ export function CartDrawer({
               ) : (
                 <div className="space-y-5">
                   {lines.map((line) => (
-                    <motion.article
+                    <article
                       key={line.id}
-                      layout
-                     
                       className="grid grid-cols-[88px_1fr] gap-4 border-b border-metal-light pb-5"
                     >
                       <div className="aspect-[3/4] overflow-hidden bg-metal-light">
@@ -172,7 +174,7 @@ export function CartDrawer({
                           </p>
                         </div>
                       </div>
-                    </motion.article>
+                    </article>
                   ))}
                 </div>
               )}
@@ -192,9 +194,9 @@ export function CartDrawer({
                 Checkout
               </MagneticButton>
             </div>
-          </motion.div>
-        </motion.aside>
-      )}
-    </AnimatePresence>
+          </motion.aside>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

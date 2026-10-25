@@ -72,6 +72,49 @@ function calculateCheckoutPricing(resolvedItems, shippingAmount = 0) {
   return { subtotalAmount, taxAmount, shippingAmount: roundedShippingAmount, totalAmount };
 }
 
+/** Firestore rejects undefined values, so optional order-item fields are omitted. */
+function withoutUndefinedProperties(record) {
+  return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined));
+}
+
+function pendingOrderItem(item) {
+  return withoutUndefinedProperties({
+    productId: item.productId,
+    firestoreDocId: item.firestoreDocId,
+    collectionName: item.collectionName,
+    couple: item.couple,
+    selectedSize: item.selectedSize,
+    selectedMensSize: item.selectedMensSize,
+    selectedWomensSize: item.selectedWomensSize,
+    selectedColor: item.selectedColor,
+    name: item.name,
+    price: item.price,
+    quantity: item.quantity,
+    lineTotal: item.lineTotal,
+    image: item.image,
+  });
+}
+
+function paidOrderItem(item) {
+  const selectedSize = normalizeSize(item.selectedSize);
+  const mensSize = normalizeSize(item.selectedMensSize);
+  const womensSize = normalizeSize(item.selectedWomensSize);
+  const color = sanitizeString(item.selectedColor, 100);
+
+  return withoutUndefinedProperties({
+    id: sanitizeString(item.productId || item.id, 100),
+    name: sanitizeString(item.name, 200),
+    ...(selectedSize ? { size: selectedSize } : {}),
+    ...(item.couple === true ? { couple: true } : {}),
+    ...(mensSize ? { mensSize } : {}),
+    ...(womensSize ? { womensSize } : {}),
+    ...(color ? { color } : {}),
+    price: Number(item.price) || 0,
+    quantity: Number(item.quantity) || 1,
+    image: sanitizeString(item.image, 2000),
+  });
+}
+
 // ============================================================================
 // CORS CONFIGURATION — SECURITY HARDENED
 // ============================================================================
@@ -1020,6 +1063,8 @@ app.post('/api/create-order', async (req, res) => {
       const couple = isCoupleProduct(product.data);
       const selectedMensSize = couple ? normalizeSize(item.mensSize ?? item.selectedMensSize) : null;
       const selectedWomensSize = couple ? normalizeSize(item.womensSize ?? item.selectedWomensSize) : null;
+      const submittedStandardSize = !couple ? normalizeSize(item.size ?? item.selectedSize) : null;
+      const selectedSize = !couple ? product.selectedSize || submittedStandardSize : null;
 
       if (couple && (!selectedMensSize || !selectedWomensSize)) {
         return res.status(400).json({
@@ -1028,7 +1073,14 @@ app.post('/api/create-order', async (req, res) => {
         });
       }
 
-      if (!couple && !product.selectedSize) {
+      if (!couple && product.selectedSize && submittedStandardSize && product.selectedSize !== submittedStandardSize) {
+        return res.status(400).json({
+          success: false,
+          message: `Selected size for "${productId}" does not match the product variant.`,
+        });
+      }
+
+      if (!couple && !selectedSize) {
         return res.status(400).json({
           success: false,
           message: `Select an in-stock size for "${productId}" before checkout.`,
@@ -1080,10 +1132,10 @@ app.post('/api/create-order', async (req, res) => {
         firestoreDocId: product.docId,
         collectionName: product.collectionName,
         couple,
-        selectedSize: couple ? undefined : product.selectedSize,
-        selectedMensSize: selectedMensSize || undefined,
-        selectedWomensSize: selectedWomensSize || undefined,
-        selectedColor,
+        ...(couple
+          ? { selectedMensSize, selectedWomensSize }
+          : { selectedSize }),
+        ...(selectedColor ? { selectedColor } : {}),
         name: product.data.name || product.data.title || product.docId,
         price: firestorePrice,
         quantity,
@@ -1148,21 +1200,7 @@ app.post('/api/create-order', async (req, res) => {
 
     // --- Store pending order context in Firestore for later verification ---
     const pendingOrderData = {
-      items: resolvedItems.map(i => ({
-        productId: i.productId,
-        firestoreDocId: i.firestoreDocId,
-        collectionName: i.collectionName,
-        couple: i.couple,
-        selectedSize: i.selectedSize,
-        selectedMensSize: i.selectedMensSize,
-        selectedWomensSize: i.selectedWomensSize,
-        selectedColor: i.selectedColor,
-        name: i.name,
-        price: i.price,
-        quantity: i.quantity,
-        lineTotal: i.lineTotal,
-        image: i.image,
-      })),
+      items: resolvedItems.map(pendingOrderItem),
       subtotalAmount,
       taxAmount,
       totalAmount,
@@ -1383,18 +1421,7 @@ app.post('/api/verify-payment', async (req, res) => {
             state: sanitizeString(shipping.state, 100),
             pinCode: sanitizeString(shipping.pinCode, 10),
           },
-          items: items.map(item => ({
-            id: sanitizeString(item.productId || item.id, 100),
-            name: sanitizeString(item.name, 200),
-            size: normalizeSize(item.selectedSize) || undefined,
-            couple: item.couple === true || undefined,
-            mensSize: normalizeSize(item.selectedMensSize) || undefined,
-            womensSize: normalizeSize(item.selectedWomensSize) || undefined,
-            color: sanitizeString(item.selectedColor, 100) || undefined,
-            price: Number(item.price) || 0,
-            quantity: Number(item.quantity) || 1,
-            image: sanitizeString(item.image, 2000),
-          })),
+          items: items.map(paidOrderItem),
           pricing: {
             subtotal: serverSubtotal,
             tax: serverTax,
@@ -1605,18 +1632,7 @@ app.post('/api/cashfree-webhook', async (req, res) => {
         state: sanitizeString(shipping.state, 100),
         pinCode: sanitizeString(shipping.pinCode, 10),
       },
-      items: items.map(item => ({
-        id: sanitizeString(item.productId || item.id, 100),
-        name: sanitizeString(item.name, 200),
-        size: normalizeSize(item.selectedSize) || undefined,
-        couple: item.couple === true || undefined,
-        mensSize: normalizeSize(item.selectedMensSize) || undefined,
-        womensSize: normalizeSize(item.selectedWomensSize) || undefined,
-        color: sanitizeString(item.selectedColor, 100) || undefined,
-        price: Number(item.price) || 0,
-        quantity: Number(item.quantity) || 1,
-        image: sanitizeString(item.image, 2000),
-      })),
+      items: items.map(paidOrderItem),
       pricing: { subtotal: serverSubtotal, tax: serverTax, shipping: serverShipping, total: cashfreeTotal },
       payment: {
         gateway: gateway.gatewayName,
@@ -1711,4 +1727,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, calculateCheckoutPricing };
+module.exports = { app, calculateCheckoutPricing, pendingOrderItem, paidOrderItem };

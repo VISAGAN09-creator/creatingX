@@ -149,6 +149,19 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
       return;
     }
 
+    const incompleteLine = lines.find((line) =>
+      line.isCouple
+        ? !line.selectedMensSize || !line.selectedWomensSize
+        : !line.selectedSize,
+    );
+    if (incompleteLine) {
+      const message = incompleteLine.isCouple
+        ? `Select both men's and women's sizes for ${incompleteLine.name} before checkout.`
+        : `Select a size for ${incompleteLine.name} before checkout.`;
+      showToast(message, 'error');
+      return;
+    }
+
     setIsPaying(true);
 
     // Load the gateway's client-side SDK/script
@@ -169,9 +182,10 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
           items: lines.map((line) => ({
             id: line.checkoutProductId ?? line.id,
             quantity: line.quantity,
-            mensSize: line.selectedMensSize,
-            womensSize: line.selectedWomensSize,
-            color: line.selectedColor,
+            ...(line.isCouple
+              ? { mensSize: line.selectedMensSize, womensSize: line.selectedWomensSize }
+              : { size: line.selectedSize }),
+            ...(line.selectedColor ? { color: line.selectedColor } : {}),
           })),
           customer: {
             email: details.email,
