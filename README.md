@@ -1,6 +1,6 @@
 # VARATAAA — Custom Print T-Shirt Storefront
 
-A production storefront for **VARATAAA** (custom-print streetwear, also branded METALFLUX / TOTD). It is a single-page React application backed by **Firebase** for content and **Cashfree** for payments, with a small Express API handling everything money-related.
+A production storefront for **VARATAAA** custom-print streetwear. It is a single-page React application backed by **Firebase** for content and **Cashfree** for payments, with a small Express API handling everything money-related.
 
 This README explains what the project is, how the code is organized, and how to run, extend, and deploy it. For deeper internal documentation see [`docs/architecture.md`](docs/architecture.md), [`docs/admin-panel-spec.md`](docs/admin-panel-spec.md), and [`walkthrough.md`](walkthrough.md). Agent/machine instructions live in [`AGENTS.md`](AGENTS.md).
 

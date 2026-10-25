@@ -1,6 +1,6 @@
 {
   "name": "metalflux-functions",
-  "description": "Firebase Cloud Functions for METALFLUX payment API",
+  "description": "Firebase Cloud Functions for VARATAAA payment API",
   "private": true,
   "engines": {
     "node": "20"

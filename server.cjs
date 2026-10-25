@@ -716,13 +716,27 @@ async function inventoryCollectionNames() {
 
 function inventoryProductResponse(collectionName, document) {
   const data = document.data();
+  const hasName = typeof data.name === 'string';
+  const hasTitle = typeof data.title === 'string';
   return {
     productId: `${slugify(collectionName)}-${document.id}`,
     collectionName,
     documentId: document.id,
-    name: typeof data.name === 'string' && data.name.trim() ? data.name.trim()
-      : typeof data.title === 'string' && data.title.trim() ? data.title.trim()
+    name: hasName && data.name.trim() ? data.name.trim()
+      : hasTitle && data.title.trim() ? data.title.trim()
         : document.id,
+    nameField: hasName ? 'name' : hasTitle ? 'title' : null,
+    image: typeof data.img1 === 'string' ? data.img1.trim() : '',
+    price: typeof data.price === 'number' && Number.isFinite(data.price)
+      ? data.price
+      : typeof data.price === 'string' && data.price.trim() && Number.isFinite(Number(data.price))
+        ? Number(data.price)
+        : null,
+    flags: {
+      latest: adminYesNoValue(data.latest),
+      hero: adminYesNoValue(data.hero),
+      couple: adminYesNoValue(data.couple),
+    },
     version: documentVersion(document),
     ...stockSummary(data),
   };
@@ -755,11 +769,76 @@ function parseInventoryChanges(value) {
   return Object.keys(changes).length > 0 ? changes : null;
 }
 
+function adminYesNoValue(value) {
+  if (value === true || value === 1) return true;
+  if (typeof value !== 'string') return false;
+  return ['yes', 'true', '1', 'latest'].includes(value.trim().toLowerCase());
+}
+
+function persistedFlagValue(currentValue, nextValue, field) {
+  if (field === 'hero') return nextValue ? 'yes' : 'no';
+  if (typeof currentValue === 'boolean') return nextValue;
+  if (typeof currentValue === 'number') return nextValue ? 1 : 0;
+  if (typeof currentValue === 'string') {
+    const normalized = currentValue.trim().toLowerCase();
+    if (normalized === 'true' || normalized === 'false') return String(nextValue);
+    if (normalized === '1' || normalized === '0') return nextValue ? '1' : '0';
+    if (field === 'latest' && normalized === 'latest' && nextValue) return 'latest';
+  }
+  return nextValue ? 'yes' : 'no';
+}
+
+function parseInventoryMetadata(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const metadata = {};
+
+  if (Object.prototype.hasOwnProperty.call(value, 'name')) {
+    const name = sanitizeString(value.name, 200).replace(/\s+/g, ' ');
+    if (!name) return null;
+    metadata.name = name;
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'price')) {
+    const price = value.price;
+    if (typeof price !== 'number' || !Number.isFinite(price) || price < 0) return null;
+    metadata.price = price;
+  }
+  for (const field of ['latest', 'hero', 'couple']) {
+    if (!Object.prototype.hasOwnProperty.call(value, field)) continue;
+    if (typeof value[field] !== 'boolean') return null;
+    metadata[field] = value[field];
+  }
+
+  return Object.keys(metadata).length > 0 ? metadata : null;
+}
+
+function inventoryMetadataPatch(data, metadata) {
+  const patch = {};
+  if (Object.prototype.hasOwnProperty.call(metadata, 'name')) {
+    const nameField = typeof data.name === 'string' ? 'name' : typeof data.title === 'string' ? 'title' : null;
+    if (!nameField) {
+      const error = new Error('This product has no editable name field.');
+      error.code = 'name-field-not-configured';
+      throw error;
+    }
+    patch[nameField] = metadata.name;
+  }
+  if (Object.prototype.hasOwnProperty.call(metadata, 'price')) {
+    patch.price = typeof data.price === 'string' ? String(metadata.price) : metadata.price;
+  }
+  for (const field of ['latest', 'hero', 'couple']) {
+    if (Object.prototype.hasOwnProperty.call(metadata, field)) {
+      patch[field] = persistedFlagValue(data[field], metadata[field], field);
+    }
+  }
+  return patch;
+}
+
 async function updateInventoryProduct(update, adminUid) {
   const productId = typeof update?.productId === 'string' ? update.productId.trim() : '';
   const expectedVersion = typeof update?.version === 'string' ? update.version : '';
   const changes = parseInventoryChanges(update?.changes);
-  if (!productId || !expectedVersion || !changes) {
+  const metadata = parseInventoryMetadata(update?.metadata);
+  if (!productId || !expectedVersion || (!changes && !metadata)) {
     const error = new Error('Invalid inventory update.');
     error.code = 'invalid-inventory-update';
     throw error;
@@ -788,9 +867,12 @@ async function updateInventoryProduct(update, adminUid) {
 
     const data = snapshot.data();
     const adapter = stockAdapter(data);
-    const patch = applyStockChanges(data, adapter, changes);
+    const patch = {
+      ...(changes ? applyStockChanges(data, adapter, changes) : {}),
+      ...(metadata ? inventoryMetadataPatch(data, metadata) : {}),
+    };
     transaction.update(reference, patch);
-    return { productId, changes, previous: stockSummary(data), adminUid };
+    return { productId, changes: changes || {}, metadata: metadata || {}, previous: stockSummary(data), adminUid };
   });
 }
 
@@ -812,15 +894,17 @@ app.post('/api/admin/inventory', async (req, res) => {
     seenProducts.add(productId);
     try {
       const result = await updateInventoryProduct(update, req.adminUser.uid);
-      successful.push({ productId: result.productId, changes: result.changes });
+      successful.push({ productId: result.productId, changes: result.changes, metadata: result.metadata });
     } catch (error) {
       console.error(`[Admin Inventory] Failed to update ${productId}:`, error.message);
       const message = error.code === 'inventory-conflict'
         ? error.message
         : error.code === 'size-not-configured' || error.code === 'stock-schema-readonly'
           ? error.message
-          : error.code === 'product-not-found'
-            ? 'Product no longer exists.'
+        : error.code === 'product-not-found'
+          ? 'Product no longer exists.'
+          : error.code === 'name-field-not-configured'
+            ? error.message
             : 'Unable to save this product inventory.';
       failed.push({ productId, message, code: error.code || 'inventory-save-failed' });
     }

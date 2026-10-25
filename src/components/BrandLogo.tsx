@@ -74,7 +74,7 @@ export function BrandLogo({ containerClassName, imageClassName, fallbackClassNam
       <span className={`inline-flex shrink-0 ${containerClassName}`}>
         <img
           src={readyLogo.url}
-          alt="METALFLUX"
+          alt="VARATAAA"
           className={imageClassName}
           onError={() => markTargetFailed(readyLogo.source, readyLogo.url)}
         />
@@ -85,12 +85,12 @@ export function BrandLogo({ containerClassName, imageClassName, fallbackClassNam
   // A cached URL is intentionally given a blank, reserved slot while it is
   // preloaded. Rendering the wordmark here is the flash this component avoids.
   if (cachedLogoUrl && !targetPreviouslyFailed) {
-    return <span className={`inline-flex shrink-0 ${containerClassName}`} aria-label="METALFLUX" />;
+    return <span className={`inline-flex shrink-0 ${containerClassName}`} aria-label="VARATAAA" />;
   }
 
   return (
-    <span className={`inline-flex shrink-0 ${containerClassName}`} aria-label="METALFLUX">
-      <span className={fallbackClassName}>METALFLUX</span>
+    <span className={`inline-flex shrink-0 ${containerClassName}`} aria-label="VARATAAA">
+      <span className={fallbackClassName}>VARATAAA</span>
     </span>
   );
 }

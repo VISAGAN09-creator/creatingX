@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, LoaderCircle, LogOut, Pencil, RefreshCw, ShieldCheck } from 'lucide-react';
+import { ChevronDown, ChevronUp, Download, LoaderCircle, LogOut, Pencil, RefreshCw, ShieldCheck } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   type AdminOrder,
@@ -56,6 +56,60 @@ function statusClass(status: FulfillmentStatus) {
   return 'border-amber-400/40 bg-amber-400/10 text-amber-100';
 }
 
+function csvCell(value: unknown) {
+  const text = String(value ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const protectedText = /^\s*[=+\-@]/.test(text) ? `'${text}` : text;
+  return `"${protectedText.replace(/"/g, '""')}"`;
+}
+
+function orderAddress(order: AdminOrder) {
+  return [
+    order.shipping.doorNo,
+    order.shipping.addressLine1 ?? order.shipping.address,
+    order.shipping.addressLine2 ?? order.shipping.apartment,
+    order.shipping.city,
+    order.shipping.state,
+    order.shipping.pinCode,
+    order.shipping.country,
+  ].filter(Boolean).join(', ');
+}
+
+function orderItemsForCsv(order: AdminOrder) {
+  return order.items.map((item) => {
+    const options = [item.size && `Size: ${item.size}`, item.mensSize && `Men's: ${item.mensSize}`, item.womensSize && `Women's: ${item.womensSize}`, item.color && `Color: ${item.color}`].filter(Boolean).join(', ');
+    return `${item.name || 'Unnamed item'} × ${item.quantity ?? 1}${options ? ` (${options})` : ''}`;
+  }).join(' | ');
+}
+
+function downloadOrdersCsv(orders: AdminOrder[]) {
+  const rows = [
+    ['Order ID', 'Order Date', 'Customer Name', 'Customer Email', 'Phone Number', 'Shipping Address', 'Products / Items', 'Order Total (INR)', 'Payment Status', 'Fulfillment Status', 'Cashfree Order ID'],
+    ...orders.map((order) => [
+      order.orderId,
+      formatOrderDate(order.createdAt),
+      customerName(order),
+      order.customer.email || '',
+      order.customer.phone || '',
+      orderAddress(order),
+      orderItemsForCsv(order),
+      order.pricing.total ?? '',
+      order.paymentStatus || '',
+      statusLabels[order.fulfillmentStatus],
+      order.payment.cashfreeOrderId || '',
+    ]),
+  ];
+  const csv = `\ufeff${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}`;
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `varataaa-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function AdminOrders({ adminEmail, onSignOut, onExit, onOpenInventory }: AdminOrdersProps) {
   const [filter, setFilter] = useState<FulfillmentStatus>('production');
   const [orders, setOrders] = useState<AdminOrder[]>([]);
@@ -64,6 +118,7 @@ export function AdminOrders({ adminEmail, onSignOut, onExit, onOpenInventory }: 
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -134,6 +189,28 @@ export function AdminOrders({ adminEmail, onSignOut, onExit, onOpenInventory }: 
     }
   };
 
+  const exportOrders = async () => {
+    if (exporting) return;
+    setExporting(true);
+    setError(null);
+    setNotice(null);
+    try {
+      // The authorized endpoint has no pagination and returns every order
+      // matching the active fulfillment status, not just visible table rows.
+      const exportRows = await fetchAdminOrders(filter);
+      if (exportRows.length === 0) {
+        setNotice(`No ${statusLabels[filter].toLowerCase()} orders are available to export.`);
+        return;
+      }
+      downloadOrdersCsv(exportRows);
+      setNotice(`${exportRows.length} order${exportRows.length === 1 ? '' : 's'} exported as CSV.`);
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : 'Unable to export orders.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <main className="relative z-[1] min-h-screen bg-[#111214] px-4 py-5 text-zinc-100 sm:px-7 sm:py-8 lg:px-10">
       <section className="mx-auto w-full max-w-[1500px]">
@@ -156,21 +233,27 @@ export function AdminOrders({ adminEmail, onSignOut, onExit, onOpenInventory }: 
         </header>
 
         <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <label className="flex items-center gap-3 text-sm font-medium text-zinc-300">
-            Fulfillment status
-            <select
-              value={filter}
-              onChange={(event) => {
-                setFilter(event.target.value as FulfillmentStatus);
-                setEditingOrderId(null);
-                setExpandedOrderId(null);
-              }}
-              disabled={saving}
-              className="min-h-10 rounded-lg border border-white/15 bg-[#1a1b1f] px-3 text-sm text-white outline-none transition focus:border-white/50 focus:ring-2 focus:ring-white/15 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {statuses.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
-            </select>
-          </label>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-3 text-sm font-medium text-zinc-300">
+              Fulfillment status
+              <select
+                value={filter}
+                onChange={(event) => {
+                  setFilter(event.target.value as FulfillmentStatus);
+                  setEditingOrderId(null);
+                  setExpandedOrderId(null);
+                }}
+                disabled={saving || exporting}
+                className="min-h-10 rounded-lg border border-white/15 bg-[#1a1b1f] px-3 text-sm text-white outline-none transition focus:border-white/50 focus:ring-2 focus:ring-white/15 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {statuses.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
+              </select>
+            </label>
+            <Button type="button" variant="outline" onClick={() => void exportOrders()} disabled={exporting} className="border-white/20 bg-transparent text-zinc-100 hover:bg-white/10 hover:text-white">
+              {exporting ? <LoaderCircle className="mr-2 animate-spin" size={15} aria-hidden="true" /> : <Download className="mr-2" size={15} aria-hidden="true" />}
+              {exporting ? 'Exporting' : 'Export as CSV'}
+            </Button>
+          </div>
           <button
             type="button"
             onClick={() => setRefreshKey((key) => key + 1)}

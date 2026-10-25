@@ -53,7 +53,7 @@ Run `npm.cmd run dev`, visit `/varataaa/`, and confirm the remote logo, sale
 badges, and desktop video load. Then temporarily set one `storagePath` to a
 nonexistent object and refresh:
 
-- missing `logo`: a text METALFLUX wordmark remains;
+- missing `logo`: a text VARATAAA wordmark remains;
 - missing `sale`: sale badges are omitted;
 - missing `heroVideo` or `heroPoster`: the Hero keeps its dark, styled backdrop.
 

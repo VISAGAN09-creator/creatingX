@@ -23,7 +23,7 @@ This repository is a single-package e-commerce **storefront SPA** plus an Expres
 
 **Absent from application code (confirmed by search):** Firebase Auth imports, Firebase Storage usage, React Context/Redux/Zustand store, test runner, ESLint/Prettier, admin UI.
 
-Branding is inconsistent: site title/copy **VARATAAA**, packages/alt text often **METALFLUX**, section **Thoughts Of The Day (TOTD)**.
+Customer-facing branding uses **VARATAAA**. Existing `metalflux-*` package and cache identifiers are retained as compatibility/internal identifiers; **Thoughts Of The Day (TOTD)** remains a product section name.
 
 ---
 
@@ -327,7 +327,7 @@ Firebase Auth / Storage: **not integrated** in app code (Storage packages may ex
 | `App.tsx` comment: cart “cookie persistence, Firestore sync” | `useCart` uses localStorage only |
 | `functions/index.js`: “predeploy script copies…” | No `predeploy` in `firebase.json`; manual `copy-server` |
 | `firestore.rules` comments: “catalog collections” public read | Wildcard allows **all** non-`orders`/`mail` collections |
-| Package/UI “METALFLUX” vs title “VARATAAA” | Branding mismatch, not a functional split |
+| `metalflux-*` package/cache identifiers vs VARATAAA UI | Compatibility identifiers, not a customer-facing branding split |
 | `walkthrough.md` env cleanup | Matches current discovery via `_config/collections` |
 | Empty tracked stubs | `README.md`, `docs/data-model.md`, `docs/implementation-plan.md`, `.cursor/rules/*.mdc` were empty at audit time |
 | Branch `feature/admin-auth` | No Auth/admin implementation found in app source |

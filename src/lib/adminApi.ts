@@ -59,6 +59,7 @@ export type AdminOrder = {
   };
   payment: {
     gateway?: string;
+    cashfreeOrderId?: string;
     transactionId?: string;
     paymentStatus?: string;
   };
@@ -140,6 +141,14 @@ export type InventoryProduct = {
   collectionName: string;
   documentId: string;
   name: string;
+  nameField: 'name' | 'title' | null;
+  image: string;
+  price: number | null;
+  flags: {
+    latest: boolean;
+    hero: boolean;
+    couple: boolean;
+  };
   version: string | null;
   schema: string;
   editable: boolean;
@@ -154,7 +163,11 @@ type InventoryResponse = {
 
 export type InventorySaveResult = {
   success: boolean;
-  successful: Array<{ productId: string; changes: Partial<Record<InventorySize, number>> }>;
+  successful: Array<{
+    productId: string;
+    changes: Partial<Record<InventorySize, number>>;
+    metadata?: Partial<{ name: string; price: number; latest: boolean; hero: boolean; couple: boolean }>;
+  }>;
   failed: Array<{ productId: string | null; message: string; code?: string }>;
 };
 
@@ -171,7 +184,8 @@ export async function saveInventory(
   updates: Array<{
     productId: string;
     version: string;
-    changes: Partial<Record<InventorySize, number>>;
+    changes?: Partial<Record<InventorySize, number>>;
+    metadata?: Partial<{ name: string; price: number; latest: boolean; hero: boolean; couple: boolean }>;
   }>,
 ): Promise<InventorySaveResult> {
   const { body } = await adminFetch('/admin/inventory', {

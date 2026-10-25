@@ -95,7 +95,7 @@ export function Hero({
         ) : showPoster ? (
           <img
             src={assets.heroPoster}
-            alt="MetalFlux editorial campaign"
+            alt="VARATAAA editorial campaign"
             className="h-full w-full object-cover"
             loading="eager"
             onError={() => setPosterFailed(true)}
