@@ -48,6 +48,30 @@ const app = express();
 app.use(helmet());
 const PORT = process.env.PORT || 5000;
 
+function roundCurrency(value) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+/**
+ * Builds the amount passed to Cashfree from server-resolved line totals only.
+ * Client-request totals are intentionally not part of this contract.
+ */
+function calculateCheckoutPricing(resolvedItems, shippingAmount = 0) {
+  const normalizedShipping = Number(shippingAmount);
+  if (!Number.isFinite(normalizedShipping) || normalizedShipping < 0) {
+    throw new Error('Shipping amount must be a non-negative number.');
+  }
+
+  const subtotalAmount = roundCurrency(
+    resolvedItems.reduce((sum, item) => sum + Number(item.lineTotal), 0),
+  );
+  const taxAmount = 0;
+  const roundedShippingAmount = roundCurrency(normalizedShipping);
+  const totalAmount = roundCurrency(subtotalAmount + roundedShippingAmount);
+
+  return { subtotalAmount, taxAmount, shippingAmount: roundedShippingAmount, totalAmount };
+}
+
 // ============================================================================
 // CORS CONFIGURATION — SECURITY HARDENED
 // ============================================================================
@@ -1096,10 +1120,9 @@ app.post('/api/create-order', async (req, res) => {
 
     // Catalog prices are the intended payable prices. Shipping is currently
     // free and no additional tax is charged at checkout.
-    const subtotalAmount = Math.round(totalAmount * 100) / 100;
-    const taxAmount = 0;
-    const shippingAmount = 0;
-    totalAmount = Math.round((subtotalAmount + shippingAmount) * 100) / 100;
+    const pricing = calculateCheckoutPricing(resolvedItems, 0);
+    const { subtotalAmount, taxAmount, shippingAmount } = pricing;
+    totalAmount = pricing.totalAmount;
 
     if (totalAmount <= 0) {
       return res.status(400).json({
@@ -1688,4 +1711,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app };
+module.exports = { app, calculateCheckoutPricing };
