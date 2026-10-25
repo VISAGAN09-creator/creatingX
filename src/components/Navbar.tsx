@@ -45,7 +45,7 @@ export function Navbar({ cartCount, onCartOpen, onSearchOpen, onNavigate, active
   };
 
   return (
-    <header className="fixed left-0 top-0 z-[1000] w-full border-b border-metal-light bg-white/90 px-5 py-2  backdrop-blur-xl sm:px-8 lg:px-12">
+    <header className="fixed left-0 top-0 z-[1000] w-full border-b border-metal-light bg-white/90 px-5 py-2.5 backdrop-blur-xl sm:px-8 lg:px-12">
       <nav className="mx-auto flex max-w-shell items-center justify-between gap-5">
         <button
           type="button"

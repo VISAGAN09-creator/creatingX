@@ -301,7 +301,7 @@ export function AdminOrders({ adminEmail, onSignOut, onExit, onOpenInventory }: 
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={8} className="px-5 py-14 text-center text-zinc-400"><LoaderCircle className="mx-auto mb-3 animate-spin" size={20} aria-hidden="true" />Loading {statusLabels[filter].toLowerCase()} orders…</td></tr>
+                  <tr><td colSpan={8} className="px-5 py-14 text-center text-zinc-400"><LoaderCircle className="mx-auto mb-3 animate-spin" size={20} aria-hidden="true" />Loading {statusLabels[filter].toLowerCase()} orders...</td></tr>
                 ) : orders.length === 0 ? (
                   <tr><td colSpan={8} className="px-5 py-14 text-center text-zinc-400">No orders are currently in {statusLabels[filter].toLowerCase()}.</td></tr>
                 ) : orders.map((order) => {
