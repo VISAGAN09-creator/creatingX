@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { TOTD_ENABLED } from '../config/features';
 import { subscribeToProducts, subscribeToTOTD } from '../data/firestoreContent';
 import type { DataStatus, Product } from '../types';
 
@@ -27,7 +28,7 @@ export function useCatalog(): UseCatalogReturn {
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
   const [catalogStatus, setCatalogStatus] = useState<DataStatus>('loading');
   const [totdProducts, setTotdProducts] = useState<Product[]>([]);
-  const [totdStatus, setTotdStatus] = useState<DataStatus>('loading');
+  const [totdStatus, setTotdStatus] = useState<DataStatus>(TOTD_ENABLED ? 'loading' : 'ready');
 
   // Track whether we've received at least one snapshot (error resilience)
   const hasReceivedFirstSnapshot = useRef(false);
@@ -58,6 +59,13 @@ export function useCatalog(): UseCatalogReturn {
   // ---- TOTD subscription ---------------------------------------------------
 
   useEffect(() => {
+    if (!TOTD_ENABLED) {
+      // Keep the return shape stable without creating a Firestore listener.
+      setTotdProducts([]);
+      setTotdStatus('ready');
+      return undefined;
+    }
+
     const unsubscribe = subscribeToTOTD(
       (items) => {
         setTotdProducts(items);

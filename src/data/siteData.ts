@@ -1,11 +1,14 @@
 import { PenTool, Settings, Truck } from 'lucide-react';
+import { TOTD_ENABLED } from '../config/features';
 import type { Feature, FooterColumn, LookbookItem, NavLink, Product } from '../types';
+
+const totdNavLink: NavLink = { label: 'TOTD', href: '#totd' };
 
 export const navLinks: NavLink[] = [
   { label: 'Latest Drop', href: '#latest-drop' },
   { label: 'Collections', href: '#collections' },
   { label: 'Lookbook', href: '#lookbook' },
-  { label: 'TOTD', href: '#totd' },
+  ...(TOTD_ENABLED ? [totdNavLink] : []),
   { label: 'Customize', href: '#customize' },
   { label: 'About', href: '#about' },
   { label: 'Contact', href: '#contact' },
@@ -135,7 +138,7 @@ export const features: Feature[] = [
   },
   {
     title: 'Fast Delivery',
-    description: 'Shipped in 4-5 days. Track your order in real-time from print to doorstep.',
+    description: 'Shipped in 4-5 days and delivered at your doorstep.',
     icon: Truck,
   },
 ];
@@ -143,7 +146,7 @@ export const features: Feature[] = [
 export const stats = [
   { value: '50K+', label: 'Happy Customers' },
   { value: '200+', label: 'Unique Designs' },
-  { value: '15', label: 'Countries' },
+  { value: '15 Years', label: 'Experience' },
 ];
 
 export const footerColumns: FooterColumn[] = [

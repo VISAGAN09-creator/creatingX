@@ -111,13 +111,14 @@ function imageList(value: unknown): string[] {
   ]);
 }
 
-function colorFallback(value: string) {
-  const normalized = value.toLowerCase();
-  if (normalized.includes('white')) return '#f5f5f5';
-  if (normalized.includes('black')) return '#000000';
-  if (normalized.includes('silver')) return 'linear-gradient(135deg, #c0c0c0, #e8e8e8)';
-  if (normalized.includes('graphite')) return 'linear-gradient(135deg, #444444, #666666)';
-  return '#c0c0c0';
+function colorSwatchValue(value: string) {
+  const candidate = value.trim();
+  if (!candidate) return undefined;
+
+  // A product name such as "Black" is a valid CSS color, while names such as
+  // "Vintage wash" remain labelled choices rather than misleading swatches.
+  if (typeof CSS !== 'undefined' && CSS.supports('color', candidate)) return candidate;
+  return undefined;
 }
 
 function colorList(value: unknown): ProductColor[] {
@@ -126,7 +127,7 @@ function colorList(value: unknown): ProductColor[] {
   }
 
   if (typeof value === 'string') {
-    return textList(value).map((name) => ({ name, value: colorFallback(name) }));
+    return textList(value).map((name) => ({ name, value: colorSwatchValue(name) }));
   }
 
   const record = objectValue(value);
@@ -134,12 +135,12 @@ function colorList(value: unknown): ProductColor[] {
 
   const name = text(record.name) ?? text(record.label);
   const swatch = text(record.value) ?? text(record.hex) ?? text(record.color);
-  if (name) return [{ name, value: swatch ?? colorFallback(name) }];
+  if (name) return [{ name, value: swatch ? colorSwatchValue(swatch) : colorSwatchValue(name) }];
 
   return Object.entries(record)
     .map(([entryName, entryValue]) => ({
       name: entryName,
-      value: text(entryValue) ?? colorFallback(entryName),
+      value: text(entryValue) ? colorSwatchValue(text(entryValue)!) : colorSwatchValue(entryName),
     }))
     .filter((color) => color.name.trim().length > 0);
 }
@@ -162,7 +163,9 @@ function sizeList(value: unknown): ProductSize[] {
   }
 
   if (typeof value === 'string') {
-    return textList(value).map((name) => ({ name, stock: 1 }));
+    // A string list only declares which sizes exist. It does not contain an
+    // inventory quantity, so it must never make a size purchasable by default.
+    return textList(value).map((name) => ({ name, stock: 0 }));
   }
 
   const record = objectValue(value);
@@ -193,7 +196,30 @@ function sizeList(value: unknown): ProductSize[] {
 }
 
 function sizeFields(data: DocumentData): ProductSize[] {
-  return sizeFieldNames.map((name) => ({ name, stock: stockValue(data[name], 0) }));
+  // Missing top-level fields mean the size is not configured. Do not fabricate
+  // a full size run: it would make the UI imply variant availability that the
+  // product document does not define.
+  return sizeFieldNames
+    .filter((name) => Object.prototype.hasOwnProperty.call(data, name))
+    .map((name) => ({ name, stock: stockValue(data[name], 0) }));
+}
+
+function uniqueColors(colors: ProductColor[]) {
+  const seen = new Set<string>();
+  return colors.filter((color) => {
+    const key = color.name.trim().toLocaleLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function numberedColorFields(data: DocumentData): ProductColor[] {
+  return Object.keys(data)
+    .map((key) => ({ key, match: /^color(\d+)$/i.exec(key) }))
+    .filter((entry): entry is { key: string; match: RegExpExecArray } => Boolean(entry.match))
+    .sort((a, b) => Number(a.match[1]) - Number(b.match[1]))
+    .flatMap(({ key }) => colorList(data[key]));
 }
 
 function sizeGuideList(value: unknown): ProductSizeGuideRow[] {
@@ -325,7 +351,10 @@ function toProduct(id: string, data: DocumentData, sourceCollectionName = produc
 
     return uniqueTexts(collected);
   })();
-  const colors = colorList(data.colors ?? data.colorOptions ?? data.color);
+  const colors = uniqueColors([
+    ...colorList(data.colors ?? data.colorOptions ?? data.color),
+    ...numberedColorFields(data),
+  ]);
   const sizes = sizeList(data.sizes ?? data.sizeStock ?? data.stockBySize ?? data.stock);
   const mappedSizes = sizes.length > 0 ? sizes : sizeFields(data);
 
@@ -347,6 +376,7 @@ function toProduct(id: string, data: DocumentData, sourceCollectionName = produc
     galleryImages,
     colors,
     sizes: mappedSizes,
+    isCouple: booleanValue(data.couple) === true,
     sizeGuide: sizeGuideList(data.sizeGuide),
     theme: sourceLabel,
     collectionImage:

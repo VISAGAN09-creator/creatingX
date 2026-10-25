@@ -1,4 +1,7 @@
 {
+  "firestore": {
+    "rules": "firestore.rules"
+  },
   "functions": [
     {
       "source": "functions",
@@ -13,6 +16,10 @@
       "**/node_modules/**"
     ],
     "rewrites": [
+      {
+        "source": "/varataaa/api/**",
+        "function": "api"
+      },
       {
         "source": "/api/**",
         "function": "api"

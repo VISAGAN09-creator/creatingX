@@ -1,19 +1,24 @@
 import { motion, useMotionValue, useReducedMotion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
-import { useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useWebsiteAssets } from '../hooks/useWebsiteAssets';
 import { scrollToHash } from '../utils/scroll';
-import { formatPrice } from '../utils/format';
 import { MagneticAnchor } from './Magnetic';
-import { SmartImage } from './SmartImage';
-import heroVideo from '../assets/hero video.mp4';
-import saleBadge from '../assets/sale.png';
 import type { Product } from '../types';
 
-const heroPosterUrl =
-  (import.meta.env.VITE_HERO_POSTER_URL as string | undefined)?.trim() ||
-  'https://upload.wikimedia.org/wikipedia/commons/5/50/Black_colour.jpg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original';
+function shouldPreferStillHero() {
+  if (typeof window === 'undefined') return false;
 
-const heroVideoUrl = (import.meta.env.VITE_HERO_VIDEO_URL as string | undefined)?.trim() || heroVideo;
+  const connection = (navigator as Navigator & {
+    connection?: { saveData?: boolean; effectiveType?: string };
+  }).connection;
+
+  return (
+    connection?.saveData === true ||
+    connection?.effectiveType === 'slow-2g' ||
+    connection?.effectiveType === '2g'
+  );
+}
 
 export function Hero({
   products = [],
@@ -23,9 +28,57 @@ export function Hero({
   onOpenProduct?: (product: Product) => void;
 }) {
   const shouldReduceMotion = useReducedMotion();
+  const { assets } = useWebsiteAssets();
   const [videoFailed, setVideoFailed] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
+  const [posterFailed, setPosterFailed] = useState(false);
+  const [saleFailed, setSaleFailed] = useState(false);
+  const [preferStillHero, setPreferStillHero] = useState(shouldPreferStillHero);
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    setVideoFailed(false);
+    setVideoReady(false);
+  }, [assets.heroVideo]);
+  useEffect(() => setPosterFailed(false), [assets.heroPoster]);
+  useEffect(() => setSaleFailed(false), [assets.sale]);
+
+  const showVideo = Boolean(assets.heroVideo) && !videoFailed && !shouldReduceMotion && !preferStillHero;
+  const showPoster = Boolean(assets.heroPoster) && !posterFailed;
+
+  useEffect(() => {
+    if (!showVideo) return undefined;
+
+    const video = videoRef.current;
+    if (!video) return undefined;
+
+    let active = true;
+    const attemptPlayback = () => {
+      // iOS Safari requires the element to be muted before play() is called.
+      video.muted = true;
+      video.defaultMuted = true;
+      const playback = video.play();
+      if (playback) {
+        playback
+          .then(() => {
+            if (active) setVideoReady(true);
+          })
+          .catch(() => {
+            if (active) setVideoFailed(true);
+          });
+      }
+    };
+
+    if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) attemptPlayback();
+    else video.addEventListener('canplay', attemptPlayback, { once: true });
+
+    return () => {
+      active = false;
+      video.removeEventListener('canplay', attemptPlayback);
+    };
+  }, [showVideo, assets.heroVideo]);
 
   const heroProducts = (products ?? [])
     .filter((p) => p.hero?.toLowerCase() === 'yes')
@@ -53,39 +106,46 @@ export function Hero({
       onMouseLeave={handleMouseLeave}
     >
       <div className="absolute inset-0 z-0">
-        {heroVideoUrl && !videoFailed ? (
+        {showPoster && (
+          <img
+            src={assets.heroPoster}
+            alt="VARATAAA editorial campaign"
+            className="absolute inset-0 h-full w-full object-cover"
+            loading="eager"
+            onError={() => setPosterFailed(true)}
+          />
+        )}
+        {showVideo && (
           <video
-            className="h-full w-full object-cover"
-            autoPlay={!shouldReduceMotion}
+            ref={videoRef}
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${videoReady || !showPoster ? 'opacity-100' : 'opacity-0'}`}
+            autoPlay
             muted
             loop
             playsInline
-            poster={heroPosterUrl}
+            preload="metadata"
+            poster={assets.heroPoster}
             aria-hidden="true"
+            onPlaying={() => setVideoReady(true)}
             onError={() => setVideoFailed(true)}
           >
-            <source src={heroVideoUrl} type="video/mp4" />
+            <source src={assets.heroVideo} type="video/mp4" />
           </video>
-        ) : (
-          <SmartImage
-            src={heroPosterUrl}
-            alt="MetalFlux editorial campaign"
-            className="h-full w-full object-cover"
-          />
         )}
         <div className="absolute inset-0 bg-black/65" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.22),transparent_28%),linear-gradient(90deg,rgba(0,0,0,0.25),rgba(0,0,0,0.78))]" />
       </div>
 
       {/* Blinking Sale Badges (Blue Boxes) */}
-      {heroProducts.length > 0 && (
+      {heroProducts.length > 0 && assets.sale && !saleFailed && (
         <>
           {/* Centered on mobile, left-aligned on sm+ */}
           <div className="absolute top-28 left-1/2 -translate-x-1/2 sm:left-8 sm:translate-x-0 lg:left-12 z-[2]">
             <motion.img
-              src={saleBadge}
+              src={assets.sale}
               alt="Sale"
               className="h-20 w-20 sm:h-20 sm:w-20 lg:h-24 lg:w-24 object-contain"
+              onError={() => setSaleFailed(true)}
               animate={shouldReduceMotion ? undefined : { opacity: [1, 0.15, 1] }}
               transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
             />
@@ -94,9 +154,10 @@ export function Hero({
           {/* Hidden on mobile, right-aligned on sm+ */}
           <div className="absolute top-28 right-5 sm:right-8 lg:right-12 z-[2] hidden sm:block">
             <motion.img
-              src={saleBadge}
+              src={assets.sale}
               alt="Sale"
               className="h-20 w-20 sm:h-20 sm:w-20 lg:h-24 lg:w-24 object-contain"
+              onError={() => setSaleFailed(true)}
               animate={shouldReduceMotion ? undefined : { opacity: [1, 0.15, 1] }}
               transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
             />

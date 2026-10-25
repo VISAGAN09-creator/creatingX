@@ -1,21 +1,34 @@
 import { useCallback, useEffect, useState } from 'react';
+import { TOTD_ENABLED } from '../config/features';
 import type { Product } from '../types';
 import { scrollToHash } from '../utils/scroll';
 
 // ============================================================================
 // Page types supported by the application router.
 // ============================================================================
-export type AppPage = 'home' | 'products' | 'productDetail' | 'checkout' | 'totd' | 'customize' | 'paymentReturn';
+export type AppPage = 'home' | 'products' | 'productDetail' | 'checkout' | 'totd' | 'customize' | 'paymentReturn' | 'admin';
 
 /** Pages the user can "return to" after viewing a product detail page. */
 type ReturnablePage = 'home' | 'products' | 'totd' | 'customize';
+
+function isAdminPath() {
+  const pathname = window.location.pathname.replace(/\/+$/, '');
+  return pathname === '/admin' || pathname === '/varataaa/admin';
+}
+
+function isDisabledTotdRoute(hash: string) {
+  return !TOTD_ENABLED && (hash === '#totd' || hash.toLowerCase().startsWith('#product-totd-'));
+}
 
 /**
  * Parse the current `window.location.hash` into the matching AppPage.
  */
 function pageFromHash(): AppPage {
   const hash = window.location.hash;
+  if (isAdminPath()) return 'admin';
+  if (isDisabledTotdRoute(hash)) return 'home';
   if (hash === '#checkout') return 'checkout';
+  if (hash === '#admin') return 'admin';
   if (hash.startsWith('#payment-return')) return 'paymentReturn';
   if (hash.startsWith('#product-')) return 'productDetail';
   if (hash === '#totd') return 'totd';
@@ -42,9 +55,8 @@ function orderIdFromPaymentReturnHash(): string | null {
  */
 function productIdFromHash(): string | null {
   const hash = window.location.hash;
-  return hash.startsWith('#product-')
-    ? decodeURIComponent(hash.replace('#product-', ''))
-    : null;
+  if (!hash.startsWith('#product-') || isDisabledTotdRoute(hash)) return null;
+  return decodeURIComponent(hash.replace('#product-', ''));
 }
 
 // ============================================================================
@@ -74,6 +86,7 @@ export type UseRouterReturn = {
   openProductDetail: (product: Product) => void;
   navigateToHomeSection: (href: string) => void;
   closeProductDetail: () => void;
+  exitAdmin: () => void;
 };
 
 export function useRouter(): UseRouterReturn {
@@ -89,10 +102,33 @@ export function useRouter(): UseRouterReturn {
     const syncPageFromHash = () => {
       const hash = window.location.hash;
 
+      if (isAdminPath()) {
+        setSelectedProductId(null);
+        setSelectedCatalogFilter(null);
+        setActivePage('admin');
+        return;
+      }
+
+      if (isDisabledTotdRoute(hash)) {
+        setSelectedProductId(null);
+        setSelectedCatalogFilter(null);
+        setActivePage('home');
+        window.history.replaceState(null, '', '#hero');
+        window.setTimeout(() => scrollToHash('#hero'), 0);
+        return;
+      }
+
       if (hash === '#checkout') {
         setSelectedProductId(null);
         setSelectedCatalogFilter(null);
         setActivePage('checkout');
+        return;
+      }
+
+      if (hash === '#admin') {
+        setSelectedProductId(null);
+        setSelectedCatalogFilter(null);
+        setActivePage('admin');
         return;
       }
 
@@ -181,6 +217,14 @@ export function useRouter(): UseRouterReturn {
 
   const navigateToHomeSection = useCallback((href: string) => {
     if (href === '#totd') {
+      if (!TOTD_ENABLED) {
+        setActivePage('home');
+        setSelectedProductId(null);
+        setSelectedCatalogFilter(null);
+        window.history.pushState(null, '', '#hero');
+        window.setTimeout(() => scrollToHash('#hero'), 0);
+        return;
+      }
       setActivePage('totd');
       setSelectedProductId(null);
       setSelectedCatalogFilter(null);
@@ -209,6 +253,10 @@ export function useRouter(): UseRouterReturn {
       return;
     }
     if (productReturnPage === 'totd') {
+      if (!TOTD_ENABLED) {
+        navigateToHomeSection('#hero');
+        return;
+      }
       setActivePage('totd');
       window.history.pushState(null, '', '#totd');
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -220,6 +268,15 @@ export function useRouter(): UseRouterReturn {
     }
     navigateToHomeSection('#hero');
   }, [navigateToHomeSection, openCustomizePage, openProductPage, productReturnPage]);
+
+  const exitAdmin = useCallback(() => {
+    const storePath = window.location.pathname.startsWith('/varataaa/admin') ? '/varataaa/' : '/';
+    setActivePage('home');
+    setSelectedProductId(null);
+    setSelectedCatalogFilter(null);
+    window.history.pushState(null, '', `${storePath}#hero`);
+    window.setTimeout(() => scrollToHash('#hero'), 0);
+  }, []);
 
   return {
     activePage,
@@ -233,5 +290,6 @@ export function useRouter(): UseRouterReturn {
     openProductDetail,
     navigateToHomeSection,
     closeProductDetail,
+    exitAdmin,
   };
 }
