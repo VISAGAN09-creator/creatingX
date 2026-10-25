@@ -5,7 +5,10 @@
   "functions": [
     {
       "source": "functions",
-      "codebase": "default"
+      "codebase": "default",
+      "predeploy": [
+        "npm --prefix functions run copy-server"
+      ]
     }
   ],
   "hosting": {
