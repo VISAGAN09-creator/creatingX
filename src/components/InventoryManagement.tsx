@@ -28,6 +28,21 @@ function validPrice(value: string) {
   return Number.isFinite(price) && price >= 0;
 }
 
+/**
+ * Keeps stock fields numeric: digits only, no sign or decimal point, and no
+ * leading zeros (so "007" cannot fail the stricter validQuantity check).
+ */
+function quantityInputValue(raw: string) {
+  return raw.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+}
+
+/** Keeps the price field numeric: digits and at most one decimal point. */
+function priceInputValue(raw: string) {
+  const digitsAndDots = raw.replace(/[^\d.]/g, '');
+  const [whole, ...decimalParts] = digitsAndDots.split('.');
+  return decimalParts.length > 0 ? `${whole}.${decimalParts.join('')}` : whole;
+}
+
 function visibleQuantity(product: InventoryProduct, drafts: InventoryDrafts, size: InventorySize) {
   const draft = drafts[product.productId]?.[size];
   return draft === undefined ? product.sizes[size] : draft;
@@ -122,20 +137,22 @@ export function InventoryManagement({ adminEmail, onSignOut, onExit, onOpenOrder
   };
 
   const setInventoryDraft = (product: InventoryProduct, size: InventorySize, value: string) => {
+    const nextValue = quantityInputValue(value);
     setInventoryDrafts((current) => ({
       ...current,
-      [product.productId]: { ...current[product.productId], [size]: value },
+      [product.productId]: { ...current[product.productId], [size]: nextValue },
     }));
-    setInvalidState(draftKey(product.productId, size), value === '' || !validQuantity(value));
+    setInvalidState(draftKey(product.productId, size), nextValue === '' || !validQuantity(nextValue));
   };
 
   const setMetadataDraft = <Field extends keyof MetadataDraft>(product: InventoryProduct, field: Field, value: MetadataDraft[Field]) => {
+    const nextValue = (field === 'price' ? priceInputValue(String(value ?? '')) : value) as MetadataDraft[Field];
     setMetadataDrafts((current) => ({
       ...current,
-      [product.productId]: { ...current[product.productId], [field]: value },
+      [product.productId]: { ...current[product.productId], [field]: nextValue },
     }));
-    if (field === 'name') setInvalidState(draftKey(product.productId, field), !String(value).trim());
-    if (field === 'price') setInvalidState(draftKey(product.productId, field), !validPrice(String(value)));
+    if (field === 'name') setInvalidState(draftKey(product.productId, field), !String(nextValue).trim());
+    if (field === 'price') setInvalidState(draftKey(product.productId, field), !validPrice(String(nextValue)));
   };
 
   const resetDrafts = () => {
@@ -235,14 +252,14 @@ export function InventoryManagement({ adminEmail, onSignOut, onExit, onOpenOrder
           {pendingCount > 0 && <p className="text-sm text-amber-200">{pendingCount} product{pendingCount === 1 ? '' : 's'} with unsaved changes.</p>}
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-white/10 bg-[#17181b] shadow-2xl shadow-black/20"><div className="overflow-x-auto"><table className="w-full min-w-[1720px] border-collapse text-left text-sm"><thead className="border-b border-white/10 bg-white/[0.025] text-xs uppercase tracking-[0.12em] text-zinc-500"><tr><th className="sticky left-0 z-10 min-w-[290px] bg-[#1a1b1f] px-5 py-4 font-medium">Product</th><th className="min-w-28 px-3 py-4 text-right font-medium">Price</th><th className="min-w-24 px-3 py-4 font-medium">Latest</th><th className="min-w-24 px-3 py-4 font-medium">Hero</th><th className="min-w-28 px-3 py-4 font-medium">Couple T-shirt</th>{INVENTORY_SIZES.map((size) => <th key={size} className="w-20 px-2 py-4 text-center font-medium">{size}</th>)}<th className="px-5 py-4 text-right font-medium">Total stock</th></tr></thead><tbody>
+        <div className="overflow-hidden rounded-xl border border-white/10 bg-[#17181b] shadow-2xl shadow-black/20"><div className="overflow-x-auto"><table className="w-full min-w-[1720px] border-collapse text-left text-sm"><thead className="border-b border-white/10 bg-white/[0.025] text-xs uppercase tracking-[0.12em] text-zinc-500"><tr><th className="sticky left-0 z-10 min-w-[290px] bg-[#1a1b1f] px-5 py-4 font-medium">Product</th><th className="min-w-28 px-3 py-4 text-center font-medium">Price</th><th className="min-w-24 px-3 py-4 text-center font-medium">Latest</th><th className="min-w-24 px-3 py-4 text-center font-medium">Hero</th><th className="min-w-28 px-3 py-4 text-center font-medium">Couple T-shirt</th>{INVENTORY_SIZES.map((size) => <th key={size} className="w-20 px-2 py-4 text-center font-medium">{size}</th>)}<th className="px-5 py-4 text-right font-medium">Total stock</th></tr></thead><tbody>
           {loading ? <tr><td colSpan={14} className="px-5 py-14 text-center text-zinc-400"><LoaderCircle className="mx-auto mb-3 animate-spin" size={20} aria-hidden="true" />Loading inventory…</td></tr> : filteredProducts.length === 0 ? <tr><td colSpan={14} className="px-5 py-14 text-center text-zinc-400">{products.length === 0 ? 'No products were found in the configured collections.' : 'No products match the current collection and search.'}</td></tr> : filteredProducts.map((product) => {
             const total = INVENTORY_SIZES.reduce((sum, size) => { const value = visibleQuantity(product, inventoryDrafts, size); return sum + (typeof value === 'string' && validQuantity(value) ? Number(value) : typeof value === 'number' ? value : 0); }, 0);
             const hasDraft = pendingProducts.some((pendingProduct) => pendingProduct.productId === product.productId);
             const metadata = metadataDrafts[product.productId] ?? {};
             const displayName = metadata.name ?? product.name;
             const displayPrice = metadata.price ?? (product.price === null ? '' : String(product.price));
-            return <tr key={product.productId} className={`border-b border-white/[0.07] ${hasDraft ? 'bg-amber-300/[0.045]' : 'hover:bg-white/[0.025]'}`}><td className="sticky left-0 z-[1] bg-[#17181b] px-5 py-3 align-top"><div className="flex min-w-0 gap-3"><div className="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-black/30"><SmartImage src={product.image} alt={product.name} fallbackLabel="No image" className="h-full w-full object-cover text-[8px]" /></div><div className="min-w-0 flex-1"><input aria-label={`${product.name} product name`} value={displayName} onChange={(event) => setMetadataDraft(product, 'name', event.target.value)} disabled={saving || !product.nameField} className={`h-9 w-full rounded-md border bg-[#111214] px-2.5 text-sm font-medium text-white outline-none disabled:cursor-not-allowed disabled:opacity-50 ${invalid.has(draftKey(product.productId, 'name')) ? 'border-red-400' : 'border-white/15 focus:border-white/50'}`} /><p className="mt-1 text-xs text-zinc-500">{product.collectionName}{!product.nameField && ' · name field needs migration'}{!product.editable && ' · stock field needs migration'}</p>{hasDraft && <p className="mt-1 text-xs text-amber-200">Unsaved change</p>}</div></div></td><td className="px-3 py-3 align-top"><input aria-label={`${product.name} price`} value={displayPrice} onChange={(event) => setMetadataDraft(product, 'price', event.target.value)} disabled={saving} inputMode="decimal" className={`h-9 w-24 rounded-md border bg-[#111214] px-2 text-right text-sm text-white outline-none disabled:cursor-not-allowed disabled:opacity-50 ${invalid.has(draftKey(product.productId, 'price')) ? 'border-red-400' : 'border-white/15 focus:border-white/50'}`} /></td>{(['latest', 'hero', 'couple'] as const).map((field) => { const value = metadata[field] ?? product.flags[field]; return <td key={field} className="px-3 py-3 align-top"><select aria-label={`${product.name} ${field}`} value={value ? 'yes' : 'no'} onChange={(event) => setMetadataDraft(product, field, event.target.value === 'yes')} disabled={saving} className="h-9 w-full rounded-md border border-white/15 bg-[#111214] px-2 text-sm text-white outline-none focus:border-white/50 disabled:cursor-not-allowed disabled:opacity-50"><option value="yes">Yes</option><option value="no">No</option></select></td>; })}{INVENTORY_SIZES.map((size) => { const saved = product.sizes[size]; const value = visibleQuantity(product, inventoryDrafts, size); const inputInvalid = invalid.has(draftKey(product.productId, size)); const changed = value !== saved && value !== String(saved ?? ''); return <td key={size} className="px-2 py-3 text-center">{saved === null ? <span className="text-zinc-600" title="Size not configured">—</span> : <input aria-label={`${product.name}, ${size} stock`} value={value ?? ''} onChange={(event) => setInventoryDraft(product, size, event.target.value)} disabled={saving || !product.editable} inputMode="numeric" className={`h-9 w-16 rounded-md border bg-[#111214] px-2 text-center text-sm text-white outline-none disabled:cursor-not-allowed disabled:opacity-50 ${inputInvalid ? 'border-red-400' : changed ? 'border-amber-300 bg-amber-300/10' : saved === 0 ? 'border-red-400/40 text-red-200' : 'border-white/15 focus:border-white/50'}`} />}</td>; })}<td className="px-5 py-4 text-right font-semibold text-zinc-100">{total}</td></tr>;
+            return <tr key={product.productId} className={`border-b border-white/[0.07] ${hasDraft ? 'bg-amber-300/[0.045]' : 'hover:bg-white/[0.025]'}`}><td className="sticky left-0 z-[1] bg-[#17181b] px-5 py-3 align-top"><div className="flex min-w-0 gap-3"><div className="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-black/30"><SmartImage src={product.image} alt={product.name} fallbackLabel="No image" className="h-full w-full object-cover text-[8px]" /></div><div className="min-w-0 flex-1"><input aria-label={`${product.name} product name`} value={displayName} onChange={(event) => setMetadataDraft(product, 'name', event.target.value)} disabled={saving || !product.nameField} className={`h-9 w-full rounded-md border bg-[#111214] px-2.5 text-sm font-medium text-white outline-none disabled:cursor-not-allowed disabled:opacity-50 ${invalid.has(draftKey(product.productId, 'name')) ? 'border-red-400' : 'border-white/15 focus:border-white/50'}`} /><p className="mt-1 text-xs text-zinc-500">{product.collectionName}{!product.nameField && ' · name field needs migration'}{!product.editable && ' · stock field needs migration'}</p>{hasDraft && <p className="mt-1 text-xs text-amber-200">Unsaved change</p>}</div></div></td><td className="px-3 py-3 align-top"><input aria-label={`${product.name} price`} value={displayPrice} onChange={(event) => setMetadataDraft(product, 'price', event.target.value)} disabled={saving} inputMode="decimal" className={`h-9 w-full rounded-md border bg-[#111214] px-2 text-right text-sm text-white outline-none disabled:cursor-not-allowed disabled:opacity-50 ${invalid.has(draftKey(product.productId, 'price')) ? 'border-red-400' : 'border-white/15 focus:border-white/50'}`} /></td>{(['latest', 'hero', 'couple'] as const).map((field) => { const value = metadata[field] ?? product.flags[field]; return <td key={field} className="px-3 py-3 align-top"><select aria-label={`${product.name} ${field}`} value={value ? 'yes' : 'no'} onChange={(event) => setMetadataDraft(product, field, event.target.value === 'yes')} disabled={saving} className="h-9 w-full rounded-md border border-white/15 bg-[#111214] px-2 text-sm text-white outline-none focus:border-white/50 disabled:cursor-not-allowed disabled:opacity-50"><option value="yes">Yes</option><option value="no">No</option></select></td>; })}{INVENTORY_SIZES.map((size) => { const saved = product.sizes[size]; const value = visibleQuantity(product, inventoryDrafts, size); const inputInvalid = invalid.has(draftKey(product.productId, size)); const changed = value !== saved && value !== String(saved ?? ''); return <td key={size} className="px-2 py-3 text-center">{saved === null ? <span className="text-zinc-600" title="Size not configured">—</span> : <input aria-label={`${product.name}, ${size} stock`} value={value ?? ''} onChange={(event) => setInventoryDraft(product, size, event.target.value)} disabled={saving || !product.editable} inputMode="numeric" className={`h-9 w-16 rounded-md border bg-[#111214] px-2 text-center text-sm text-white outline-none disabled:cursor-not-allowed disabled:opacity-50 ${inputInvalid ? 'border-red-400' : changed ? 'border-amber-300 bg-amber-300/10' : saved === 0 ? 'border-red-400/40 text-red-200' : 'border-white/15 focus:border-white/50'}`} />}</td>; })}<td className="px-5 py-4 text-right font-semibold text-zinc-100">{total}</td></tr>;
           })}</tbody></table></div></div>
       </section>
     </main>
