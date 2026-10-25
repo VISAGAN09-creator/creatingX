@@ -1,8 +1,8 @@
 import { Instagram } from 'lucide-react';
 import { useState } from 'react';
 import { footerColumns } from '../data/siteData';
+import { BrandLogo } from './BrandLogo';
 import { MagneticButton } from './Magnetic';
-import logo from '../assets/logo.png';
 import { scrollToHash } from '../utils/scroll';
 
 type FooterProps = {
@@ -69,7 +69,11 @@ export function Footer({ activePage, onNavigate }: FooterProps) {
                 </span>
               ) : (
                 <div className="flex items-center gap-4">
-                  <img src={logo} alt="METALFLUX" className="h-10 w-auto object-contain" />
+                  <BrandLogo
+                    containerClassName="h-12 w-[155px]"
+                    imageClassName="h-full w-full object-contain"
+                    fallbackClassName="flex h-full w-full items-center font-display text-xl font-bold tracking-wider text-black"
+                  />
                   <a
                     href="https://www.instagram.com/varataaah/"
                     target="_blank"

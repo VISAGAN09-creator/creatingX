@@ -15,6 +15,8 @@ type CartDrawerProps = {
   onDecrement: (id: string) => void;
   onRemove: (id: string) => void;
   onCheckout: () => void;
+  onExitComplete?: () => void;
+  checkoutPending?: boolean;
 };
 
 export function CartDrawer({
@@ -26,6 +28,8 @@ export function CartDrawer({
   onDecrement,
   onRemove,
   onCheckout,
+  onExitComplete,
+  checkoutPending = false,
 }: CartDrawerProps) {
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -45,7 +49,7 @@ export function CartDrawer({
   }, [isOpen, onClose]);
 
   return (
-    <AnimatePresence>
+    <AnimatePresence onExitComplete={onExitComplete}>
       {isOpen && (
         <motion.aside
           className="fixed inset-0 z-[3000]"
@@ -115,6 +119,18 @@ export function CartDrawer({
                           <div>
                             <h3 className="font-display text-lg font-semibold text-black">{line.name}</h3>
                             <p className="text-sm text-metal-text">{formatPrice(line.price)}</p>
+                            {(line.selectedSize || line.selectedMensSize || line.selectedWomensSize || line.selectedColor) && (
+                              <p className="mt-1 text-xs text-metal-text">
+                                {[
+                                  line.selectedSize && `Size: ${line.selectedSize}`,
+                                  line.selectedMensSize && `Men's size: ${line.selectedMensSize}`,
+                                  line.selectedWomensSize && `Women's size: ${line.selectedWomensSize}`,
+                                  line.selectedColor && `Color: ${line.selectedColor}`,
+                                ]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              </p>
+                            )}
                           </div>
                           <button
                             type="button"
@@ -169,7 +185,7 @@ export function CartDrawer({
               </div>
               <MagneticButton
                 type="button"
-                disabled={lines.length === 0}
+                disabled={lines.length === 0 || checkoutPending}
                 onClick={onCheckout}
                 className="liquid-metal metal-sheen flex min-h-14 w-full items-center justify-center bg-black px-6 py-4 text-sm font-semibold uppercase tracking-[0.08em] text-white"
               >
