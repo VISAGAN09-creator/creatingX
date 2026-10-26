@@ -141,17 +141,23 @@ export function ProductDetailsPage({
   const images = useMemo(() => (product ? productImages(product) : []), [product]);
   const colors = useMemo(() => product?.colors ?? [], [product]);
   const sizes = useMemo(() => product?.sizes ?? [], [product]);
+  const mensSizes = useMemo(() => product?.mensSizes ?? sizes, [product, sizes]);
+  const womensSizes = useMemo(() => product?.womensSizes ?? sizes, [product, sizes]);
   const sizeGuide = product?.sizeGuide?.length ? product.sizeGuide : DEFAULT_SIZE_GUIDE;
   const selectedSizeData = sizes.find((size) => size.name === selectedSize);
-  const selectedMensSizeData = sizes.find((size) => size.name === selectedMensSize);
-  const selectedWomensSizeData = sizes.find((size) => size.name === selectedWomensSize);
+  const selectedMensSizeData = mensSizes.find((size) => size.name === selectedMensSize);
+  const selectedWomensSizeData = womensSizes.find((size) => size.name === selectedWomensSize);
   const isCoupleProduct = product?.isCouple === true;
+  // Legacy couple products use one shared inventory map. New products created
+  // by the admin use independent maps and can sell the same named size once
+  // from each map.
+  const hasSharedCoupleStock = mensSizes === womensSizes;
   const coupleSizesInStock = Boolean(
     selectedMensSizeData &&
     selectedWomensSizeData &&
     selectedMensSizeData.stock > 0 &&
     selectedWomensSizeData.stock > 0 &&
-    (selectedMensSize !== selectedWomensSize || selectedMensSizeData.stock >= 2),
+    (!hasSharedCoupleStock || selectedMensSize !== selectedWomensSize || selectedMensSizeData.stock >= 2),
   );
   const hasColorOptions = colors.length > 0;
   const canAddToCart = Boolean(
@@ -489,21 +495,21 @@ export function ProductDetailsPage({
                 </button>
               </div>
 
-              {sizes.length === 0 ? (
+              {(!isCoupleProduct && sizes.length === 0) || (isCoupleProduct && (!mensSizes.length || !womensSizes.length)) ? (
                 <p className="text-sm text-metal-text">No sizes are currently configured for this product.</p>
               ) : isCoupleProduct ? (
                 <div className="space-y-5">
                   {[
-                    { label: "Men's Size", selected: selectedMensSize, setSelected: setSelectedMensSize, otherSelected: selectedWomensSize },
-                    { label: "Women's Size", selected: selectedWomensSize, setSelected: setSelectedWomensSize, otherSelected: selectedMensSize },
-                  ].map(({ label, selected, setSelected, otherSelected }) => (
+                    { label: "Men's Size", selected: selectedMensSize, setSelected: setSelectedMensSize, otherSelected: selectedWomensSize, options: mensSizes },
+                    { label: "Women's Size", selected: selectedWomensSize, setSelected: setSelectedWomensSize, otherSelected: selectedMensSize, options: womensSizes },
+                  ].map(({ label, selected, setSelected, otherSelected, options }) => (
                     <div key={label}>
                       <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.16em] text-black">
                         {label} - <span className="text-metal-text">{selected || 'Select'}</span>
                       </p>
                       <div className="flex flex-wrap gap-2.5">
-                        {sizes.map((size) => {
-                          const isOutOfStock = size.stock <= 0 || (otherSelected === size.name && size.stock < 2);
+                        {options.map((size) => {
+                          const isOutOfStock = size.stock <= 0 || (hasSharedCoupleStock && otherSelected === size.name && size.stock < 2);
                           return (
                             <button
                               key={size.name}

@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { calculateCheckoutPricing, paidOrderItem, pendingOrderItem } = require('../server.cjs');
+const { calculateCheckoutPricing, coupleStockAdapters, paidOrderItem, parseNewProductSizes, pendingOrderItem } = require('../server.cjs');
 
 test('charges a ₹1.00 server-resolved item as ₹1.00 with free shipping', () => {
   assert.deepEqual(calculateCheckoutPricing([{ lineTotal: 1 }]), {
@@ -92,4 +92,22 @@ test('does not emit undefined optional fields in paid standard-product order ite
     image: '',
   });
   assert.equal(Object.values(item).some((value) => value === undefined), false);
+});
+
+test('accepts stock-backed product sizes and rejects malformed quantities', () => {
+  assert.deepEqual(parseNewProductSizes({ XS: 0, M: 12 }), { XS: 0, M: 12 });
+  assert.equal(parseNewProductSizes({ M: -1 }), null);
+  assert.equal(parseNewProductSizes({ M: '12' }), null);
+  assert.equal(parseNewProductSizes({ OneSize: 2 }), null);
+});
+
+test('uses independent maps for new couple products while retaining legacy shared stock', () => {
+  const independent = coupleStockAdapters({ mensSizes: { M: 2 }, womensSizes: { S: 3 } });
+  assert.equal(independent.mens.quantities.M, 2);
+  assert.equal(independent.womens.quantities.S, 3);
+  assert.equal(independent.legacy, null);
+
+  const legacy = coupleStockAdapters({ sizes: { M: 4, S: 5 } });
+  assert.equal(legacy.legacy.quantities.M, 4);
+  assert.equal(legacy.legacy.quantities.S, 5);
 });

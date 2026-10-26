@@ -357,6 +357,11 @@ function toProduct(id: string, data: DocumentData, sourceCollectionName = produc
   ]);
   const sizes = sizeList(data.sizes ?? data.sizeStock ?? data.stockBySize ?? data.stock);
   const mappedSizes = sizes.length > 0 ? sizes : sizeFields(data);
+  const isCouple = booleanValue(data.couple) === true;
+  // Older couple products used one shared stock map. Keep that representation
+  // readable while new product creation stores independent maps.
+  const mensSizes = sizeList(data.mensSizes ?? data.mensSizeStock);
+  const womensSizes = sizeList(data.womensSizes ?? data.womensSizeStock);
 
   return {
     id: `${slugify(sourceCollectionName)}-${id}`,
@@ -376,7 +381,9 @@ function toProduct(id: string, data: DocumentData, sourceCollectionName = produc
     galleryImages,
     colors,
     sizes: mappedSizes,
-    isCouple: booleanValue(data.couple) === true,
+    mensSizes: isCouple ? (mensSizes.length ? mensSizes : mappedSizes) : undefined,
+    womensSizes: isCouple ? (womensSizes.length ? womensSizes : mappedSizes) : undefined,
+    isCouple,
     sizeGuide: sizeGuideList(data.sizeGuide),
     theme: sourceLabel,
     collectionImage:

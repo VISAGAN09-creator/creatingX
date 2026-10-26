@@ -314,10 +314,10 @@ function documentVersion(snapshot) {
  * update operation. String-only size lists are intentionally read-only: they
  * declare variants but provide no unambiguous field in which to store stock.
  */
-function stockAdapter(data) {
+function stockAdapter(data, fields = ['sizes', 'sizeStock', 'stockBySize', 'stock']) {
   const empty = { quantities: {}, configured: new Set(), editable: false, kind: 'none', field: null };
 
-  for (const field of ['sizes', 'sizeStock', 'stockBySize', 'stock']) {
+  for (const field of fields) {
     const value = data?.[field];
     if (Array.isArray(value)) {
       const entries = [];
@@ -372,6 +372,8 @@ function stockAdapter(data) {
     }
   }
 
+  // Top-level fields are part of the legacy standard-product schema only.
+  if (fields[0] !== 'sizes') return empty;
   const quantities = {};
   const configured = new Set();
   SUPPORTED_SIZES.forEach((size) => {
@@ -390,6 +392,17 @@ function stockSummary(data) {
     schema: adapter.kind,
     editable: adapter.editable,
     sizes: Object.fromEntries(SUPPORTED_SIZES.map((size) => [size, adapter.configured.has(size) ? adapter.quantities[size] ?? 0 : null])),
+  };
+}
+
+function coupleStockAdapters(data) {
+  const standard = stockAdapter(data);
+  return {
+    mens: stockAdapter(data, ['mensSizes', 'mensSizeStock']),
+    womens: stockAdapter(data, ['womensSizes', 'womensSizeStock']),
+    // Existing couple documents use one shared inventory map and retain their
+    // current behaviour until they are explicitly migrated.
+    legacy: !data?.mensSizes && !data?.womensSizes ? standard : null,
   };
 }
 
@@ -489,18 +502,21 @@ function inventoryGroups(items) {
     const collectionName = typeof item?.collectionName === 'string' ? item.collectionName : '';
     const documentId = typeof item?.firestoreDocId === 'string' ? item.firestoreDocId : '';
     const quantity = Number(item?.quantity);
-    const sizes = item?.couple
-      ? [normalizeSize(item?.selectedMensSize), normalizeSize(item?.selectedWomensSize)]
-      : [normalizeSize(item?.selectedSize)];
-    if (!collectionName || !documentId || sizes.some((size) => !size) || !Number.isSafeInteger(quantity) || quantity < 1) {
+    const selections = item?.couple
+      ? [
+          { role: 'mens', size: normalizeSize(item?.selectedMensSize) },
+          { role: 'womens', size: normalizeSize(item?.selectedWomensSize) },
+        ]
+      : [{ role: 'standard', size: normalizeSize(item?.selectedSize) }];
+    if (!collectionName || !documentId || selections.some(({ size }) => !size) || !Number.isSafeInteger(quantity) || quantity < 1) {
       const error = new Error('Order inventory details are incomplete.');
       error.code = 'inventory-invalid-order';
       throw error;
     }
     const key = `${collectionName}\u0000${documentId}`;
-    const group = groups.get(key) || { collectionName, documentId, quantities: {} };
-    for (const size of sizes) {
-      group.quantities[size] = (group.quantities[size] || 0) + quantity;
+    const group = groups.get(key) || { collectionName, documentId, quantities: { standard: {}, mens: {}, womens: {} } };
+    for (const { role, size } of selections) {
+      group.quantities[role][size] = (group.quantities[role][size] || 0) + quantity;
     }
     groups.set(key, group);
   }
@@ -536,18 +552,36 @@ async function createPaidOrderWithFulfillment(orderId, orderData, inventoryItems
         throw error;
       }
       const data = stockDocument.snapshot.data();
-      const adapter = stockAdapter(data);
-      const nextQuantities = {};
-      for (const [size, requested] of Object.entries(stockDocument.group.quantities)) {
-        const available = adapter.configured.has(size) ? adapter.quantities[size] ?? 0 : 0;
-        if (!adapter.editable || available < requested) {
-          const error = new Error(`${data.name || data.title || stockDocument.group.documentId} (${size}) is no longer in stock.`);
-          error.code = 'inventory-insufficient';
-          throw error;
+      const adapters = coupleStockAdapters(data);
+      const legacyCoupleChanges = Object.entries(stockDocument.group.quantities.mens)
+        .concat(Object.entries(stockDocument.group.quantities.womens))
+        .reduce((combined, [size, quantity]) => ({ ...combined, [size]: (combined[size] || 0) + quantity }), {});
+      const roles = adapters.legacy
+        ? [
+            { adapter: stockAdapter(data), changes: stockDocument.group.quantities.standard },
+            { adapter: adapters.legacy, changes: legacyCoupleChanges },
+          ]
+        : [
+            { adapter: stockAdapter(data), changes: stockDocument.group.quantities.standard },
+            { adapter: adapters.mens, changes: stockDocument.group.quantities.mens },
+            { adapter: adapters.womens, changes: stockDocument.group.quantities.womens },
+          ];
+      const patch = {};
+      for (const { adapter, changes } of roles) {
+        if (!Object.keys(changes).length) continue;
+        const nextQuantities = {};
+        for (const [size, requested] of Object.entries(changes)) {
+          const available = adapter?.configured.has(size) ? adapter.quantities[size] ?? 0 : 0;
+          if (!adapter?.editable || available < requested) {
+            const error = new Error(`${data.name || data.title || stockDocument.group.documentId} (${size}) is no longer in stock.`);
+            error.code = 'inventory-insufficient';
+            throw error;
+          }
+          nextQuantities[size] = available - requested;
         }
-        nextQuantities[size] = available - requested;
+        Object.assign(patch, applyStockChanges(data, adapter, nextQuantities));
       }
-      transaction.update(stockDocument.ref, applyStockChanges(data, adapter, nextQuantities));
+      transaction.update(stockDocument.ref, patch);
     }
 
     transaction.create(orderRef, completedOrder);
@@ -980,6 +1014,91 @@ app.post('/api/admin/inventory', async (req, res) => {
   return res.status(failed.length ? 207 : 200).json({ success: failed.length === 0, successful, failed });
 });
 
+function parseNewProductSizes(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const sizes = {};
+  for (const [rawSize, rawQuantity] of Object.entries(value)) {
+    const size = normalizeSize(rawSize);
+    if (!size || !Number.isSafeInteger(rawQuantity) || rawQuantity < 0) return null;
+    sizes[size] = rawQuantity;
+  }
+  return Object.keys(sizes).length ? sizes : null;
+}
+
+function storageDownloadUrl(value) {
+  if (typeof value !== 'string' || value.length > 2000) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.hostname === 'firebasestorage.googleapis.com' ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+app.get('/api/admin/product-collections', async (req, res) => {
+  if (!db) return res.status(503).json({ success: false, message: 'Product collections are unavailable because the database is not configured.' });
+  try {
+    return res.status(200).json({ success: true, collections: await inventoryCollectionNames() });
+  } catch (error) {
+    console.error('[Admin Products] Failed to list collections:', error.message);
+    return res.status(500).json({ success: false, message: 'Unable to load product collections.' });
+  }
+});
+
+app.post('/api/admin/products', async (req, res) => {
+  if (!db) return res.status(503).json({ success: false, message: 'Product creation is unavailable because the database is not configured.' });
+
+  const name = sanitizeString(req.body?.name, 200).replace(/\s+/g, ' ');
+  const price = req.body?.price;
+  const collectionName = sanitizeString(req.body?.collectionName, 200);
+  const documentId = sanitizeString(req.body?.documentId, 160);
+  const latest = req.body?.latest === true;
+  const hero = req.body?.hero === true;
+  const couple = req.body?.couple === true;
+  const imageUrls = Array.isArray(req.body?.imageUrls) ? req.body.imageUrls.map(storageDownloadUrl) : [];
+  const standardSizes = parseNewProductSizes(req.body?.sizes);
+  const mensSizes = parseNewProductSizes(req.body?.mensSizes);
+  const womensSizes = parseNewProductSizes(req.body?.womensSizes);
+
+  if (!name || typeof price !== 'number' || !Number.isFinite(price) || price <= 0 || !collectionName || !documentId || !/^[a-z0-9][a-z0-9-]{2,159}$/i.test(documentId)) {
+    return res.status(400).json({ success: false, message: 'Enter a name, a positive numeric price, a valid collection, and a valid product identifier.' });
+  }
+  if (!imageUrls.length || imageUrls.some((url) => !url)) {
+    return res.status(400).json({ success: false, message: 'Upload at least one valid Firebase Storage image before saving the product.' });
+  }
+  if ((couple && (!mensSizes || !womensSizes)) || (!couple && !standardSizes)) {
+    return res.status(400).json({ success: false, message: couple ? "Configure at least one men's and one women's size." : 'Configure at least one size.' });
+  }
+
+  try {
+    const collectionNames = await inventoryCollectionNames();
+    if (!collectionNames.includes(collectionName)) {
+      return res.status(400).json({ success: false, message: 'Choose one existing product collection.' });
+    }
+    const reference = db.collection(collectionName).doc(documentId);
+    const existing = await reference.get();
+    if (existing.exists) return res.status(409).json({ success: false, message: 'A product with this identifier already exists. Rename the product and try again.' });
+
+    const data = {
+      name,
+      price,
+      latest: latest ? 'yes' : 'no',
+      hero: hero ? 'yes' : 'no',
+      couple: couple ? 'yes' : 'no',
+      img1: imageUrls[0],
+      images: imageUrls,
+      ...(couple ? { mensSizes, womensSizes } : { sizes: standardSizes }),
+      createdAt: new Date().toISOString(),
+      createdBy: req.adminUser.uid,
+    };
+    await reference.create(data);
+    return res.status(201).json({ success: true, productId: `${slugify(collectionName)}-${documentId}`, collectionName, documentId });
+  } catch (error) {
+    console.error('[Admin Products] Failed to create product:', error.message);
+    return res.status(500).json({ success: false, message: 'Unable to save the product.' });
+  }
+});
+
 // Health check endpoint to verify backend status
 app.get('/api/health', (req, res) => {
   return res.status(200).json({
@@ -1132,6 +1251,9 @@ app.post('/api/create-order', async (req, res) => {
         firestoreDocId: product.docId,
         collectionName: product.collectionName,
         couple,
+        // New couple products use independent stock maps. Existing documents
+        // have one shared map, which must keep counting both garments together.
+        independentCoupleStock: couple && Boolean(product.data.mensSizes || product.data.womensSizes),
         ...(couple
           ? { selectedMensSize, selectedWomensSize }
           : { selectedSize }),
@@ -1149,24 +1271,31 @@ app.post('/api/create-order', async (req, res) => {
     // check so concurrent shoppers cannot oversell a size.
     const requestedByVariant = new Map();
     for (const item of resolvedItems) {
-      const selectedSizes = item.couple
-        ? [item.selectedMensSize, item.selectedWomensSize]
-        : [item.selectedSize];
-      for (const size of selectedSizes) {
-        const key = `${item.collectionName}\u0000${item.firestoreDocId}\u0000${size}`;
-        requestedByVariant.set(key, (requestedByVariant.get(key) || 0) + item.quantity);
+      const selections = item.couple
+        ? [
+            { role: item.independentCoupleStock ? 'mens' : 'legacy', size: item.selectedMensSize },
+            { role: item.independentCoupleStock ? 'womens' : 'legacy', size: item.selectedWomensSize },
+          ]
+        : [{ role: 'standard', size: item.selectedSize }];
+      for (const selection of selections) {
+        const key = `${item.collectionName}\u0000${item.firestoreDocId}\u0000${selection.role}\u0000${selection.size}`;
+        const current = requestedByVariant.get(key) || { item, role: selection.role, size: selection.size, quantity: 0 };
+        requestedByVariant.set(key, { ...current, quantity: current.quantity + item.quantity });
       }
     }
-    for (const [key, requested] of requestedByVariant) {
-      const [, , size] = key.split('\u0000');
-      const item = resolvedItems.find((candidate) =>
-        candidate.collectionName === key.split('\u0000')[0] &&
-        candidate.firestoreDocId === key.split('\u0000')[1],
-      );
-      const adapter = stockAdapter(item && (await db.collection(item.collectionName).doc(item.firestoreDocId).get()).data());
-      const available = adapter.configured.has(size) ? adapter.quantities[size] ?? 0 : 0;
-      if (!adapter.editable || available < requested) {
-        return res.status(409).json({ success: false, message: `${item.name} (${size}) is out of stock or has insufficient stock.` });
+    for (const request of requestedByVariant.values()) {
+      const productData = (await db.collection(request.item.collectionName).doc(request.item.firestoreDocId).get()).data();
+      const coupleAdapters = request.item.couple ? coupleStockAdapters(productData) : null;
+      const adapter = request.role === 'mens'
+        ? (coupleAdapters.mens.configured.size ? coupleAdapters.mens : coupleAdapters.legacy)
+        : request.role === 'womens'
+          ? (coupleAdapters.womens.configured.size ? coupleAdapters.womens : coupleAdapters.legacy)
+          : request.role === 'legacy'
+            ? coupleAdapters.legacy
+            : stockAdapter(productData);
+      const available = adapter.configured.has(request.size) ? adapter.quantities[request.size] ?? 0 : 0;
+      if (!adapter.editable || available < request.quantity) {
+        return res.status(409).json({ success: false, message: `${request.item.name} (${request.size}) is out of stock or has insufficient stock.` });
       }
     }
 
@@ -1727,4 +1856,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, calculateCheckoutPricing, pendingOrderItem, paidOrderItem };
+module.exports = { app, calculateCheckoutPricing, pendingOrderItem, paidOrderItem, parseNewProductSizes, coupleStockAdapters };

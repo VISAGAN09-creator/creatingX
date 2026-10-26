@@ -199,11 +199,12 @@ function InventoryMobileCard({
   );
 }
 
-export function InventoryManagement({ adminEmail, onSignOut, onExit, onOpenOrders }: {
+export function InventoryManagement({ adminEmail, onSignOut, onExit, onOpenOrders, onOpenCreate }: {
   adminEmail: string | null;
   onSignOut: () => Promise<void>;
   onExit: () => void;
   onOpenOrders: () => void;
+  onOpenCreate: () => void;
 }) {
   const [products, setProducts] = useState<InventoryProduct[]>([]);
   const [inventoryDrafts, setInventoryDrafts] = useState<InventoryDrafts>({});
@@ -353,6 +354,7 @@ export function InventoryManagement({ adminEmail, onSignOut, onExit, onOpenOrder
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <span className="max-w-[220px] truncate text-zinc-500">{adminEmail || 'Authorized administrator'}</span>
+            <button type="button" onClick={onOpenCreate} className="rounded-lg bg-white px-3 py-2 font-medium text-black transition hover:bg-zinc-200">Create product</button>
             <button type="button" onClick={onOpenOrders} className="rounded-lg border border-white/15 px-3 py-2 text-zinc-300 transition hover:border-white/35 hover:text-white">Orders</button>
             <button type="button" onClick={onExit} className="rounded-lg border border-white/15 px-3 py-2 text-zinc-300 transition hover:border-white/35 hover:text-white">Storefront</button>
             <button type="button" onClick={() => void onSignOut()} className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-zinc-300 transition hover:border-white/35 hover:text-white"><LogOut size={15} aria-hidden="true" /> Sign out</button>
