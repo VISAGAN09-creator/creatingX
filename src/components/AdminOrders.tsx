@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Download, LoaderCircle, LogOut, Pencil, RefreshCw, ShieldCheck } from 'lucide-react';
+import { ChevronDown, ChevronUp, Download, LoaderCircle, LogOut, Pencil, RefreshCw, Search, ShieldCheck, X } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   type AdminOrder,
@@ -128,6 +128,7 @@ export function AdminOrders({ adminEmail, onSignOut, onExit, onOpenInventory }: 
   const [refreshKey, setRefreshKey] = useState(0);
   const [walkInOpen, setWalkInOpen] = useState(false);
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -153,6 +154,16 @@ export function AdminOrders({ adminEmail, onSignOut, onExit, onOpenInventory }: 
     () => orders.filter((order) => pending[order.orderId]).length,
     [orders, pending],
   );
+  const filteredOrders = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase();
+    if (!query) return orders;
+    return orders.filter((order) => [
+      order.orderId,
+      customerName(order),
+      order.customer.email,
+      order.customer.phone,
+    ].filter(Boolean).some((value) => String(value).toLocaleLowerCase().includes(query)));
+  }, [orders, search]);
 
   const setPendingStatus = useCallback((order: AdminOrder, nextStatus: FulfillmentStatus) => {
     setPending((current) => {
@@ -281,6 +292,14 @@ export function AdminOrders({ adminEmail, onSignOut, onExit, onOpenInventory }: 
           </button>
         </div>
 
+        <div className="mb-5 max-w-xl">
+          <label className="relative block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} aria-hidden="true" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by order ID, customer, email, or phone" className="h-11 w-full rounded-lg border border-white/15 bg-[#17181b] pl-9 pr-10 text-sm text-white outline-none transition focus:border-white/50" />
+            {search && <button type="button" onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1.5 text-zinc-400 hover:bg-white/10 hover:text-white" aria-label="Clear order search"><X size={16} /></button>}
+          </label>
+        </div>
+
         <div aria-live="polite" className="mb-4 space-y-2">
           {notice && <p className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">{notice}</p>}
           {error && <p role="alert" className="rounded-lg border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-100">{error}</p>}
@@ -319,9 +338,9 @@ export function AdminOrders({ adminEmail, onSignOut, onExit, onOpenInventory }: 
               <tbody>
                 {loading ? (
                   <tr><td colSpan={8} className="px-5 py-14 text-center text-zinc-400"><LoaderCircle className="mx-auto mb-3 animate-spin" size={20} aria-hidden="true" />Loading {statusLabels[filter].toLowerCase()} orders...</td></tr>
-                ) : orders.length === 0 ? (
-                  <tr><td colSpan={8} className="px-5 py-14 text-center text-zinc-400">No orders are currently in {statusLabels[filter].toLowerCase()}.</td></tr>
-                ) : orders.map((order) => {
+                ) : filteredOrders.length === 0 ? (
+                  <tr><td colSpan={8} className="px-5 py-14 text-center text-zinc-400">{search.trim() ? `No ${statusLabels[filter].toLowerCase()} orders match “${search.trim()}”.` : `No orders are currently in ${statusLabels[filter].toLowerCase()}.`}</td></tr>
+                ) : filteredOrders.map((order) => {
                   const proposedStatus = pending[order.orderId] || order.fulfillmentStatus;
                   const isEditing = editingOrderId === order.orderId;
                   const isExpanded = expandedOrderId === order.orderId;
