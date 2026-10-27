@@ -8,6 +8,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { slugify } from '../utils/string';
+import { sortClothingSizes } from '../utils/sizes';
 import type { LookbookItem, Product, ProductColor, ProductSize, ProductSizeGuideRow } from '../types';
 
 const productsCollectionName = import.meta.env.VITE_FIRESTORE_PRODUCTS_COLLECTION || 'products';
@@ -356,7 +357,7 @@ function toProduct(id: string, data: DocumentData, sourceCollectionName = produc
     ...numberedColorFields(data),
   ]);
   const sizes = sizeList(data.sizes ?? data.sizeStock ?? data.stockBySize ?? data.stock);
-  const mappedSizes = sizes.length > 0 ? sizes : sizeFields(data);
+  const mappedSizes = sortClothingSizes(sizes.length > 0 ? sizes : sizeFields(data));
 
   return {
     id: `${slugify(sourceCollectionName)}-${id}`,

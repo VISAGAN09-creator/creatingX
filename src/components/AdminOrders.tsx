@@ -4,11 +4,13 @@ import {
   type AdminOrder,
   type FulfillmentStatus,
   fetchAdminOrders,
+  deleteAdminOrder,
   saveFulfillmentStatuses,
 } from '../lib/adminApi';
 import { cn } from '../lib/utils';
 import { formatPrice } from '../utils/format';
 import { Button } from './ui/button';
+import { WalkInOrderForm } from './WalkInOrderForm';
 
 type AdminOrdersProps = {
   adminEmail: string | null;
@@ -83,9 +85,10 @@ function orderItemsForCsv(order: AdminOrder) {
 
 function downloadOrdersCsv(orders: AdminOrder[]) {
   const rows = [
-    ['Order ID', 'Order Date', 'Customer Name', 'Customer Email', 'Phone Number', 'Shipping Address', 'Products / Items', 'Order Total (INR)', 'Payment Status', 'Fulfillment Status', 'Cashfree Order ID'],
+    ['Order ID', 'Order Type', 'Order Date', 'Customer Name', 'Customer Email', 'Phone Number', 'Shipping Address', 'Products / Items', 'Order Total (INR)', 'Payment Method', 'Payment Status', 'Fulfillment Status', 'Cashfree Order ID'],
     ...orders.map((order) => [
       order.orderId,
+      order.orderType === 'walk-in' ? 'Walk-in' : 'Online',
       formatOrderDate(order.createdAt),
       customerName(order),
       order.customer.email || '',
@@ -93,6 +96,7 @@ function downloadOrdersCsv(orders: AdminOrder[]) {
       orderAddress(order),
       orderItemsForCsv(order),
       order.pricing.total ?? '',
+      order.payment.method === 'other' ? order.payment.otherMethod || 'Other' : order.payment.method || order.payment.gateway || '',
       order.paymentStatus || '',
       statusLabels[order.fulfillmentStatus],
       order.payment.cashfreeOrderId || '',
@@ -122,6 +126,8 @@ export function AdminOrders({ adminEmail, onSignOut, onExit, onOpenInventory }: 
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [walkInOpen, setWalkInOpen] = useState(false);
+  const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -211,7 +217,17 @@ export function AdminOrders({ adminEmail, onSignOut, onExit, onOpenInventory }: 
     }
   };
 
+  const deleteOrder = async (order: AdminOrder) => {
+    if (deletingOrderId) return;
+    if (!window.confirm('Are you sure you want to delete this order? This action cannot be undone.')) return;
+    setDeletingOrderId(order.orderId); setError(null); setNotice(null);
+    try { await deleteAdminOrder(order.orderId); setNotice(`Order ${order.orderId} deleted. Payment was not refunded.`); setRefreshKey((key) => key + 1); }
+    catch (deleteError) { setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete this order.'); }
+    finally { setDeletingOrderId(null); }
+  };
+
   return (
+    <>
     <main className="relative z-[1] min-h-screen bg-[#111214] px-4 py-5 text-zinc-100 sm:px-7 sm:py-8 lg:px-10">
       <section className="mx-auto w-full max-w-[1500px]">
         <header className="mb-7 flex flex-col gap-5 border-b border-white/10 pb-6 lg:flex-row lg:items-end lg:justify-between">
@@ -253,6 +269,7 @@ export function AdminOrders({ adminEmail, onSignOut, onExit, onOpenInventory }: 
               {exporting ? <LoaderCircle className="mr-2 animate-spin" size={15} aria-hidden="true" /> : <Download className="mr-2" size={15} aria-hidden="true" />}
               {exporting ? 'Exporting' : 'Export as CSV'}
             </Button>
+            <Button type="button" onClick={() => setWalkInOpen(true)} className="bg-white text-black hover:bg-zinc-200">+ Create Order</Button>
           </div>
           <button
             type="button"
@@ -325,8 +342,8 @@ export function AdminOrders({ adminEmail, onSignOut, onExit, onOpenInventory }: 
                           </button>
                         </td>
                         <td className="px-5 py-4 align-top font-medium text-zinc-100">{formatPrice(order.pricing.total)}</td>
-                        <td className="px-5 py-4 align-top"><p className="capitalize text-zinc-200">{order.payment.gateway || '—'}</p><p className="mt-1 text-xs text-zinc-500">{order.paymentStatus || '—'}</p></td>
-                        <td className="px-5 py-4 align-top whitespace-nowrap text-zinc-300">{formatOrderDate(order.createdAt)}</td>
+                        <td className="px-5 py-4 align-top"><p className="text-zinc-200">{order.orderType === 'walk-in' ? 'Walk-in' : 'Online'}</p><p className="mt-1 text-xs capitalize text-zinc-400">{order.payment.method === 'other' ? order.payment.otherMethod || 'Other' : order.payment.method || order.payment.gateway || '—'}</p><p className="mt-1 text-xs text-zinc-500">{order.paymentStatus || '—'}</p></td>
+                        <td className="px-5 py-4 align-top whitespace-nowrap text-zinc-300">{formatOrderDate(order.createdAt)}<button type="button" onClick={() => void deleteOrder(order)} disabled={Boolean(deletingOrderId)} className="mt-2 block rounded-lg border border-red-400/30 px-2 py-1 text-xs text-red-200 hover:bg-red-400/10 disabled:opacity-50">{deletingOrderId === order.orderId ? 'Deleting…' : 'Delete'}</button></td>
                         <td className="px-2 py-4 align-top">
                           <button type="button" onClick={() => setEditingOrderId(isEditing ? null : order.orderId)} aria-label={`Edit fulfillment status for order ${order.orderId}`} aria-expanded={isEditing} className="grid size-9 place-items-center rounded-lg border border-white/15 text-zinc-300 transition hover:border-white/40 hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/30">
                             <Pencil size={15} aria-hidden="true" />
@@ -348,5 +365,7 @@ export function AdminOrders({ adminEmail, onSignOut, onExit, onOpenInventory }: 
         </div>
       </section>
     </main>
+    {walkInOpen && <WalkInOrderForm onClose={() => { setWalkInOpen(false); setRefreshKey((key) => key + 1); }} onCreated={() => setNotice('Walk-in order created successfully.')} />}
+    </>
   );
 }

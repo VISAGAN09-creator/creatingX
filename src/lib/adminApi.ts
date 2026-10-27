@@ -59,11 +59,14 @@ export type AdminOrder = {
   };
   payment: {
     gateway?: string;
+    method?: 'cash' | 'other' | string;
+    otherMethod?: string;
     cashfreeOrderId?: string;
     transactionId?: string;
     paymentStatus?: string;
   };
   paymentStatus: string | null;
+  orderType?: 'walk-in' | string;
   fulfillmentStatus: FulfillmentStatus;
   createdAt: string | null;
 };
@@ -71,6 +74,40 @@ export type AdminOrder = {
 type OrdersResponse = {
   success: boolean;
   orders?: AdminOrder[];
+  message?: string;
+};
+
+export type WalkInOrderItem = {
+  id: string;
+  quantity: number;
+  size?: string;
+  mensSize?: string;
+  womensSize?: string;
+  color?: string;
+};
+
+export type WalkInOrderPayload = {
+  clientRequestId: string;
+  customer: { name: string; email?: string; phone?: string };
+  shipping?: {
+    address?: string;
+    doorNo?: string;
+    addressLine1?: string;
+    addressLine2?: string;
+    city?: string;
+    state?: string;
+    pinCode?: string;
+    country?: string;
+  };
+  payment: { method: 'cash' | 'other'; otherMethod?: string; received: boolean };
+  items: WalkInOrderItem[];
+};
+
+export type WalkInOrderResult = {
+  success: boolean;
+  duplicate?: boolean;
+  orderId: string;
+  order: AdminOrder;
   message?: string;
 };
 
@@ -118,6 +155,24 @@ export async function fetchAdminOrders(status: FulfillmentStatus, signal?: Abort
   return result.orders;
 }
 
+export async function createWalkInOrder(payload: WalkInOrderPayload): Promise<WalkInOrderResult> {
+  const { body } = await adminFetch('/admin/orders/walk-in', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const result = body as WalkInOrderResult | null;
+  if (!result?.success || !result.orderId || !result.order) {
+    throw new Error(result?.message || 'Unable to create walk-in order.');
+  }
+  return result;
+}
+
+export async function deleteAdminOrder(orderId: string): Promise<void> {
+  const { body } = await adminFetch(`/admin/orders/${encodeURIComponent(orderId)}`, { method: 'DELETE' });
+  if (!(body as { success?: boolean } | null)?.success) throw new Error((body as { message?: string } | null)?.message || 'Unable to delete this order.');
+}
+
 export async function saveFulfillmentStatuses(
   updates: Array<{ orderId: string; fulfillmentStatus: FulfillmentStatus }>,
 ): Promise<FulfillmentSaveResult> {
@@ -153,6 +208,8 @@ export type InventoryProduct = {
   schema: string;
   editable: boolean;
   sizes: Record<InventorySize, number | null>;
+  mensSizes?: Record<InventorySize, number | null>;
+  womensSizes?: Record<InventorySize, number | null>;
 };
 
 type InventoryResponse = {
