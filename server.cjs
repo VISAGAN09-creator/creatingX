@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
+const crypto = require('node:crypto');
 require('dotenv').config();
 const admin = require('firebase-admin');
 const gateway = require('./gateway/index.cjs');
@@ -83,6 +84,7 @@ function pendingOrderItem(item) {
     firestoreDocId: item.firestoreDocId,
     collectionName: item.collectionName,
     couple: item.couple,
+    independentCoupleStock: item.independentCoupleStock,
     selectedSize: item.selectedSize,
     selectedMensSize: item.selectedMensSize,
     selectedWomensSize: item.selectedWomensSize,
@@ -113,6 +115,55 @@ function paidOrderItem(item) {
     quantity: Number(item.quantity) || 1,
     image: sanitizeString(item.image, 2000),
   });
+}
+
+function walkInOrderId(clientRequestId) {
+  return `walkin-${crypto.createHash('sha256').update(clientRequestId).digest('hex').slice(0, 32)}`;
+}
+
+function walkInCustomer(value) {
+  const name = sanitizeString(value?.name, 200).replace(/\s+/g, ' ');
+  const email = sanitizeString(value?.email, 254).toLowerCase();
+  const phone = typeof value?.phone === 'string' ? value.phone.trim() : '';
+  if (!name) return { valid: false, message: 'Customer name is required.' };
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { valid: false, message: 'Provide a valid customer email address.' };
+  if (phone && !/^\d{10}$/.test(phone)) return { valid: false, message: 'Customer phone must contain exactly 10 digits.' };
+  return {
+    valid: true,
+    customer: {
+      name,
+      email,
+      phone,
+      firstName: name.split(' ')[0],
+      lastName: name.split(' ').slice(1).join(' '),
+    },
+  };
+}
+
+function walkInShipping(value) {
+  const delivery = sanitizeString(value?.delivery ?? value?.address, 1000).replace(/\s+/g, ' ').trim();
+  if (!delivery) return { valid: false, message: 'Complete delivery address is required.' };
+  return { valid: true, shipping: { address: delivery } };
+  /*
+  const fields = ['doorNo', 'addressLine1', 'addressLine2', 'city', 'state', 'pinCode', 'country'];
+  const shipping = Object.fromEntries(fields
+    .map((field) => [field, sanitizeString(value[field], 200)])
+    .filter(([, fieldValue]) => fieldValue));
+  const required = ['doorNo', 'addressLine1', 'city', 'state', 'pinCode', 'country'];
+  if (required.some((field) => !shipping[field])) return { valid: false, message: 'Door number, address line, city, state, PIN code, and country are required.' };
+  if (!/^\d{6}$/.test(shipping.pinCode)) return { valid: false, message: 'PIN code must contain exactly 6 digits.' };
+  return { valid: true, shipping };
+  */
+}
+
+function walkInPayment(value) {
+  const method = value?.method === 'other' ? 'other' : value?.method === 'cash' ? 'cash' : '';
+  const status = 'paid';
+  const otherMethod = sanitizeString(value?.otherMethod, 100);
+  if (!method) return { valid: false, message: 'Choose Cash or Other as the payment method.' };
+  if (method === 'other' && !otherMethod) return { valid: false, message: 'Enter the actual payment method.' };
+  if (value?.received !== true) return { valid: false, message: 'Confirm that payment has been received before creating the order.' };
+  return { valid: true, method, otherMethod: method === 'other' ? otherMethod : '', status };
 }
 
 // ============================================================================
@@ -314,10 +365,10 @@ function documentVersion(snapshot) {
  * update operation. String-only size lists are intentionally read-only: they
  * declare variants but provide no unambiguous field in which to store stock.
  */
-function stockAdapter(data) {
+function stockAdapter(data, fields = ['sizes', 'sizeStock', 'stockBySize', 'stock']) {
   const empty = { quantities: {}, configured: new Set(), editable: false, kind: 'none', field: null };
 
-  for (const field of ['sizes', 'sizeStock', 'stockBySize', 'stock']) {
+  for (const field of fields) {
     const value = data?.[field];
     if (Array.isArray(value)) {
       const entries = [];
@@ -372,6 +423,7 @@ function stockAdapter(data) {
     }
   }
 
+  if (fields[0] !== 'sizes') return empty;
   const quantities = {};
   const configured = new Set();
   SUPPORTED_SIZES.forEach((size) => {
@@ -385,11 +437,27 @@ function stockAdapter(data) {
 }
 
 function stockSummary(data) {
-  const adapter = stockAdapter(data);
+  return stockSummaryFor(data, ['sizes', 'sizeStock', 'stockBySize', 'stock']);
+}
+
+function stockSummaryFor(data, fields) {
+  const adapter = stockAdapter(data, fields);
   return {
     schema: adapter.kind,
     editable: adapter.editable,
     sizes: Object.fromEntries(SUPPORTED_SIZES.map((size) => [size, adapter.configured.has(size) ? adapter.quantities[size] ?? 0 : null])),
+  };
+}
+
+function coupleStockAdapters(data) {
+  const standard = stockAdapter(data);
+  const mens = stockAdapter(data, ['mensSizes', 'mensSizeStock']);
+  const womens = stockAdapter(data, ['womensSizes', 'womensSizeStock']);
+  return {
+    standard,
+    mens,
+    womens,
+    legacy: !data?.mensSizes && !data?.womensSizes ? standard : null,
   };
 }
 
@@ -466,6 +534,7 @@ function timestampSortValue(value) {
 function adminOrderResponse(orderId, order) {
   return {
     orderId,
+    orderType: order.orderType || 'online',
     customer: order.customer || {},
     shipping: order.shipping || {},
     items: Array.isArray(order.items) ? order.items : [],
@@ -489,18 +558,21 @@ function inventoryGroups(items) {
     const collectionName = typeof item?.collectionName === 'string' ? item.collectionName : '';
     const documentId = typeof item?.firestoreDocId === 'string' ? item.firestoreDocId : '';
     const quantity = Number(item?.quantity);
-    const sizes = item?.couple
-      ? [normalizeSize(item?.selectedMensSize), normalizeSize(item?.selectedWomensSize)]
-      : [normalizeSize(item?.selectedSize)];
-    if (!collectionName || !documentId || sizes.some((size) => !size) || !Number.isSafeInteger(quantity) || quantity < 1) {
+    const selections = item?.couple
+      ? [
+          { role: item.independentCoupleStock ? 'mens' : 'legacy', size: normalizeSize(item?.selectedMensSize) },
+          { role: item.independentCoupleStock ? 'womens' : 'legacy', size: normalizeSize(item?.selectedWomensSize) },
+        ]
+      : [{ role: 'standard', size: normalizeSize(item?.selectedSize) }];
+    if (!collectionName || !documentId || selections.some(({ size }) => !size) || !Number.isSafeInteger(quantity) || quantity < 1) {
       const error = new Error('Order inventory details are incomplete.');
       error.code = 'inventory-invalid-order';
       throw error;
     }
     const key = `${collectionName}\u0000${documentId}`;
-    const group = groups.get(key) || { collectionName, documentId, quantities: {} };
-    for (const size of sizes) {
-      group.quantities[size] = (group.quantities[size] || 0) + quantity;
+    const group = groups.get(key) || { collectionName, documentId, quantities: { standard: {}, mens: {}, womens: {}, legacy: {} } };
+    for (const { role, size } of selections) {
+      group.quantities[role][size] = (group.quantities[role][size] || 0) + quantity;
     }
     groups.set(key, group);
   }
@@ -536,18 +608,36 @@ async function createPaidOrderWithFulfillment(orderId, orderData, inventoryItems
         throw error;
       }
       const data = stockDocument.snapshot.data();
-      const adapter = stockAdapter(data);
-      const nextQuantities = {};
-      for (const [size, requested] of Object.entries(stockDocument.group.quantities)) {
-        const available = adapter.configured.has(size) ? adapter.quantities[size] ?? 0 : 0;
-        if (!adapter.editable || available < requested) {
-          const error = new Error(`${data.name || data.title || stockDocument.group.documentId} (${size}) is no longer in stock.`);
-          error.code = 'inventory-insufficient';
-          throw error;
+      const adapters = coupleStockAdapters(data);
+      const legacyChanges = Object.entries(stockDocument.group.quantities.legacy)
+        .concat(Object.entries(stockDocument.group.quantities.mens), Object.entries(stockDocument.group.quantities.womens))
+        .reduce((combined, [size, quantity]) => ({ ...combined, [size]: (combined[size] || 0) + quantity }), {});
+      const roles = adapters.legacy
+        ? [
+            { adapter: adapters.standard, changes: stockDocument.group.quantities.standard },
+            { adapter: adapters.legacy, changes: legacyChanges },
+          ]
+        : [
+            { adapter: adapters.standard, changes: stockDocument.group.quantities.standard },
+            { adapter: adapters.mens, changes: stockDocument.group.quantities.mens },
+            { adapter: adapters.womens, changes: stockDocument.group.quantities.womens },
+          ];
+      const patch = {};
+      for (const { adapter, changes } of roles) {
+        if (!Object.keys(changes).length) continue;
+        const nextQuantities = {};
+        for (const [size, requested] of Object.entries(changes)) {
+          const available = adapter.configured.has(size) ? adapter.quantities[size] ?? 0 : 0;
+          if (!adapter.editable || available < requested) {
+            const error = new Error(`${data.name || data.title || stockDocument.group.documentId} (${size}) is no longer in stock.`);
+            error.code = 'inventory-insufficient';
+            throw error;
+          }
+          nextQuantities[size] = available - requested;
         }
-        nextQuantities[size] = available - requested;
+        Object.assign(patch, applyStockChanges(data, adapter, nextQuantities));
       }
-      transaction.update(stockDocument.ref, applyStockChanges(data, adapter, nextQuantities));
+      transaction.update(stockDocument.ref, patch);
     }
 
     transaction.create(orderRef, completedOrder);
@@ -597,6 +687,127 @@ app.get('/api/admin/session', (req, res) => {
   return res.status(200).json({ success: true });
 });
 
+/**
+ * Create a server-authoritative in-person order. This never calls Cashfree;
+ * it uses the same transaction that allocates stock for verified online orders.
+ */
+app.post('/api/admin/orders/walk-in', async (req, res) => {
+  if (!db) return res.status(503).json({ success: false, message: 'Orders are unavailable because the database is not configured.' });
+
+  const clientRequestId = typeof req.body?.clientRequestId === 'string' ? req.body.clientRequestId.trim() : '';
+  const items = req.body?.items;
+  if (!/^[A-Za-z0-9_-]{16,100}$/.test(clientRequestId)) {
+    return res.status(400).json({ success: false, message: 'A valid order request identifier is required.' });
+  }
+
+  const orderId = walkInOrderId(clientRequestId);
+  const orderRef = db.collection('orders').doc(orderId);
+  const existing = await orderRef.get();
+  if (existing.exists) {
+    const existingOrder = existing.data();
+    return res.status(200).json({ success: true, duplicate: true, orderId, order: existingOrder });
+  }
+
+  if (!Array.isArray(items) || items.length === 0 || items.length > 50) {
+    return res.status(400).json({ success: false, message: 'Add between 1 and 50 products.' });
+  }
+
+  const customerResult = walkInCustomer(req.body?.customer);
+  if (!customerResult.valid) return res.status(400).json({ success: false, message: customerResult.message });
+  const paymentResult = walkInPayment(req.body?.payment);
+  if (!paymentResult.valid) return res.status(400).json({ success: false, message: paymentResult.message });
+
+  try {
+    const resolvedItems = [];
+    for (const item of items) {
+      const productId = typeof item?.id === 'string' ? item.id.trim() : '';
+      const quantity = Number(item?.quantity);
+      if (!productId || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 100) {
+        return res.status(400).json({ success: false, message: 'Each product needs a valid quantity between 1 and 100.' });
+      }
+
+      const product = await resolveProductFromFirestore(productId);
+      if (!product) return res.status(404).json({ success: false, message: `Product not found: "${productId}".` });
+
+      const couple = isCoupleProduct(product.data);
+      const selectedMensSize = couple ? normalizeSize(item.mensSize ?? item.selectedMensSize) : null;
+      const selectedWomensSize = couple ? normalizeSize(item.womensSize ?? item.selectedWomensSize) : null;
+      const selectedSize = !couple ? normalizeSize(item.size ?? item.selectedSize) : null;
+      if (couple && (!selectedMensSize || !selectedWomensSize)) {
+        return res.status(400).json({ success: false, message: `Select both men's and women's sizes for ${product.data.name || product.docId}.` });
+      }
+      if (!couple && !selectedSize) {
+        return res.status(400).json({ success: false, message: `Select a size for ${product.data.name || product.docId}.` });
+      }
+
+      const price = Number(product.data.price);
+      if (!Number.isFinite(price) || price <= 0) {
+        return res.status(400).json({ success: false, message: `Product ${product.data.name || product.docId} has an invalid price.` });
+      }
+
+      const submittedColor = sanitizeString(item.color ?? item.selectedColor, 100);
+      const configuredColors = configuredColorLabels(product.data);
+      let selectedColor;
+      if (configuredColors.length > 0) {
+        selectedColor = configuredColors.find((color) => color.toLocaleLowerCase() === submittedColor.toLocaleLowerCase());
+        if (!selectedColor) return res.status(400).json({ success: false, message: `Select an available color for ${product.data.name || product.docId}.` });
+      } else if (submittedColor) {
+        return res.status(400).json({ success: false, message: `Product ${product.data.name || product.docId} has no configurable colors.` });
+      }
+
+      resolvedItems.push({
+        productId,
+        firestoreDocId: product.docId,
+        collectionName: product.collectionName,
+        couple,
+        independentCoupleStock: couple && Boolean(product.data.mensSizes || product.data.womensSizes),
+        ...(couple ? { selectedMensSize, selectedWomensSize } : { selectedSize }),
+        ...(selectedColor ? { selectedColor } : {}),
+        name: product.data.name || product.data.title || product.docId,
+        price,
+        quantity,
+        lineTotal: price * quantity,
+        image: product.data.img1 || product.data.image || '',
+      });
+    }
+
+    const shippingResult = walkInShipping(req.body?.shipping);
+    if (!shippingResult.valid) return res.status(400).json({ success: false, message: shippingResult.message });
+    const pricing = calculateCheckoutPricing(resolvedItems, 0);
+    const orderData = {
+      orderType: 'walk-in',
+      source: 'admin',
+      customer: customerResult.customer,
+      shipping: shippingResult.shipping,
+      items: resolvedItems.map(paidOrderItem),
+      pricing: {
+        subtotal: pricing.subtotalAmount,
+        tax: pricing.taxAmount,
+        shipping: pricing.shippingAmount,
+        total: pricing.totalAmount,
+      },
+      payment: {
+        gateway: 'walk-in',
+        method: paymentResult.method,
+        ...(paymentResult.otherMethod ? { otherMethod: paymentResult.otherMethod } : {}),
+        paymentStatus: paymentResult.status,
+      },
+      status: paymentResult.status,
+      createdAt: new Date().toISOString(),
+      createdBy: req.adminUser.uid,
+    };
+
+    const result = await createPaidOrderWithFulfillment(orderId, orderData, resolvedItems);
+    return res.status(result.created ? 201 : 200).json({ success: true, duplicate: !result.created, orderId, order: result.order });
+  } catch (error) {
+    if (error.code === 'inventory-insufficient' || error.code === 'inventory-invalid-order') {
+      return res.status(409).json({ success: false, message: error.message || 'One or more selected products are out of stock.' });
+    }
+    console.error('[Walk-in Order] Failed to create order:', error.message);
+    return res.status(500).json({ success: false, message: 'Unable to create walk-in order.' });
+  }
+});
+
 app.get('/api/admin/orders', async (req, res) => {
   const selectedStatus = typeof req.query.status === 'string' ? req.query.status : null;
   if (selectedStatus && !isFulfillmentStatus(selectedStatus)) {
@@ -619,6 +830,28 @@ app.get('/api/admin/orders', async (req, res) => {
   } catch (error) {
     console.error('[Admin Orders] Failed to list orders:', error.message);
     return res.status(500).json({ success: false, message: 'Unable to load orders.' });
+  }
+});
+
+app.delete('/api/admin/orders/:orderId', async (req, res) => {
+  if (!db) return res.status(503).json({ success: false, message: 'Orders are unavailable because the database is not configured.' });
+  const orderId = typeof req.params.orderId === 'string' ? req.params.orderId.trim() : '';
+  if (!/^[A-Za-z0-9_-]{1,150}$/.test(orderId)) return res.status(400).json({ success: false, message: 'Invalid order identifier.' });
+
+  try {
+    const orderRef = db.collection('orders').doc(orderId);
+    const snapshot = await orderRef.get();
+    if (!snapshot.exists) return res.status(404).json({ success: false, message: 'Order no longer exists.' });
+    // Deletion intentionally does not restore stock or imply a refund. Inventory
+    // effects and payment records cannot be safely reversed from an admin delete.
+    const batch = db.batch();
+    batch.delete(orderRef);
+    for (const status of FULFILLMENT_STATUSES) batch.delete(fulfillmentOrderRef(status, orderId));
+    await batch.commit();
+    return res.status(200).json({ success: true, orderId });
+  } catch (error) {
+    console.error(`[Admin Orders] Failed to delete ${orderId}:`, error.message);
+    return res.status(500).json({ success: false, message: 'Unable to delete this order.' });
   }
 });
 
@@ -783,6 +1016,9 @@ async function inventoryCollectionNames() {
 
 function inventoryProductResponse(collectionName, document) {
   const data = document.data();
+  const couple = adminYesNoValue(data.couple);
+  const mensSummary = couple ? stockSummaryFor(data, ['mensSizes', 'mensSizeStock']) : null;
+  const womensSummary = couple ? stockSummaryFor(data, ['womensSizes', 'womensSizeStock']) : null;
   const hasName = typeof data.name === 'string';
   const hasTitle = typeof data.title === 'string';
   return {
@@ -802,10 +1038,12 @@ function inventoryProductResponse(collectionName, document) {
     flags: {
       latest: adminYesNoValue(data.latest),
       hero: adminYesNoValue(data.hero),
-      couple: adminYesNoValue(data.couple),
+      couple,
     },
     version: documentVersion(document),
     ...stockSummary(data),
+    ...(couple && mensSummary && Object.values(mensSummary.sizes).some((value) => value !== null) ? { mensSizes: mensSummary.sizes } : {}),
+    ...(couple && womensSummary && Object.values(womensSummary.sizes).some((value) => value !== null) ? { womensSizes: womensSummary.sizes } : {}),
   };
 }
 
@@ -1132,6 +1370,7 @@ app.post('/api/create-order', async (req, res) => {
         firestoreDocId: product.docId,
         collectionName: product.collectionName,
         couple,
+        independentCoupleStock: couple && Boolean(product.data.mensSizes || product.data.womensSizes),
         ...(couple
           ? { selectedMensSize, selectedWomensSize }
           : { selectedSize }),
@@ -1149,24 +1388,31 @@ app.post('/api/create-order', async (req, res) => {
     // check so concurrent shoppers cannot oversell a size.
     const requestedByVariant = new Map();
     for (const item of resolvedItems) {
-      const selectedSizes = item.couple
-        ? [item.selectedMensSize, item.selectedWomensSize]
-        : [item.selectedSize];
-      for (const size of selectedSizes) {
-        const key = `${item.collectionName}\u0000${item.firestoreDocId}\u0000${size}`;
-        requestedByVariant.set(key, (requestedByVariant.get(key) || 0) + item.quantity);
+      const selections = item.couple
+        ? [
+            { role: item.independentCoupleStock ? 'mens' : 'legacy', size: item.selectedMensSize },
+            { role: item.independentCoupleStock ? 'womens' : 'legacy', size: item.selectedWomensSize },
+          ]
+        : [{ role: 'standard', size: item.selectedSize }];
+      for (const selection of selections) {
+        const key = `${item.collectionName}\u0000${item.firestoreDocId}\u0000${selection.role}\u0000${selection.size}`;
+        const current = requestedByVariant.get(key) || { item, role: selection.role, size: selection.size, quantity: 0 };
+        requestedByVariant.set(key, { ...current, quantity: current.quantity + item.quantity });
       }
     }
-    for (const [key, requested] of requestedByVariant) {
-      const [, , size] = key.split('\u0000');
-      const item = resolvedItems.find((candidate) =>
-        candidate.collectionName === key.split('\u0000')[0] &&
-        candidate.firestoreDocId === key.split('\u0000')[1],
-      );
-      const adapter = stockAdapter(item && (await db.collection(item.collectionName).doc(item.firestoreDocId).get()).data());
-      const available = adapter.configured.has(size) ? adapter.quantities[size] ?? 0 : 0;
-      if (!adapter.editable || available < requested) {
-        return res.status(409).json({ success: false, message: `${item.name} (${size}) is out of stock or has insufficient stock.` });
+    for (const request of requestedByVariant.values()) {
+      const productData = (await db.collection(request.item.collectionName).doc(request.item.firestoreDocId).get()).data();
+      const adapters = request.item.couple ? coupleStockAdapters(productData) : null;
+      const adapter = request.role === 'mens'
+        ? (adapters.mens.configured.size ? adapters.mens : adapters.legacy)
+        : request.role === 'womens'
+          ? (adapters.womens.configured.size ? adapters.womens : adapters.legacy)
+          : request.role === 'legacy'
+            ? adapters.legacy
+            : stockAdapter(productData);
+      const available = adapter.configured.has(request.size) ? adapter.quantities[request.size] ?? 0 : 0;
+      if (!adapter.editable || available < request.quantity) {
+        return res.status(409).json({ success: false, message: `${request.item.name} (${request.size}) is out of stock or has insufficient stock.` });
       }
     }
 
@@ -1727,4 +1973,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, calculateCheckoutPricing, pendingOrderItem, paidOrderItem };
+module.exports = { app, calculateCheckoutPricing, pendingOrderItem, paidOrderItem, walkInCustomer, walkInPayment, walkInOrderId, coupleStockAdapters };

@@ -5,6 +5,7 @@ import { formatPrice } from '../utils/format';
 import { MagneticButton } from './Magnetic';
 import { SmartImage } from './SmartImage';
 import { getCookie, setCookie } from '../utils/cookies';
+import { sortClothingSizes } from '../utils/sizes';
 
 type ProductDetailsPageProps = {
   product?: Product;
@@ -140,7 +141,7 @@ export function ProductDetailsPage({
 
   const images = useMemo(() => (product ? productImages(product) : []), [product]);
   const colors = useMemo(() => product?.colors ?? [], [product]);
-  const sizes = useMemo(() => product?.sizes ?? [], [product]);
+  const sizes = useMemo(() => sortClothingSizes(product?.sizes ?? []), [product]);
   const sizeGuide = product?.sizeGuide?.length ? product.sizeGuide : DEFAULT_SIZE_GUIDE;
   const selectedSizeData = sizes.find((size) => size.name === selectedSize);
   const selectedMensSizeData = sizes.find((size) => size.name === selectedMensSize);
