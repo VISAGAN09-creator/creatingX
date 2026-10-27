@@ -2,6 +2,7 @@ import { ArrowLeft, Plus, Ruler, ShoppingBag, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DataStatus, Product } from '../types';
 import { formatPrice } from '../utils/format';
+import { sortClothingSizes } from '../utils/sizes';
 import { MagneticButton } from './Magnetic';
 import { ProductCard } from './ProductCard';
 import { SmartImage } from './SmartImage';
@@ -121,7 +122,7 @@ export function TOTDProductDetailsPage({
   // Legacy TOTD products use a display fallback, but a couple product must
   // have explicit stock for both garments before it can be purchased.
   const sizes = useMemo(
-    () => (product?.sizes?.length ? product.sizes : isCoupleProduct ? [] : DEFAULT_SIZES),
+    () => sortClothingSizes(product?.sizes?.length ? product.sizes : isCoupleProduct ? [] : DEFAULT_SIZES),
     [product, isCoupleProduct],
   );
   const sizeGuide = product?.sizeGuide?.length ? product.sizeGuide : DEFAULT_SIZE_GUIDE;

@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { calculateCheckoutPricing, paidOrderItem, pendingOrderItem } = require('../server.cjs');
+const { calculateCheckoutPricing, coupleStockAdapters, paidOrderItem, pendingOrderItem, walkInCustomer, walkInOrderId, walkInPayment } = require('../server.cjs');
 
 test('charges a ₹1.00 server-resolved item as ₹1.00 with free shipping', () => {
   assert.deepEqual(calculateCheckoutPricing([{ lineTotal: 1 }]), {
@@ -92,4 +92,30 @@ test('does not emit undefined optional fields in paid standard-product order ite
     image: '',
   });
   assert.equal(Object.values(item).some((value) => value === undefined), false);
+});
+
+test('validates walk-in customer and payment details without trusting client totals', () => {
+  assert.equal(walkInCustomer({ name: 'Walk In', email: 'customer@example.com', phone: '9876543210' }).valid, true);
+    assert.equal(walkInCustomer({ name: 'Walk In' }).valid, true);
+  assert.equal(walkInCustomer({ name: 'Walk In', email: 'customer@example.com', phone: '123' }).valid, false);
+    assert.equal(walkInPayment({ method: 'cash', received: false }).valid, false);
+  assert.deepEqual(walkInPayment({ method: 'other', otherMethod: 'UPI', received: true }), { valid: true, method: 'other', otherMethod: 'UPI', status: 'paid' });
+  assert.equal(walkInPayment({ method: 'other', received: true }).valid, false);
+});
+
+test('walk-in request IDs are deterministic for safe retry idempotency', () => {
+  const first = walkInOrderId('request-123456789012');
+  assert.equal(first, walkInOrderId('request-123456789012'));
+  assert.notEqual(first, walkInOrderId('request-123456789013'));
+  assert.match(first, /^walkin-[a-f0-9]{32}$/);
+});
+
+test('couple stock adapters preserve separate maps and legacy shared stock', () => {
+  const independent = coupleStockAdapters({ mensSizes: { M: 2 }, womensSizes: { S: 3 } });
+  assert.equal(independent.mens.quantities.M, 2);
+  assert.equal(independent.womens.quantities.S, 3);
+  assert.equal(independent.legacy, null);
+
+  const legacy = coupleStockAdapters({ sizes: { M: 2 } });
+  assert.equal(legacy.legacy.quantities.M, 2);
 });
