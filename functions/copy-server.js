@@ -19,16 +19,17 @@ for (const file of fs.readdirSync(gatewayDir)) {
   console.log(`Copied gateway/${file}`);
 }
 
-// Copy .env, filtering out FIREBASE_ prefixed vars (reserved in Cloud Functions runtime)
+// Copy .env, filtering out runtime-managed credentials. Gmail credentials are
+// bound from Secret Manager by functions/index.js and must not be copied.
 const envSrc = path.join(root, '.env');
 if (fs.existsSync(envSrc)) {
   const envContent = fs.readFileSync(envSrc, 'utf8');
   const filtered = envContent
     .split('\n')
-    .filter(line => !line.match(/^FIREBASE_/))
+    .filter(line => !line.match(/^(FIREBASE_|GMAIL_)/))
     .join('\n');
   fs.writeFileSync(path.join(dest, '.env'), filtered);
-  console.log('Copied .env (filtered FIREBASE_ reserved vars)');
+  console.log('Copied .env (filtered Firebase and Gmail runtime credentials)');
 }
 
 console.log('Predeploy copy complete.');
