@@ -30,15 +30,14 @@ const DEFAULT_SIZE_GUIDE = [
 const DEFAULT_DETAILS = [
   '100% organic heavyweight cotton (240 gsm)',
   'Oversized drop-shoulder silhouette',
-  'Liquid metal reflective front print',
   'Reinforced neckline with double stitching',
   'Pre-shrunk and garment-washed',
 ];
 
 const DEFAULT_SHIPPING = [
-  'Free shipping on orders above RS. 3,000',
-  'Standard delivery: 4-6 business days',
-  'Express delivery: 2-3 business days',
+  'Shipping our orders worldwide',
+  'Standard Dispatch in 7 Days',
+  'Delivery time may vary depending on your location',
 ];
 
 const DEFAULT_CARE = [
@@ -303,7 +302,7 @@ export function ProductDetailsPage({
         <>
           <p className="text-[13px] leading-8 text-metal-text">
             {product.description ??
-              'The Liquid Metal Tee is engineered for those who refuse to blend in. Featuring our signature liquid metal print technique, each shirt carries a unique reflective quality that shifts with light and movement.'}
+              'Crafted for people who wear their personality out loud. Bold graphics, premium comfort, and a fit made for everyday statement-making. From street-ready staples to one-of-a-kind custom prints, VARATAAA helps you stand out without trying too hard.'}
           </p>
           <ul className="mt-4 list-disc space-y-1 pl-5 text-[13px] leading-7 text-metal-text">
             {(product.details?.length ? product.details : DEFAULT_DETAILS).map((detail) => (
