@@ -17,6 +17,7 @@ const websiteAssetsDocument = doc(db, 'assets', 'website');
 const websiteLogoSessionKey = 'metalflux.website-assets.logo-url';
 
 let websiteAssetsPromise: Promise<WebsiteAssetLoadResult> | null = null;
+let resolvedWebsiteAssets: WebsiteAssetLoadResult | null = null;
 
 function validAssetUrl(value: string | null): string | null {
   if (!value) return null;
@@ -133,6 +134,15 @@ async function getWebsiteAssets(): Promise<WebsiteAssetLoadResult> {
  * reads or duplicate Storage URL lookups.
  */
 export function loadWebsiteAssets(): Promise<WebsiteAssetLoadResult> {
-  websiteAssetsPromise ??= getWebsiteAssets();
+  if (resolvedWebsiteAssets) return Promise.resolve(resolvedWebsiteAssets);
+  websiteAssetsPromise ??= getWebsiteAssets().then((result) => {
+    resolvedWebsiteAssets = result;
+    return result;
+  });
   return websiteAssetsPromise;
+}
+
+/** Returns the already-resolved result without starting another Firebase read. */
+export function getResolvedWebsiteAssets(): WebsiteAssetLoadResult | null {
+  return resolvedWebsiteAssets;
 }

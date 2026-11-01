@@ -30,8 +30,7 @@ export function useCatalog(): UseCatalogReturn {
   const [totdProducts, setTotdProducts] = useState<Product[]>([]);
   const [totdStatus, setTotdStatus] = useState<DataStatus>(TOTD_ENABLED ? 'loading' : 'ready');
 
-  // Track whether we've received at least one snapshot (error resilience)
-  const hasReceivedFirstSnapshot = useRef(false);
+  // Keep the last usable catalogue visible if a later listener fails.
   const hasReceivedFirstTotdSnapshot = useRef(false);
 
   // ---- Main catalog subscription -------------------------------------------
@@ -40,16 +39,15 @@ export function useCatalog(): UseCatalogReturn {
     const unsubscribe = subscribeToProducts(
       (items) => {
         setCatalogProducts(items);
-        setCatalogStatus('ready');
-        hasReceivedFirstSnapshot.current = true;
       },
       (error) => {
         console.error('Unable to load products from Firestore', error);
-        // Only set error if we never got a successful snapshot
-        if (!hasReceivedFirstSnapshot.current) {
-          setCatalogProducts([]);
-          setCatalogStatus('error');
-        }
+      },
+      () => {
+        setCatalogStatus('ready');
+      },
+      (pending, failed) => {
+        setCatalogStatus(pending ? 'loading' : failed ? 'error' : 'ready');
       },
     );
 

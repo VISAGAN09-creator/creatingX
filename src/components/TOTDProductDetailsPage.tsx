@@ -8,6 +8,7 @@ import { ProductCard } from './ProductCard';
 import { SmartImage } from './SmartImage';
 import { getCookie, setCookie } from '../utils/cookies';
 import backImage from '../assets/back1.png';
+import { getProductDetailState, preserveProductDetailState } from '../lib/productDetailState';
 
 type TOTDProductDetailsPageProps = {
   product?: Product;
@@ -78,17 +79,19 @@ export function TOTDProductDetailsPage({
   onOpenProduct,
   onBack,
 }: TOTDProductDetailsPageProps) {
-  const [currentImage, setCurrentImage] = useState(0);
+  const initialDetailState = product ? getProductDetailState(product.id) : null;
+  const [currentImage, setCurrentImage] = useState(initialDetailState?.currentImage ?? 0);
   const [isZoomed, setIsZoomed] = useState(false);
-  const [selectedSize, setSelectedSize] = useState('');
-  const [selectedMensSize, setSelectedMensSize] = useState('');
-  const [selectedWomensSize, setSelectedWomensSize] = useState('');
-  const [selectedColor, setSelectedColor] = useState('');
-  const [openAccordion, setOpenAccordion] = useState('description');
+  const [selectedSize, setSelectedSize] = useState(initialDetailState?.selectedSize ?? '');
+  const [selectedMensSize, setSelectedMensSize] = useState(initialDetailState?.selectedMensSize ?? '');
+  const [selectedWomensSize, setSelectedWomensSize] = useState(initialDetailState?.selectedWomensSize ?? '');
+  const [selectedColor, setSelectedColor] = useState(initialDetailState?.selectedColor ?? '');
+  const [openAccordion, setOpenAccordion] = useState(initialDetailState?.openAccordion ?? 'description');
   const [sizeGuideOpen, setSizeGuideOpen] = useState(false);
 
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
+  const skipStatePersistence = useRef(true);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchEndX.current = null;
@@ -152,14 +155,32 @@ export function TOTDProductDetailsPage({
 
   useEffect(() => {
     if (!product) return;
-    setCurrentImage(0);
+    const preserved = getProductDetailState(product.id);
+    skipStatePersistence.current = true;
+    setCurrentImage(preserved?.currentImage ?? 0);
     setIsZoomed(false);
-    setSelectedSize(isCoupleProduct ? '' : sizes.find((size) => size.stock > 0)?.name ?? sizes[0]?.name ?? '');
-    setSelectedMensSize('');
-    setSelectedWomensSize('');
-    setSelectedColor('');
-    setOpenAccordion('description');
-  }, [product, colors, sizes]);
+    setSelectedSize(preserved?.selectedSize ?? (isCoupleProduct ? '' : sizes.find((size) => size.stock > 0)?.name ?? sizes[0]?.name ?? ''));
+    setSelectedMensSize(preserved?.selectedMensSize ?? '');
+    setSelectedWomensSize(preserved?.selectedWomensSize ?? '');
+    setSelectedColor(preserved?.selectedColor ?? '');
+    setOpenAccordion(preserved?.openAccordion ?? 'description');
+  }, [product?.id]);
+
+  useEffect(() => {
+    if (!product) return;
+    if (skipStatePersistence.current) {
+      skipStatePersistence.current = false;
+      return;
+    }
+    preserveProductDetailState(product.id, {
+      currentImage,
+      selectedSize,
+      selectedMensSize,
+      selectedWomensSize,
+      selectedColor,
+      openAccordion,
+    });
+  }, [currentImage, openAccordion, product?.id, selectedColor, selectedMensSize, selectedSize, selectedWomensSize]);
 
   useEffect(() => {
     if (!product || !product.id) return;
@@ -234,7 +255,14 @@ export function TOTDProductDetailsPage({
             <ArrowLeft size={17} strokeWidth={2} />
             Back to TOTD Collection
           </button>
-          <p className="text-sm uppercase tracking-[0.18em] text-metal-text">Loading Thoughts of The Day product...</p>
+          <div role="status" aria-live="polite" className="grid gap-8 lg:grid-cols-2">
+            <div className="aspect-[4/5] max-w-[460px] animate-pulse bg-neutral-900" aria-hidden="true" />
+            <div className="space-y-5 pt-4">
+              <p className="text-sm uppercase tracking-[0.18em] text-metal-text">Loading Thoughts of The Day product...</p>
+              <div className="h-12 w-3/4 animate-pulse bg-neutral-900" aria-hidden="true" />
+              <div className="h-6 w-1/3 animate-pulse bg-neutral-900" aria-hidden="true" />
+            </div>
+          </div>
         </div>
       </section>
     );
@@ -253,7 +281,9 @@ export function TOTDProductDetailsPage({
             Back to TOTD Collection
           </button>
           <p className="max-w-xl text-sm leading-6 text-metal-text">
-            Thoughts of The Day product details are unavailable right now.
+            {status === 'error'
+              ? 'Thoughts of The Day product details could not be loaded right now. Please try again.'
+              : 'This Thoughts of The Day product is no longer available.'}
           </p>
         </div>
       </section>
@@ -371,6 +401,7 @@ export function TOTDProductDetailsPage({
                 <SmartImage
                   src={activeImage}
                   alt={product.alt || product.name}
+                  loading="eager"
                   className={`h-full w-full object-cover transition duration-500 select-none ${
                     isZoomed ? 'scale-[1.6]' : 'hover:scale-[1.02]'
                   }`}

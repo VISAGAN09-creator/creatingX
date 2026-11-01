@@ -27,7 +27,10 @@ type ReadyLogo = {
 export function BrandLogo({ containerClassName, imageClassName, fallbackClassName }: BrandLogoProps) {
   const { assets } = useWebsiteAssets();
   const [cachedLogoUrl, setCachedLogoUrl] = useState<string | null>(() => getCachedWebsiteLogoUrl());
-  const [readyLogo, setReadyLogo] = useState<ReadyLogo | null>(null);
+  const [readyLogo, setReadyLogo] = useState<ReadyLogo | null>(() => {
+    const cachedUrl = getCachedWebsiteLogoUrl();
+    return cachedUrl ? { source: 'cache', url: cachedUrl } : null;
+  });
   const [failedTarget, setFailedTarget] = useState<string | null>(null);
 
   const firebaseTargetId = assets.logo ? `firebase:${assets.logo}` : null;

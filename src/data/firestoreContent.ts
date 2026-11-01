@@ -1,12 +1,12 @@
 import {
   collection,
   doc,
-  getDoc,
   onSnapshot,
   type DocumentData,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { TOTD_ENABLED } from '../config/features';
 import { slugify } from '../utils/string';
 import { sortClothingSizes } from '../utils/sizes';
 import type { LookbookItem, Product, ProductColor, ProductSize, ProductSizeGuideRow } from '../types';
@@ -24,31 +24,13 @@ const lookbookCollectionName = import.meta.env.VITE_FIRESTORE_LOOKBOOK_COLLECTIO
  * This means you can add a new collection in Firestore by simply updating the
  * `_config/collections` doc — no code change or redeployment needed.
  */
-async function discoverCollectionNames(): Promise<string[]> {
-  const discovered: string[] = [];
-
-  try {
-    const configRef = doc(db, '_config', 'collections');
-    const configSnap = await getDoc(configRef);
-
-    if (configSnap.exists()) {
-      const data = configSnap.data();
-      const names: unknown = data.productCollections ?? data.collections ?? data.names;
-
-      if (Array.isArray(names)) {
-        names
-          .map((n) => (typeof n === 'string' ? n.trim() : ''))
-          .filter(Boolean)
-          .forEach((n) => discovered.push(n));
-      }
-    }
-  } catch (error) {
-    console.error('Error discovering collection names from Firestore:', error);
-  }
-
-  // Always ensure the base products collection name is included,
-  // or fall back to it if no other collections are discovered.
-  return [...new Set([...discovered, productsCollectionName])];
+function configuredProductCollections(data: DocumentData | undefined): string[] {
+  const names: unknown = data?.productCollections ?? data?.collections ?? data?.names;
+  const configured = Array.isArray(names)
+    ? names.map((name) => (typeof name === 'string' ? name.trim() : '')).filter(Boolean)
+    : [];
+  return [...new Set([...configured, productsCollectionName])]
+    .filter((name) => !(TOTD_ENABLED && name.toLowerCase() === 'totd'));
 }
 const sizeFieldNames = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
 
@@ -424,13 +406,19 @@ function toLookbookItem(id: string, data: DocumentData): LookbookItem {
 export function subscribeToProducts(
   onUpdate: (products: Product[]) => void,
   onError?: (error: Error) => void,
+  onReady?: () => void,
+  onPendingChange?: (pending: boolean, failed: boolean) => void,
 ): Unsubscribe {
-  let productUnsubscribes: Unsubscribe[] = [];
+  const productUnsubscribes = new Map<string, Unsubscribe>();
   let configUnsub: Unsubscribe | null = null;
   let destroyed = false;
 
-  // Accumulator: stores the latest snapshot per collection
   const snapshotsByCollection = new Map<string, Product[]>();
+  const initiallyReadyCollections = new Set<string>();
+  const failedCollections = new Set<string>();
+  let configuredCollections = new Set<string>();
+  let configReady = false;
+  let configFailed = false;
 
   function emitMerged() {
     const merged: Product[] = [];
@@ -438,76 +426,92 @@ export function subscribeToProducts(
     onUpdate(sortByOrder(merged));
   }
 
-  function teardownProductListeners() {
-    productUnsubscribes.forEach((u) => u());
-    productUnsubscribes = [];
-    snapshotsByCollection.clear();
+  function emitReadiness() {
+    const pending =
+      !configReady ||
+      configuredCollections.size === 0 ||
+      [...configuredCollections].some((name) => !initiallyReadyCollections.has(name));
+    const failed = configFailed || failedCollections.size > 0;
+    onPendingChange?.(pending, failed);
+    if (!pending && !failed) onReady?.();
   }
 
   function setupProductListeners(collectionNames: string[]) {
-    // Teardown any existing product listeners before attaching new ones
-    teardownProductListeners();
-
     if (destroyed) return;
+    const nextCollections = new Set(collectionNames);
+
+    productUnsubscribes.forEach((unsubscribe, collectionName) => {
+      if (nextCollections.has(collectionName)) return;
+      unsubscribe();
+      productUnsubscribes.delete(collectionName);
+      snapshotsByCollection.delete(collectionName);
+      initiallyReadyCollections.delete(collectionName);
+      failedCollections.delete(collectionName);
+    });
+    configuredCollections = nextCollections;
 
     collectionNames.forEach((collectionName) => {
+      if (productUnsubscribes.has(collectionName)) return;
       const colRef = collection(db, collectionName);
       const unsub = onSnapshot(
         colRef,
         (snapshot) => {
+          if (destroyed || !configuredCollections.has(collectionName)) return;
           const products = snapshot.docs.map((d) =>
             toProduct(d.id, d.data(), collectionName),
           );
           snapshotsByCollection.set(collectionName, products);
+          initiallyReadyCollections.add(collectionName);
+          failedCollections.delete(collectionName);
           emitMerged();
+          emitReadiness();
         },
         (error) => {
+          if (destroyed || !configuredCollections.has(collectionName)) return;
           console.error(`Firestore snapshot error for "${collectionName}":`, error);
+          initiallyReadyCollections.add(collectionName);
+          failedCollections.add(collectionName);
           onError?.(error);
+          emitReadiness();
         },
       );
-      productUnsubscribes.push(unsub);
+      productUnsubscribes.set(collectionName, unsub);
     });
+    emitMerged();
+    emitReadiness();
   }
 
   // Initial setup
-  discoverCollectionNames()
-    .then((collectionNames) => {
-      if (destroyed) return;
-
-      setupProductListeners(collectionNames);
-
-      // Listen for config doc changes to pick up new collections dynamically.
-      // Use a flag to skip the initial snapshot (which fires immediately) to
-      // avoid tearing down the listeners we just set up.
-      let isInitialConfigSnapshot = true;
-      configUnsub = onSnapshot(
-        doc(db, '_config', 'collections'),
-        () => {
-          if (isInitialConfigSnapshot) {
-            isInitialConfigSnapshot = false;
-            return;
-          }
-
-          // Config changed — re-discover and re-subscribe to product collections
-          discoverCollectionNames().then((newNames) => {
-            if (destroyed) return;
-            setupProductListeners(newNames);
-          });
-        },
-        () => {
-          // Config doc doesn't exist or permissions error — ignore silently
-        },
-      );
-    })
-    .catch((error) => {
-      console.error('Failed to discover collection names:', error);
-      onError?.(error instanceof Error ? error : new Error(String(error)));
-    });
+  if (!destroyed) {
+    // The default collection is always included in configuration. Listen to it
+    // immediately so its products can render while collection discovery runs.
+    setupProductListeners(configuredProductCollections(undefined));
+    // The initial snapshot configures every collection. Later snapshots are
+    // diffed without disturbing unchanged listeners.
+    configUnsub = onSnapshot(
+      doc(db, '_config', 'collections'),
+      (snapshot) => {
+        if (destroyed) return;
+        configReady = true;
+        configFailed = false;
+        setupProductListeners(configuredProductCollections(snapshot.data()));
+      },
+      (error) => {
+        if (destroyed) return;
+        console.error('Unable to listen to product collection configuration:', error);
+        configReady = true;
+        configFailed = true;
+        setupProductListeners(configuredProductCollections(undefined));
+        onError?.(error);
+      },
+    );
+  }
 
   return () => {
     destroyed = true;
-    teardownProductListeners();
+    productUnsubscribes.forEach((unsubscribe) => unsubscribe());
+    productUnsubscribes.clear();
+    snapshotsByCollection.clear();
     configUnsub?.();
     configUnsub = null;
   };

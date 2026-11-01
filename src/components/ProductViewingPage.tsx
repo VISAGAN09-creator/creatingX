@@ -1,5 +1,6 @@
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, SlidersHorizontal, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import type { CatalogViewState } from '../hooks/useRouter';
 import type { DataStatus, Product } from '../types';
 import { scrollToHash } from '../utils/scroll';
 import { ProductCard } from './ProductCard';
@@ -10,7 +11,8 @@ const MOBILE_PRODUCTS_PER_PAGE = 8;
 type ProductViewingPageProps = {
   products: Product[];
   status: DataStatus;
-  initialFilter?: string | null;
+  viewState: CatalogViewState;
+  onViewStateChange: (view: CatalogViewState) => void;
   onAddToCart: (product: Product) => void;
   onOpenProduct: (product: Product) => void;
   onBack: () => void;
@@ -38,13 +40,14 @@ function productMatchesFilters(product: Product, selectedFilters: string[]) {
 export function ProductViewingPage({
   products,
   status,
-  initialFilter,
+  viewState,
+  onViewStateChange,
   onAddToCart,
   onOpenProduct,
   onBack,
 }: ProductViewingPageProps) {
-  const [selectedFilters, setSelectedFilters] = useState<string[]>(initialFilter ? [initialFilter] : []);
-  const [page, setPage] = useState(1);
+  const selectedFilters = viewState.filters;
+  const page = viewState.page;
   const [productsPerPage, setProductsPerPage] = useState(() =>
     typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
       ? DESKTOP_PRODUCTS_PER_PAGE
@@ -73,24 +76,15 @@ export function ProductViewingPage({
     return () => query.removeEventListener('change', syncPageSize);
   }, []);
 
-  useEffect(() => {
-    setPage(1);
-  }, [selectedFilters, products.length, productsPerPage]);
-
-  useEffect(() => {
-    setSelectedFilters(initialFilter ? [initialFilter] : []);
-  }, [initialFilter]);
-
   const toggleFilter = (filter: string) => {
-    setSelectedFilters((currentFilters) =>
-      currentFilters.includes(filter)
-        ? currentFilters.filter((currentFilter) => currentFilter !== filter)
-        : [...currentFilters, filter],
-    );
+    const filters = selectedFilters.includes(filter)
+      ? selectedFilters.filter((currentFilter) => currentFilter !== filter)
+      : [...selectedFilters, filter];
+    onViewStateChange({ page: 1, filters });
   };
 
   const goToPage = (nextPage: number) => {
-    setPage(nextPage);
+    onViewStateChange({ page: nextPage, filters: selectedFilters });
     window.setTimeout(() => scrollToHash('#products'), 0);
   };
 
@@ -136,7 +130,7 @@ export function ProductViewingPage({
                 ? 'border-black bg-black text-white'
                 : 'border-metal-mid bg-white text-black hover:border-black'
             }`}
-            onClick={() => setSelectedFilters([])}
+            onClick={() => onViewStateChange({ page: 1, filters: [] })}
           >
             {selectedFilters.length === 0 && <Check size={16} strokeWidth={2} />}
             All
@@ -170,7 +164,7 @@ export function ProductViewingPage({
              
               className="inline-flex h-11 w-11 items-center justify-center border border-metal-mid text-black transition hover:bg-black hover:text-white"
               aria-label="Clear selected filters"
-              onClick={() => setSelectedFilters([])}
+              onClick={() => onViewStateChange({ page: 1, filters: [] })}
             >
               <X size={17} strokeWidth={2} />
             </button>
