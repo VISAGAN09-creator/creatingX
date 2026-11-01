@@ -46,6 +46,7 @@ try {
 
 
 const app = express();
+const { normalizeState, shippingCharge, lookupPin } = require('./shipping.cjs');
 app.use(helmet());
 const PORT = process.env.PORT || 5000;
 
@@ -1237,6 +1238,15 @@ app.get('/api/health', (req, res) => {
  * SECURITY: The server reads product prices from Firestore.
  * The client-supplied amount is NEVER trusted.
  */
+app.get('/api/pin-state/:pin', async (req, res) => {
+  try {
+    res.json({ success: true, state: await lookupPin(req.params.pin) });
+  } catch (error) {
+    res.status(/valid six-digit|could not be verified/.test(error.message) ? 400 : 503)
+      .json({ success: false, message: error.message });
+  }
+});
+
 app.post('/api/create-order', async (req, res) => {
   const { items, customer, shipping } = req.body;
 
@@ -1416,9 +1426,16 @@ app.post('/api/create-order', async (req, res) => {
       }
     }
 
-    // Catalog prices are the intended payable prices. Shipping is currently
-    // free and no additional tax is charged at checkout.
-    const pricing = calculateCheckoutPricing(resolvedItems, 0);
+    let verifiedState;
+    try {
+      verifiedState = await lookupPin(checkoutDetails.shipping.pinCode);
+    } catch (error) {
+      return res.status(503).json({ success: false, message: error.message });
+    }
+    if (verifiedState !== checkoutDetails.shipping.state) {
+      return res.status(400).json({ success: false, message: 'PIN code does not match the selected state.' });
+    }
+    const pricing = calculateCheckoutPricing(resolvedItems, shippingCharge(verifiedState, resolvedItems));
     const { subtotalAmount, taxAmount, shippingAmount } = pricing;
     totalAmount = pricing.totalAmount;
 
@@ -1449,6 +1466,7 @@ app.post('/api/create-order', async (req, res) => {
       items: resolvedItems.map(pendingOrderItem),
       subtotalAmount,
       taxAmount,
+      shippingAmount,
       totalAmount,
       customer: {
         name: customerName,
@@ -1524,10 +1542,10 @@ function validateCheckoutDetails(customer, shipping) {
   if (!doorNo) return { valid: false, message: 'Door No. is required.' };
   if (!addressLine1) return { valid: false, message: 'Address Line 1 is required.' };
   if (!city) return { valid: false, message: 'City is required.' };
-  if (!state) return { valid: false, message: 'State is required.' };
-  if (!country) return { valid: false, message: 'Country/Region is required.' };
+  if (!normalizeState(state)) return { valid: false, message: 'Select a valid Indian state or Union Territory.' };
+  if (country !== 'IN') return { valid: false, message: 'Delivery is available in India only.' };
   if (!/^\d{10}$/.test(phone)) return { valid: false, message: 'Phone number must contain exactly 10 digits.' };
-  if (country === 'IN' && !/^\d{6}$/.test(pinCode)) return { valid: false, message: 'Indian pincode must contain exactly 6 digits.' };
+  if (!/^[1-9]\d{5}$/.test(pinCode)) return { valid: false, message: 'Indian PIN code must contain exactly 6 digits.' };
   if (!pinCode) return { valid: false, message: 'Pincode is required.' };
 
   return {
@@ -1539,7 +1557,7 @@ function validateCheckoutDetails(customer, shipping) {
       addressLine1,
       addressLine2,
       city,
-      state,
+      state: normalizeState(state),
       pinCode,
       // Retain aliases while downstream readers migrate to the explicit fields.
       address: addressLine1,
@@ -1756,7 +1774,7 @@ app.post('/api/verify-payment', async (req, res) => {
         const serverTax = Number.isFinite(storedTax)
           ? storedTax
           : Math.max(0, Math.round((cashfreeTotal - serverSubtotal) * 100) / 100);
-        const serverShipping = 0;
+        const serverShipping = Number(pendingData?.shippingAmount) || 0;
         const expectedTotal = Number.isFinite(Number(pendingData?.totalAmount))
           ? Number(pendingData.totalAmount)
           : serverSubtotal + serverTax + serverShipping;
@@ -1938,7 +1956,7 @@ app.post('/api/cashfree-webhook', async (req, res) => {
     const serverTax = Number.isFinite(storedTax)
       ? storedTax
       : Math.max(0, Math.round((cashfreeTotal - serverSubtotal) * 100) / 100);
-    const serverShipping = 0;
+    const serverShipping = Number(pendingData?.shippingAmount) || 0;
     const expectedTotal = Number.isFinite(Number(pendingData?.totalAmount))
       ? Number(pendingData.totalAmount)
       : serverSubtotal + serverTax + serverShipping;
@@ -2063,4 +2081,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, calculateCheckoutPricing, pendingOrderItem, paidOrderItem, walkInCustomer, walkInPayment, walkInOrderId, coupleStockAdapters, orderConfirmationMessage, sendOrderConfirmationEmail };
+module.exports = { app, calculateCheckoutPricing, validateCheckoutDetails, pendingOrderItem, paidOrderItem, walkInCustomer, walkInPayment, walkInOrderId, coupleStockAdapters, orderConfirmationMessage, sendOrderConfirmationEmail };

@@ -1,5 +1,6 @@
 import { HelpCircle } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import policy from '../../shipping-policy.json';
 import type { CartLine } from '../types';
 import { formatPrice } from '../utils/format';
 import { paymentApiPath } from '../lib/paymentApi';
@@ -35,14 +36,15 @@ function trimText(value: string) {
 
 export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutPageProps) {
   const [email, setEmail] = useState('');
-  const [country, setCountry] = useState('IN');
+  const country = 'IN';
   const [fullName, setFullName] = useState('');
   const [doorNo, setDoorNo] = useState('');
   const [addressLine1, setAddressLine1] = useState('');
   const [addressLine2, setAddressLine2] = useState('');
-  const [city, setCity] = useState('Chennai');
-  const [state, setState] = useState('TN');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
   const [pinCode, setPinCode] = useState('');
+  const [pinMessage, setPinMessage] = useState('');
   const [phone, setPhone] = useState('');
 
   const [errors, setErrors] = useState<Set<string>>(new Set());
@@ -51,8 +53,24 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
   const [successOrderId, setSuccessOrderId] = useState<string | null>(null);
 
   const itemCount = useMemo(() => lines.reduce((total, line) => total + line.quantity, 0), [lines]);
-  const shipping = 0;
-  const total = Math.round((subtotal + shipping) * 100) / 100;
+  const shirtCount = useMemo(() => lines.reduce((total, line) => total + line.quantity * (line.isCouple ? 2 : 1), 0), [lines]);
+  const shipping = state ? Math.ceil(shirtCount / 3) * (policy.rates[state as keyof typeof policy.rates] || policy.defaultRate) : null;
+  const total = shipping === null ? null : Math.round((subtotal + shipping) * 100) / 100;
+
+  useEffect(() => {
+    if (!/^[1-9]\d{5}$/.test(pinCode)) return;
+    const controller = new AbortController();
+    setPinMessage('Checking PIN code…');
+    fetch(paymentApiPath(`/pin-state/${pinCode}`), { signal: controller.signal })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || 'PIN lookup unavailable.');
+        setState(result.state);
+        setPinMessage(`PIN code found in ${result.state}.`);
+      })
+      .catch((error) => { if (!controller.signal.aborted) setPinMessage(`${error.message} Select the state manually; checkout will verify it.`); });
+    return () => controller.abort();
+  }, [pinCode]);
 
   const showToast = (message: string, type?: 'success' | 'error') => {
     setToast({ message, type });
@@ -119,7 +137,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
       nextErrors.add('phone');
       message ||= 'Phone number must contain exactly 10 digits.';
     }
-    if (details.country === 'IN' && details.pinCode && !/^\d{6}$/.test(details.pinCode)) {
+    if (details.pinCode && !/^[1-9]\d{5}$/.test(details.pinCode)) {
       nextErrors.add('pinCode');
       message ||= 'Indian pincode must contain exactly 6 digits.';
     }
@@ -144,7 +162,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
   const handlePayNow = async () => {
     const details = validateRequiredFields();
     if (!details) return;
-    if (lines.length === 0 || total <= 0) {
+    if (lines.length === 0 || total === null || total <= 0) {
       showToast('Your cart is empty', 'error');
       return;
     }
@@ -414,17 +432,9 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
           <div className="mb-4">
             <select
               value={country}
-              onChange={(event) => setCountry(event.target.value)}
               className="h-12 w-full rounded-lg border border-[#e0e0e0] bg-white px-3.5 text-sm text-[#1a1a1a] outline-none transition focus:border-[#1a1a1a] focus:shadow-[0_0_0_3px_rgba(0,0,0,0.04)]"
             >
               <option value="IN">India</option>
-              <option value="US">United States</option>
-              <option value="UK">United Kingdom</option>
-              <option value="CA">Canada</option>
-              <option value="AU">Australia</option>
-              <option value="DE">Germany</option>
-              <option value="FR">France</option>
-              <option value="JP">Japan</option>
             </select>
           </div>
 
@@ -495,16 +505,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
                 <option value="" disabled>
                   Select state
                 </option>
-                <option value="TN">Tamil Nadu</option>
-                <option value="KA">Karnataka</option>
-                <option value="MH">Maharashtra</option>
-                <option value="DL">Delhi</option>
-                <option value="UP">Uttar Pradesh</option>
-                <option value="WB">West Bengal</option>
-                <option value="GJ">Gujarat</option>
-                <option value="RJ">Rajasthan</option>
-                <option value="KL">Kerala</option>
-                <option value="TS">Telangana</option>
+                {policy.states.map((name) => <option key={name} value={name}>{name}</option>)}
               </select>
             </div>
             <div className="mb-4">
@@ -517,12 +518,16 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
                 onChange={(event) => {
                   const nextPinCode = event.target.value.replace(/[^0-9]/g, '');
                   setPinCode(nextPinCode);
+                  setState('');
+                  setPinMessage('');
                 }}
                 placeholder="Pincode"
                 className={inputClass('pinCode')}
               />
             </div>
           </div>
+
+          {pinMessage && <p role="status" className="mb-4 text-xs text-[#666666]">{pinMessage}</p>}
 
           <div className="mb-4">
             <div className="relative">
@@ -606,19 +611,19 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
 
             <div className="flex items-center justify-between py-2 text-sm">
               <span className="flex items-center gap-1.5 text-[#666666]">
-                Shipping
+                Shipping Charges
                 <button
                   type="button"
                   aria-label="Shipping information"
-                  onClick={() => showToast('Free shipping on all orders', 'success')}
+                  onClick={() => showToast('Shipping is charged per 3 T-shirts based on delivery state.')}
                 >
                   <HelpCircle size={14} strokeWidth={1.5} className="opacity-50 transition hover:opacity-100" />
                 </button>
               </span>
-              <span className="font-medium text-[#27ae60]">
-                FREE
-              </span>
+              <span className="font-medium">{shipping === null ? 'Enter state' : formatPrice(shipping)}</span>
             </div>
+
+            <div className="flex items-center justify-between py-2 text-sm"><span className="text-[#666666]">Tax</span><span className="font-medium">{formatPrice(0)}</span></div>
 
             <div className="my-3 h-px bg-[#e0e0e0]" />
 
@@ -626,7 +631,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
               <span className="font-display text-lg font-bold">Total</span>
               <div className="flex items-baseline gap-2">
                 <span className="text-xs font-medium text-[#666666]">INR</span>
-                <span className="font-display text-[22px] font-bold tracking-normal">{formatPrice(total)}</span>
+                <span className="font-display text-[22px] font-bold tracking-normal">{total === null ? 'Enter state' : formatPrice(total)}</span>
               </div>
             </div>
             <button

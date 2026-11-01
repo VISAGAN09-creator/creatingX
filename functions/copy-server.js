@@ -8,6 +8,8 @@ const dest = __dirname;
 
 // Copy server.cjs
 fs.copyFileSync(path.join(root, 'server.cjs'), path.join(dest, 'server.cjs'));
+fs.copyFileSync(path.join(root, 'shipping.cjs'), path.join(dest, 'shipping.cjs'));
+fs.copyFileSync(path.join(root, 'shipping-policy.json'), path.join(dest, 'shipping-policy.json'));
 console.log('Copied server.cjs');
 
 // Copy gateway/ directory
