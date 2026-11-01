@@ -157,7 +157,6 @@ export default function App() {
           />
         ) : router.activePage === 'customize' ? (
           <TShirtCustomizer
-            onAddToCart={cart.addToCart}
             onBack={() => router.navigateToHomeSection('#hero')}
           />
         ) : (
@@ -188,7 +187,7 @@ export default function App() {
         )}
       </main>
 
-      {router.activePage !== 'checkout' && router.activePage !== 'paymentReturn' && (
+      {router.activePage !== 'checkout' && router.activePage !== 'paymentReturn' && router.activePage !== 'customize' && (
         <Footer activePage={effectiveActivePage} onNavigate={router.navigateToHomeSection} />
       )}
 

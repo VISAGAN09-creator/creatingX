@@ -645,7 +645,7 @@ export const TShirt3DViewer: React.FC<TShirt3DViewerProps> = ({
             </div>
 
             {/* Main Preview Container */}
-            <div className="relative flex-1 w-full min-h-[420px] sm:min-h-[460px] flex items-center justify-center bg-[radial-gradient(circle_at_center,_#ffffff_0%,_#f3f4f6_100%)] rounded-2xl border border-metal-mid p-4 sm:p-6 overflow-hidden select-none shadow-sm">
+            <div className="customizer-viewer-stage relative flex-1 w-full min-h-[420px] sm:min-h-[460px] flex items-center justify-center bg-[radial-gradient(circle_at_center,_#ffffff_0%,_#f3f4f6_100%)] rounded-2xl border border-metal-mid p-4 sm:p-6 overflow-hidden select-none shadow-sm">
 
                 {/* Technical background grids */}
                 <div className="absolute inset-0 bg-[linear-gradient(to_right,#00000008_1px,transparent_1px),linear-gradient(to_bottom,#00000008_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none" />
