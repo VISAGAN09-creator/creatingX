@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
   loadWebsiteAssets,
-  getResolvedWebsiteAssets,
   type WebsiteAssetLoadResult,
 } from '../lib/websiteAssets';
 
@@ -12,20 +11,11 @@ const initialState: WebsiteAssetLoadResult = {
 };
 
 export function useWebsiteAssets() {
-  const [state, setState] = useState<WebsiteAssetLoadResult>(() => getResolvedWebsiteAssets() ?? initialState);
-  const [loading, setLoading] = useState(() => getResolvedWebsiteAssets() === null);
+  const [state, setState] = useState<WebsiteAssetLoadResult>(initialState);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
-
-    const resolved = getResolvedWebsiteAssets();
-    if (resolved) {
-      setState(resolved);
-      setLoading(false);
-      return () => {
-        active = false;
-      };
-    }
 
     void loadWebsiteAssets().then((result) => {
       if (!active) return;

@@ -2,7 +2,6 @@ import { motion, useMotionValue, useReducedMotion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { useWebsiteAssets } from '../hooks/useWebsiteAssets';
-import { useNavigationExperience } from '../hooks/useNavigationExperience';
 import { scrollToHash } from '../utils/scroll';
 import { MagneticAnchor } from './Magnetic';
 import type { Product } from '../types';
@@ -29,7 +28,6 @@ export function Hero({
   onOpenProduct?: (product: Product) => void;
 }) {
   const shouldReduceMotion = useReducedMotion();
-  const navigationType = useNavigationExperience();
   const { assets } = useWebsiteAssets();
   const [videoFailed, setVideoFailed] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
@@ -217,7 +215,7 @@ export function Hero({
 
       <div className="relative z-[1] mx-auto flex w-full max-w-shell flex-col items-center justify-center text-center">
         <motion.div
-          initial={navigationType === 'traverse' ? false : { opacity: 0, y: 36 }}
+          initial={{ opacity: 0, y: 36 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
           className="flex flex-col items-center pt-4"

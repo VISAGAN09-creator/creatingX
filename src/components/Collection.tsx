@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DataStatus, Product, ProductCollection } from '../types';
 import { Reveal } from './Reveal';
 import { SectionHeader } from './SectionHeader';
@@ -12,8 +12,6 @@ type CollectionsProps = {
   status: DataStatus;
   onViewAll: (filter?: string) => void;
 };
-
-let preservedCollectionScrollLeft: number | null = null;
 
 function collectionName(product: Product) {
   return product.theme?.trim() || product.filters?.[0]?.trim() || 'Core';
@@ -70,22 +68,6 @@ export function Collections({ products, status, onViewAll }: CollectionsProps) {
   const lastTimeRef = useRef<number | null>(null);
   const initializedRef = useRef(false);
   const scrollPositionRef = useRef(0);
-
-  useLayoutEffect(() => {
-    const container = scrollRef.current;
-    if (!container || collections.length === 0) return undefined;
-
-    if (preservedCollectionScrollLeft !== null && !initializedRef.current) {
-      container.scrollLeft = preservedCollectionScrollLeft;
-      scrollPositionRef.current = preservedCollectionScrollLeft;
-      initializedRef.current = true;
-    }
-
-    return () => {
-      const current = scrollRef.current;
-      if (current) preservedCollectionScrollLeft = current.scrollLeft;
-    };
-  }, [collections.length]);
 
   const animate = (time: number) => {
     const container = scrollRef.current;

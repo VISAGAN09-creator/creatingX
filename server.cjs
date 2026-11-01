@@ -1247,67 +1247,6 @@ app.get('/api/pin-state/:pin', async (req, res) => {
   }
 });
 
-// Read-only checkout snapshot. Payment creation resolves and validates again.
-app.post('/api/checkout-quote', async (req, res) => {
-  const items = req.body?.items;
-  if (!Array.isArray(items) || items.length === 0 || items.length > 50) {
-    return res.status(400).json({ success: false, message: 'Provide 1 to 50 cart items.' });
-  }
-  if (!db) return res.status(503).json({ success: false, message: 'Product catalog is unavailable.' });
-  try {
-    const quoted = [];
-    for (const item of items) {
-      const id = typeof item?.id === 'string' ? item.id.trim() : '';
-      const quantity = Number(item?.quantity);
-      if (!id || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 100) {
-        return res.status(400).json({ success: false, message: 'Cart contains an invalid item or quantity.' });
-      }
-      const product = await resolveProductFromFirestore(id);
-      if (!product) return res.status(404).json({ success: false, message: `Product ${id} is no longer available.` });
-      const data = product.data;
-      const price = Number(data.price);
-      if (!Number.isFinite(price) || price <= 0) {
-        return res.status(409).json({ success: false, message: `Product ${id} has no current price.` });
-      }
-      const couple = isCoupleProduct(data);
-      const size = couple ? null : product.selectedSize || normalizeSize(item.size ?? item.selectedSize);
-      const mensSize = couple ? normalizeSize(item.mensSize ?? item.selectedMensSize) : null;
-      const womensSize = couple ? normalizeSize(item.womensSize ?? item.selectedWomensSize) : null;
-      if (couple ? !mensSize || !womensSize : !size || (product.selectedSize && item.size && product.selectedSize !== normalizeSize(item.size))) {
-        return res.status(409).json({ success: false, message: `Selected size for ${id} is unavailable.` });
-      }
-      const colors = configuredColorLabels(data);
-      const selectedColor = sanitizeString(item.color ?? item.selectedColor, 100);
-      if (colors.length ? !colors.some((color) => color.toLowerCase() === selectedColor.toLowerCase()) : Boolean(selectedColor)) {
-        return res.status(409).json({ success: false, message: `Selected color for ${id} is unavailable.` });
-      }
-      const adapters = couple ? coupleStockAdapters(data) : null;
-      const stockChecks = couple
-        ? [[adapters.mens.configured.size ? adapters.mens : adapters.legacy, mensSize], [adapters.womens.configured.size ? adapters.womens : adapters.legacy, womensSize]]
-        : [[stockAdapter(data), size]];
-      if (stockChecks.some(([adapter, selected]) => !adapter || !adapter.editable || !adapter.configured.has(selected) || (adapter.quantities[selected] || 0) < quantity)
-        || (couple && mensSize === womensSize && stockChecks[0][0] === stockChecks[1][0] && (stockChecks[0][0]?.quantities[mensSize] || 0) < quantity * 2)) {
-        return res.status(409).json({ success: false, message: `Selected size for ${id} is out of stock.` });
-      }
-      quoted.push(checkoutQuoteLine(id, quantity, product, couple));
-    }
-    return res.json({ success: true, items: quoted, subtotal: calculateCheckoutPricing(quoted.map((item) => ({ lineTotal: item.price * item.quantity }))).subtotalAmount });
-  } catch (error) {
-    console.error('[Checkout quote] Failed:', error);
-    return res.status(503).json({ success: false, message: 'Unable to refresh checkout prices. Please try again.' });
-  }
-});
-
-function checkoutQuoteLine(id, quantity, product, couple) {
-  const data = product.data;
-  return {
-    id, quantity, name: data.name || data.title || product.docId,
-    image: data.img1 || data.image || '', alt: data.alt || data.name || data.title || product.docId,
-    model: data.model || '', theme: product.collectionName, tag: data.tag || '',
-    price: Number(data.price), couple,
-  };
-}
-
 app.post('/api/create-order', async (req, res) => {
   const { items, customer, shipping } = req.body;
 
@@ -2142,4 +2081,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, calculateCheckoutPricing, checkoutQuoteLine, validateCheckoutDetails, pendingOrderItem, paidOrderItem, walkInCustomer, walkInPayment, walkInOrderId, coupleStockAdapters, orderConfirmationMessage, sendOrderConfirmationEmail };
+module.exports = { app, calculateCheckoutPricing, validateCheckoutDetails, pendingOrderItem, paidOrderItem, walkInCustomer, walkInPayment, walkInOrderId, coupleStockAdapters, orderConfirmationMessage, sendOrderConfirmationEmail };

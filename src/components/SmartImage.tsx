@@ -1,21 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 type SmartImageProps = {
   src: string;
   alt: string;
   className?: string;
   fallbackLabel?: string;
-  loading?: 'eager' | 'lazy';
 };
 
-const loadedImageSources = new Set<string>();
-
-export function SmartImage({ src, alt, className = '', fallbackLabel = 'Image unavailable', loading }: SmartImageProps) {
+export function SmartImage({ src, alt, className = '', fallbackLabel = 'Image unavailable' }: SmartImageProps) {
   const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    setFailed(false);
-  }, [src]);
 
   if (!src || failed) {
     return (
@@ -31,14 +24,5 @@ export function SmartImage({ src, alt, className = '', fallbackLabel = 'Image un
     );
   }
 
-  return (
-    <img
-      src={src}
-      alt={alt}
-      className={className}
-      loading={loading ?? (loadedImageSources.has(src) ? 'eager' : 'lazy')}
-      onLoad={() => loadedImageSources.add(src)}
-      onError={() => setFailed(true)}
-    />
-  );
+  return <img src={src} alt={alt} className={className} loading="lazy" onError={() => setFailed(true)} />;
 }

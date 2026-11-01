@@ -22,8 +22,8 @@ import { TOTDProductDetailsPage } from './components/TOTDProductDetailsPage';
 import { TShirtCustomizer } from './features/tshirt-customizer/TShirtCustomizer';
 import { useCart } from './hooks/useCart';
 import { useCatalog } from './hooks/useCatalog';
-import { NavigationExperienceProvider } from './hooks/useNavigationExperience';
 import { useRouter } from './hooks/useRouter';
+import { scrollToHash } from './utils/scroll';
 
 // ============================================================================
 // App — thin composition shell
@@ -43,29 +43,21 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [checkoutPending, setCheckoutPending] = useState(false);
 
-  const catalogProduct = useMemo(
-    () => catalog.catalogProducts.find((product) => product.id === router.selectedProductId),
-    [catalog.catalogProducts, router.selectedProductId],
-  );
-  const totdProduct = useMemo(
-    () => TOTD_ENABLED
-      ? catalog.totdProducts.find((product) => product.id === router.selectedProductId)
-      : undefined,
-    [catalog.totdProducts, router.selectedProductId],
+  // ---- Cross-concern derived value: selected product from both catalogs ----
+  const selectedProduct = useMemo(
+    () =>
+      catalog.catalogProducts.find((p) => p.id === router.selectedProductId) ||
+      (TOTD_ENABLED ? catalog.totdProducts.find((p) => p.id === router.selectedProductId) : undefined),
+    [catalog.catalogProducts, catalog.totdProducts, router.selectedProductId],
   );
 
   const isTotdProduct = useMemo(() => {
-    if (!TOTD_ENABLED) return false;
-    return Boolean(
-      totdProduct ||
-      router.selectedProductId?.toLowerCase().startsWith('totd-'),
+    if (!TOTD_ENABLED || !selectedProduct) return TOTD_ENABLED && router.productReturnPage === 'totd';
+    return (
+      catalog.totdProducts.some((p) => p.id === selectedProduct.id) ||
+      router.productReturnPage === 'totd'
     );
-  }, [router.selectedProductId, totdProduct]);
-
-  const resolvedProduct = isTotdProduct ? totdProduct : catalogProduct;
-  const relevantCatalogStatus = isTotdProduct ? catalog.totdStatus : catalog.catalogStatus;
-  const selectedProduct = resolvedProduct;
-  const productDetailStatus = selectedProduct ? 'ready' : relevantCatalogStatus;
+  }, [selectedProduct, catalog.totdProducts, router.productReturnPage]);
 
   // ---- Cross-concern handler: checkout closes cart drawer, then navigates --
   const handleOpenCheckout = () => {
@@ -87,16 +79,16 @@ export default function App() {
 
   if (router.activePage === 'admin') {
     return (
-      <NavigationExperienceProvider navigationType={router.navigationType}>
+      <>
         <LiquidCanvas />
         <AdminPortal onExit={router.exitAdmin} />
-      </NavigationExperienceProvider>
+      </>
     );
   }
 
   // ---- Render --------------------------------------------------------------
   return (
-    <NavigationExperienceProvider navigationType={router.navigationType}>
+    <>
       <LiquidCanvas />
 
       {router.activePage !== 'checkout' && router.activePage !== 'paymentReturn' && (
@@ -120,15 +112,18 @@ export default function App() {
         ) : router.activePage === 'checkout' ? (
           <CheckoutPage
             lines={cart.cartLines}
+            subtotal={cart.subtotal}
             onClearCart={cart.clearCart}
-            onBack={router.closeCheckout}
+            onBack={() => {
+              router.navigateToHomeSection('#hero');
+            }}
           />
         ) : router.activePage === 'productDetail' ? (
           TOTD_ENABLED && isTotdProduct ? (
             <TOTDProductDetailsPage
               product={selectedProduct}
               products={catalog.totdProducts}
-              status={productDetailStatus}
+              status={catalog.totdStatus}
               onAddToCart={cart.addToCart}
               onOpenProduct={router.openProductDetail}
               onBack={router.closeProductDetail}
@@ -137,7 +132,7 @@ export default function App() {
             <ProductDetailsPage
               product={selectedProduct}
               products={catalog.catalogProducts}
-              status={productDetailStatus}
+              status={catalog.catalogStatus}
               onAddToCart={cart.addToCart}
               onOpenProduct={router.openProductDetail}
               onBack={router.closeProductDetail}
@@ -147,11 +142,10 @@ export default function App() {
           <ProductViewingPage
             products={catalog.catalogProducts}
             status={catalog.catalogStatus}
-            viewState={router.catalogView}
-            onViewStateChange={router.updateCatalogView}
+            initialFilter={router.selectedCatalogFilter}
             onAddToCart={cart.addToCart}
             onOpenProduct={router.openProductDetail}
-            onBack={router.closePage}
+            onBack={() => router.navigateToHomeSection('#hero')}
           />
         ) : TOTD_ENABLED && router.activePage === 'totd' ? (
           <TOTD
@@ -159,11 +153,11 @@ export default function App() {
             status={catalog.totdStatus}
             onAddToCart={cart.addToCart}
             onOpenProduct={router.openProductDetail}
-            onBack={router.closePage}
+            onBack={() => router.navigateToHomeSection('#hero')}
           />
         ) : router.activePage === 'customize' ? (
           <TShirtCustomizer
-            onBack={router.closePage}
+            onBack={() => router.navigateToHomeSection('#hero')}
           />
         ) : (
           <>
@@ -216,6 +210,6 @@ export default function App() {
         onOpenProduct={router.openProductDetail}
       />
       <CookieConsent />
-    </NavigationExperienceProvider>
+    </>
   );
 }

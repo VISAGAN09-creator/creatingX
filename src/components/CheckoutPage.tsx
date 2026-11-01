@@ -10,13 +10,12 @@ import { loadGatewayScript, openCheckout } from '../lib/paymentGateway';
 
 type CheckoutPageProps = {
   lines: CartLine[];
+  subtotal: number;
   onClearCart: () => void;
   onBack: () => void;
 };
 
 type ToastState = { message: string; type?: 'success' | 'error' } | null;
-type QuoteStatus = 'refreshing' | 'ready' | 'error';
-type CheckoutQuote = { key: string; lines: CartLine[] };
 
 type CheckoutDetails = {
   email: string;
@@ -31,117 +30,32 @@ type CheckoutDetails = {
   pinCode: string;
 };
 
-type CheckoutDraft = Omit<CheckoutDetails, 'country'>;
-
-const checkoutQuoteCache = new Map<string, CheckoutQuote>();
-const emptyCheckoutDraft: CheckoutDraft = {
-  email: '',
-  fullName: '',
-  phone: '',
-  doorNo: '',
-  addressLine1: '',
-  addressLine2: '',
-  city: '',
-  state: '',
-  pinCode: '',
-};
-let preservedCheckoutDraft: CheckoutDraft = { ...emptyCheckoutDraft };
-
 function trimText(value: string) {
   return value.trim().replace(/\s+/g, ' ');
 }
 
-export function CheckoutPage({ lines, onClearCart, onBack }: CheckoutPageProps) {
-  const [email, setEmail] = useState(preservedCheckoutDraft.email);
+export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutPageProps) {
+  const [email, setEmail] = useState('');
   const country = 'IN';
-  const [fullName, setFullName] = useState(preservedCheckoutDraft.fullName);
-  const [doorNo, setDoorNo] = useState(preservedCheckoutDraft.doorNo);
-  const [addressLine1, setAddressLine1] = useState(preservedCheckoutDraft.addressLine1);
-  const [addressLine2, setAddressLine2] = useState(preservedCheckoutDraft.addressLine2);
-  const [city, setCity] = useState(preservedCheckoutDraft.city);
-  const [state, setState] = useState(preservedCheckoutDraft.state);
-  const [pinCode, setPinCode] = useState(preservedCheckoutDraft.pinCode);
+  const [fullName, setFullName] = useState('');
+  const [doorNo, setDoorNo] = useState('');
+  const [addressLine1, setAddressLine1] = useState('');
+  const [addressLine2, setAddressLine2] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [pinCode, setPinCode] = useState('');
   const [pinMessage, setPinMessage] = useState('');
-  const [phone, setPhone] = useState(preservedCheckoutDraft.phone);
+  const [phone, setPhone] = useState('');
 
   const [errors, setErrors] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<ToastState>(null);
   const [isPaying, setIsPaying] = useState(false);
   const [successOrderId, setSuccessOrderId] = useState<string | null>(null);
-  const [quote, setQuote] = useState<CheckoutQuote | null>(null);
-  const [quoteStatus, setQuoteStatus] = useState<QuoteStatus>('refreshing');
-  const [quoteError, setQuoteError] = useState('');
-  const [quoteVersion, setQuoteVersion] = useState(0);
-  const requestItems = useMemo(() => lines.map((line) => ({
-    id: line.checkoutProductId ?? line.id,
-    quantity: line.quantity,
-    ...(line.isCouple ? { mensSize: line.selectedMensSize, womensSize: line.selectedWomensSize } : { size: line.selectedSize }),
-    ...(line.selectedColor ? { color: line.selectedColor } : {}),
-  })), [lines]);
-  const cartKey = JSON.stringify(requestItems);
-  const currentQuote = quote?.key === cartKey ? quote : null;
-  const displayLines = currentQuote?.lines ?? lines;
-  const currentSubtotal = Math.round(displayLines.reduce((sum, line) => sum + (line.price ?? 0) * line.quantity, 0) * 100) / 100;
-  const quoteValidated = quoteStatus === 'ready' && currentQuote !== null;
-
-  useEffect(() => {
-    preservedCheckoutDraft = {
-      email,
-      fullName,
-      phone,
-      doorNo,
-      addressLine1,
-      addressLine2,
-      city,
-      state,
-      pinCode,
-    };
-  }, [addressLine1, addressLine2, city, doorNo, email, fullName, phone, pinCode, state]);
-
-  useEffect(() => {
-    if (!requestItems.length) {
-      setQuote(null);
-      setQuoteError('');
-      setQuoteStatus('ready');
-      return undefined;
-    }
-    const controller = new AbortController();
-    setQuote(checkoutQuoteCache.get(cartKey) ?? null);
-    setQuoteStatus('refreshing');
-    setQuoteError('');
-    fetch(paymentApiPath('/checkout-quote'), {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: requestItems }), signal: controller.signal,
-    }).then(async (response) => {
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.message || 'Unable to refresh checkout items.');
-      if (!Array.isArray(result.items) || result.items.length !== lines.length) throw new Error('Checkout items changed. Please try again.');
-      const refreshedQuote: CheckoutQuote = { key: cartKey, lines: lines.map((line, index) => ({
-        ...line,
-        name: result.items[index].name,
-        image: result.items[index].image,
-        alt: result.items[index].alt,
-        model: result.items[index].model,
-        theme: result.items[index].theme,
-        tag: result.items[index].tag,
-        price: result.items[index].price,
-        isCouple: result.items[index].couple,
-      })) };
-      checkoutQuoteCache.set(cartKey, refreshedQuote);
-      setQuote(refreshedQuote);
-      setQuoteStatus('ready');
-    }).catch((error) => {
-      if (controller.signal.aborted) return;
-      setQuoteError(error.message || 'Unable to refresh checkout items.');
-      setQuoteStatus('error');
-    });
-    return () => controller.abort();
-  }, [cartKey, lines, quoteVersion]);
 
   const itemCount = useMemo(() => lines.reduce((total, line) => total + line.quantity, 0), [lines]);
-  const shirtCount = useMemo(() => (currentQuote ? displayLines : lines).reduce((count, line) => count + line.quantity * (line.isCouple ? 2 : 1), 0), [currentQuote, lines]);
+  const shirtCount = useMemo(() => lines.reduce((total, line) => total + line.quantity * (line.isCouple ? 2 : 1), 0), [lines]);
   const shipping = state ? Math.ceil(shirtCount / 3) * (policy.rates[state as keyof typeof policy.rates] || policy.defaultRate) : null;
-  const total = shipping === null ? null : Math.round((currentSubtotal + shipping) * 100) / 100;
+  const total = shipping === null ? null : Math.round((subtotal + shipping) * 100) / 100;
 
   useEffect(() => {
     if (!/^[1-9]\d{5}$/.test(pinCode)) return;
@@ -246,7 +160,6 @@ export function CheckoutPage({ lines, onClearCart, onBack }: CheckoutPageProps) 
   };
 
   const handlePayNow = async () => {
-    if (!quoteValidated || quoteError) return;
     const details = validateRequiredFields();
     if (!details) return;
     if (lines.length === 0 || total === null || total <= 0) {
@@ -284,7 +197,14 @@ export function CheckoutPage({ lines, onClearCart, onBack }: CheckoutPageProps) 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          items: requestItems,
+          items: lines.map((line) => ({
+            id: line.checkoutProductId ?? line.id,
+            quantity: line.quantity,
+            ...(line.isCouple
+              ? { mensSize: line.selectedMensSize, womensSize: line.selectedWomensSize }
+              : { size: line.selectedSize }),
+            ...(line.selectedColor ? { color: line.selectedColor } : {}),
+          })),
           customer: {
             email: details.email,
             phone: details.phone,
@@ -317,11 +237,6 @@ export function CheckoutPage({ lines, onClearCart, onBack }: CheckoutPageProps) 
       }
 
       const orderData = await createResponse.json();
-      if (Math.round(Number(orderData.amount) * 100) !== Math.round(total * 100)) {
-        setQuote(null);
-        setQuoteVersion((version) => version + 1);
-        throw new Error('Product prices changed again. Review the updated checkout total and retry.');
-      }
 
       // Store checkout context in sessionStorage for use after redirect
       try {
@@ -370,7 +285,6 @@ export function CheckoutPage({ lines, onClearCart, onBack }: CheckoutPageProps) 
 
               const result = await verifyResponse.json();
               if (result.success) {
-                preservedCheckoutDraft = { ...emptyCheckoutDraft };
                 onClearCart();
                 setSuccessOrderId(result.orderId);
               } else {
@@ -644,24 +558,10 @@ export function CheckoutPage({ lines, onClearCart, onBack }: CheckoutPageProps) 
         <aside className="order-2 border-t border-[#e0e0e0] bg-[#f9f9f9] px-6 py-8 sm:px-8 lg:border-l lg:border-t-0 lg:px-12 lg:py-10">
           <div className="w-full lg:mr-auto lg:max-w-[440px]">
             <div className="mb-6">
-              {lines.length > 0 && quoteStatus === 'refreshing' && (
-                <p role="status" className="mb-3 text-sm text-[#666666]">Refreshing products and prices...</p>
-              )}
-              {lines.length > 0 && quoteStatus === 'error' && (
-                <div role="alert" className="mb-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                  <p>{quoteError || 'Unable to refresh checkout items.'}</p>
-                  <button type="button" className="mt-2 font-semibold underline" onClick={() => setQuoteVersion((version) => version + 1)}>Retry price refresh</button>
-                </div>
-              )}
               {lines.length === 0 ? (
                 <p className="text-sm text-[#666666]">Your cart is empty.</p>
-              ) : displayLines.length === 0 ? (
-                <div role="status" className="text-sm text-[#666666]">
-                  <p>{quoteError || 'Refreshing products and prices…'}</p>
-                  {quoteError && <button type="button" className="mt-2 font-semibold underline" onClick={() => setQuoteVersion((version) => version + 1)}>Retry price refresh</button>}
-                </div>
               ) : (
-                displayLines.map((line) => (
+                lines.map((line) => (
                   <article
                     key={line.id}
                     className="flex items-center gap-4 border-b border-[#e0e0e0] py-3 last:border-b-0"
@@ -704,7 +604,7 @@ export function CheckoutPage({ lines, onClearCart, onBack }: CheckoutPageProps) 
               <span className="text-[#666666]">
                 Subtotal - {itemCount} {itemCount === 1 ? 'item' : 'items'}
               </span>
-              <span className="font-medium">{currentSubtotal === null ? 'Refreshing…' : formatPrice(currentSubtotal)}</span>
+              <span className="font-medium">{formatPrice(subtotal)}</span>
             </div>
 
 
@@ -720,7 +620,7 @@ export function CheckoutPage({ lines, onClearCart, onBack }: CheckoutPageProps) 
                   <HelpCircle size={14} strokeWidth={1.5} className="opacity-50 transition hover:opacity-100" />
                 </button>
               </span>
-              <span className="font-medium">{!currentQuote ? 'Refreshing…' : shipping === null ? 'Enter state' : formatPrice(shipping)}</span>
+              <span className="font-medium">{shipping === null ? 'Enter state' : formatPrice(shipping)}</span>
             </div>
 
             <div className="flex items-center justify-between py-2 text-sm"><span className="text-[#666666]">Tax</span><span className="font-medium">{formatPrice(0)}</span></div>
@@ -731,13 +631,13 @@ export function CheckoutPage({ lines, onClearCart, onBack }: CheckoutPageProps) 
               <span className="font-display text-lg font-bold">Total</span>
               <div className="flex items-baseline gap-2">
                 <span className="text-xs font-medium text-[#666666]">INR</span>
-                <span className="font-display text-[22px] font-bold tracking-normal">{!currentQuote ? 'Refreshing…' : total === null ? 'Enter state' : formatPrice(total)}</span>
+                <span className="font-display text-[22px] font-bold tracking-normal">{total === null ? 'Enter state' : formatPrice(total)}</span>
               </div>
             </div>
             <button
               type="button"
              
-              disabled={isPaying || lines.length === 0 || !quoteValidated || !!quoteError}
+              disabled={isPaying || lines.length === 0}
               className={`flex h-14 w-full items-center justify-center gap-2.5 rounded-lg bg-[#1a1a1a] text-sm font-bold uppercase tracking-[0.08em] text-white transition disabled:cursor-not-allowed disabled:opacity-50 enabled:hover:-translate-y-px enabled:hover:bg-[#333333] enabled:hover:shadow-[0_6px_20px_rgba(0,0,0,0.15)] ${isPaying ? 'pointer-events-none' : ''
                 }`}
               onClick={handlePayNow}
