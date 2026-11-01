@@ -88,13 +88,13 @@ export function Footer({ activePage, onNavigate }: FooterProps) {
               )}
             </div>
             <p className="max-w-[300px] text-[0.95rem] leading-7 text-metal-dark">
-              Custom print t-shirts for the bold. Unconventional shapes, liquid metal aesthetics, and
+              Custom print t-shirts for the bold. Unconventional shapes, aesthetics, and
               dopamine-inducing designs.
             </p>
             <div className="mt-5 space-y-2 text-sm text-metal-dark">
               <p><span className="font-semibold text-metal-text">Contact:</span> <a href="tel:+91 7358012011" className="transition hover:text-black">+91 7358012011</a></p>
               <p><span className="font-semibold text-metal-text">Email:</span> <a href="mailto:varataaah@gmail.com" className="transition hover:text-black">varataaah@gmail.com</a></p>
-              <p><span className="font-semibold text-metal-text">Email:</span> <a href="mailto:handle2227@gmail.com" className="transition hover:text-black">handle2227@gmail.com</a></p>
+              <p><span className="font-semibold text-metal-text"></span> <a href="mailto:handle2227@gmail.com" className="transition hover:text-black">handle2227@gmail.com</a></p>
             </div>
           </div>
 

@@ -49,8 +49,7 @@ export const footerColumns: FooterColumn[] = [
   },
   {
     title: 'Support',
-    links: ['FAQ', 'Shipping', 'Returns'],
+    links: ['Terms & Service', 'Shipping', 'Returns'],
   },
 ];
 
-export const seedCartProductIds = ['liquid-chrome', 'mercury-flow', 'molten-silver'];
