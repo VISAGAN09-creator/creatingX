@@ -23,6 +23,7 @@ import { TShirtCustomizer } from './features/tshirt-customizer/TShirtCustomizer'
 import { useCart } from './hooks/useCart';
 import { useCatalog } from './hooks/useCatalog';
 import { useRouter } from './hooks/useRouter';
+import { cartCanCheckout, cartSubtotal, resolveCartLines } from './utils/cartCatalog';
 import { scrollToHash } from './utils/scroll';
 
 // ============================================================================
@@ -43,6 +44,19 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [checkoutPending, setCheckoutPending] = useState(false);
 
+  const displayCartLines = useMemo(
+    () => resolveCartLines(cart.cartLines, catalog),
+    [
+      cart.cartLines,
+      catalog.catalogProducts,
+      catalog.catalogStatus,
+      catalog.totdProducts,
+      catalog.totdStatus,
+    ],
+  );
+  const displayCartSubtotal = useMemo(() => cartSubtotal(displayCartLines), [displayCartLines]);
+  const canCheckout = useMemo(() => cartCanCheckout(displayCartLines), [displayCartLines]);
+
   // ---- Cross-concern derived value: selected product from both catalogs ----
   const selectedProduct = useMemo(
     () =>
@@ -61,6 +75,7 @@ export default function App() {
 
   // ---- Cross-concern handler: checkout closes cart drawer, then navigates --
   const handleOpenCheckout = () => {
+    if (!canCheckout) return;
     // The cart's fixed exit layer covers the viewport until its motion exit
     // completes. Navigate only after that layer unmounts so it cannot capture
     // pointer or focus events intended for checkout fields.
@@ -111,8 +126,7 @@ export default function App() {
           />
         ) : router.activePage === 'checkout' ? (
           <CheckoutPage
-            lines={cart.cartLines}
-            subtotal={cart.subtotal}
+            lines={displayCartLines}
             onClearCart={cart.clearCart}
             onBack={() => {
               router.navigateToHomeSection('#hero');
@@ -193,8 +207,9 @@ export default function App() {
 
       <CartDrawer
         isOpen={cart.cartOpen}
-        lines={cart.cartLines}
-        subtotal={cart.subtotal}
+        lines={displayCartLines}
+        subtotal={displayCartSubtotal}
+        canCheckout={canCheckout}
         onClose={() => cart.setCartOpen(false)}
         onIncrement={cart.increment}
         onDecrement={cart.decrement}

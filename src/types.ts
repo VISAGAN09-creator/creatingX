@@ -46,6 +46,18 @@ export type CartLine = Product & {
   quantity: number;
 };
 
+export type CartLineAvailability =
+  | 'loading'
+  | 'available'
+  | 'unavailable'
+  | 'variant-unavailable'
+  | 'catalog-error';
+
+export type CartDisplayLine = CartLine & {
+  availability: CartLineAvailability;
+  availabilityMessage?: string;
+};
+
 export type DataStatus = 'loading' | 'ready' | 'error';
 
 export type ProductColor = {

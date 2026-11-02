@@ -17,14 +17,21 @@ export function useWebsiteAssets() {
   useEffect(() => {
     let active = true;
 
-    void loadWebsiteAssets().then((result) => {
-      if (!active) return;
-      setState(result);
-      setLoading(false);
-    });
+    const load = () => {
+      setLoading(true);
+      void loadWebsiteAssets().then((result) => {
+        if (!active) return;
+        setState(result);
+        setLoading(false);
+      });
+    };
+
+    load();
+    window.addEventListener('online', load);
 
     return () => {
       active = false;
+      window.removeEventListener('online', load);
     };
   }, []);
 

@@ -1,0 +1,54 @@
+{
+  "run_id": "security-audit",
+  "repo": "creating-X",
+  "target": "D:\\creating X",
+  "source_ref": "ed147216e75fb8a45374d9c94d3825f31c241ab5 (dirty worktree; staged and unstaged changes reviewed as current source)",
+  "profile": "standard",
+  "scope_paths": [
+    "src/",
+    "server.cjs",
+    "shipping.cjs",
+    "shipping-policy.json",
+    "gateway/",
+    "functions/",
+    "firestore.rules",
+    "firebase.json",
+    "vite.config.ts",
+    "package.json",
+    "package-lock.json",
+    ".github/workflows/",
+    "test/"
+  ],
+  "budget": null,
+  "execution_policy": "sandboxed-source-and-local-only",
+  "selected_companion_files": [
+    "WEB-PROTOCOL-AND-AUTH.md",
+    "CLIENT-SIDE.md",
+    "CLOUD-AND-DEPLOYMENT.md",
+    "PROTOCOLS-RPC-AND-MESSAGING.md",
+    "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md",
+    "DATA-ISOLATION-AND-LIFECYCLE.md",
+    "SUPPLY-CHAIN-AND-RELEASE.md"
+  ],
+  "prior_run_paths": [
+    "C:\\Users\\viisa\\AppData\\Local\\Temp\\security-audit-skill\\creating-X\\run-1"
+  ],
+  "shared_file_owners": {
+    "run-metadata.json": "parent",
+    "architecture.md": "parent",
+    "coverage-ledger.json": "parent",
+    "findings.json": "parent",
+    "REPORT.md": "parent",
+    "FINDINGS-DETAIL.md": "parent",
+    "NEEDS-VALIDATION.md": "parent"
+  },
+  "planned_agent_invocations": {
+    "reconnaissance": 4,
+    "hunter_wave_1": 3,
+    "post_wave_critic": 1,
+    "final_clean_critic": 1,
+    "candidate_validation": "one fresh verifier per candidate",
+    "final_record_verification": "one fresh verifier per final record"
+  },
+  "run_status": "in_progress"
+}

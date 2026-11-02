@@ -128,11 +128,24 @@ async function getWebsiteAssets(): Promise<WebsiteAssetLoadResult> {
 }
 
 /**
- * Loads the website-wide asset document once per page session. Every component
- * shares this promise, so mounting another logo or Hero does not add Firestore
- * reads or duplicate Storage URL lookups.
+ * Loads the website-wide asset document once per successful page session. Every
+ * component shares this promise, so mounting another logo or Hero does not add
+ * Firestore reads or duplicate Storage URL lookups. An empty failed result is
+ * released so a later online event or remount can recover from a transport
+ * failure.
  */
 export function loadWebsiteAssets(): Promise<WebsiteAssetLoadResult> {
-  websiteAssetsPromise ??= getWebsiteAssets();
+  if (!websiteAssetsPromise) {
+    websiteAssetsPromise = getWebsiteAssets().then((result) => {
+      // A transient Firestore/Storage transport failure must not permanently
+      // cache an empty result for the rest of the tab session. Keep successful
+      // partial configuration cached, but allow a later online/remount retry
+      // when nothing could be resolved.
+      if (Object.keys(result.assets).length === 0 && result.error) {
+        websiteAssetsPromise = null;
+      }
+      return result;
+    });
+  }
   return websiteAssetsPromise;
 }
