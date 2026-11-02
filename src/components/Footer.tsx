@@ -8,9 +8,10 @@ import { scrollToHash } from '../utils/scroll';
 type FooterProps = {
   activePage?: string;
   onNavigate?: (href: string) => void;
+  onSizeGuideOpen?: () => void;
 };
 
-export function Footer({ activePage, onNavigate }: FooterProps) {
+export function Footer({ activePage, onNavigate, onSizeGuideOpen }: FooterProps) {
   const [toast, setToast] = useState<string | null>(null);
 
   const showToast = (message: string) => {
@@ -53,7 +54,12 @@ export function Footer({ activePage, onNavigate }: FooterProps) {
       return;
     }
 
-    // Default fallback (e.g. Size Guide, etc.)
+    if (link === 'Size Guide') {
+      onSizeGuideOpen?.();
+      return;
+    }
+
+    // Default fallback for unfinished footer destinations.
     showToast('Soon');
   };
 

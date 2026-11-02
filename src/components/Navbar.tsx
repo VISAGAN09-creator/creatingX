@@ -10,11 +10,12 @@ type NavbarProps = {
   cartCount: number;
   onCartOpen: () => void;
   onSearchOpen: () => void;
+  onSizeGuideOpen: () => void;
   onNavigate?: (href: string) => void;
   activePage?: string;
 };
 
-export function Navbar({ cartCount, onCartOpen, onSearchOpen, onNavigate, activePage }: NavbarProps) {
+export function Navbar({ cartCount, onCartOpen, onSearchOpen, onSizeGuideOpen, onNavigate, activePage }: NavbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -44,15 +45,15 @@ export function Navbar({ cartCount, onCartOpen, onSearchOpen, onNavigate, active
     setMenuOpen(false);
   };
 
+  const handleSizeGuideOpen = () => {
+    onSizeGuideOpen();
+    setMenuOpen(false);
+  };
+
   return (
     <header className="fixed left-0 top-0 z-[1000] w-full border-b border-metal-light bg-white/90 px-5 py-2.5 backdrop-blur-xl sm:px-8 lg:px-12">
       <nav className="mx-auto flex max-w-shell items-center justify-between gap-5">
-        <button
-          type="button"
-         
-          className="flex items-center"
-          onClick={() => handleNavigate('#hero')}
-        >
+        <a href="/varataaa" className="flex items-center" aria-label="VARATAAA home">
           {activePage === 'totd' ? (
             <span className="font-display text-lg sm:text-xl font-bold tracking-wider text-black uppercase">
               Thoughts Of The Day
@@ -64,7 +65,7 @@ export function Navbar({ cartCount, onCartOpen, onSearchOpen, onNavigate, active
               fallbackClassName="flex h-full w-full items-center font-display text-xl font-bold tracking-wider text-black sm:text-2xl"
             />
           )}
-        </button>
+        </a>
 
         <ul className="hidden list-none items-center gap-8 lg:flex xl:gap-10">
           {navLinks.map((link) => {
@@ -90,6 +91,16 @@ export function Navbar({ cartCount, onCartOpen, onSearchOpen, onNavigate, active
               </li>
             );
           })}
+          <li>
+            <button
+              type="button"
+              onClick={handleSizeGuideOpen}
+              className="group relative py-1 text-[0.85rem] font-medium uppercase tracking-[0.05em] text-black transition-colors"
+            >
+              Size Guide
+              <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-black transition-all duration-300 group-hover:w-full" />
+            </button>
+          </li>
         </ul>
 
         <div className="flex items-center gap-2 sm:gap-4">
@@ -160,6 +171,17 @@ export function Navbar({ cartCount, onCartOpen, onSearchOpen, onNavigate, active
                   <span className="text-sm font-normal text-metal-text">0{index + 1}</span>
                 </motion.button>
               ))}
+              <motion.button
+                type="button"
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: navLinks.length * 0.04 }}
+                onClick={handleSizeGuideOpen}
+                className="flex min-h-12 items-center justify-between border-b border-metal-light py-3 text-left font-display text-2xl font-bold text-black"
+              >
+                Size Guide
+                <span className="text-sm font-normal text-metal-text">0{navLinks.length + 1}</span>
+              </motion.button>
             </div>
           </motion.div>
         )}

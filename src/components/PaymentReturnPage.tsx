@@ -84,17 +84,13 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
   return (
     <section className="relative z-[1] min-h-screen bg-white font-sans text-sm leading-normal text-[#1a1a1a] flex flex-col justify-between">
       <header className="border-b border-[#e0e0e0] px-4 py-5 text-center flex justify-center">
-        <button
-          type="button"
-          className="flex items-center justify-center"
-          onClick={onBack}
-        >
+        <a href="/varataaa" className="flex items-center justify-center" aria-label="VARATAAA home">
           <BrandLogo
             containerClassName="h-10 w-[140px] sm:h-11"
             imageClassName="h-full w-full object-contain"
             fallbackClassName="flex h-full w-full items-center font-display text-lg font-bold tracking-wider text-black sm:text-xl"
           />
-        </button>
+        </a>
       </header>
 
       <div className="flex-1 flex flex-col items-center justify-center px-5 py-16 text-center max-w-md mx-auto">

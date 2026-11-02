@@ -17,6 +17,7 @@ import { ProductDetailsPage } from './components/ProductDetailsPage';
 import { ProductViewingPage } from './components/ProductViewingPage';
 import { PaymentReturnPage } from './components/PaymentReturnPage';
 import { SearchDrawer } from './components/SearchDrawer';
+import { SizeGuideModal } from './components/SizeGuideModal';
 import { TOTD } from './components/TOTD';
 import { TOTDProductDetailsPage } from './components/TOTDProductDetailsPage';
 import { TShirtCustomizer } from './features/tshirt-customizer/TShirtCustomizer';
@@ -40,6 +41,7 @@ export default function App() {
   const catalog = useCatalog();
   const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [sizeGuideOpen, setSizeGuideOpen] = useState(false);
   const [checkoutPending, setCheckoutPending] = useState(false);
 
   // ---- Cross-concern derived value: selected product from both catalogs ----
@@ -99,6 +101,7 @@ export default function App() {
           cartCount={cart.cartCount}
           onCartOpen={() => cart.setCartOpen(true)}
           onSearchOpen={() => setSearchOpen(true)}
+          onSizeGuideOpen={() => setSizeGuideOpen(true)}
           onNavigate={router.navigateToHomeSection}
           activePage={effectiveActivePage}
         />
@@ -195,7 +198,11 @@ export default function App() {
       </main>
 
       {router.activePage !== 'checkout' && router.activePage !== 'paymentReturn' && router.activePage !== 'customize' && (
-        <Footer activePage={effectiveActivePage} onNavigate={router.navigateToHomeSection} />
+        <Footer
+          activePage={effectiveActivePage}
+          onNavigate={router.navigateToHomeSection}
+          onSizeGuideOpen={() => setSizeGuideOpen(true)}
+        />
       )}
 
       <CartDrawer
@@ -217,6 +224,7 @@ export default function App() {
         onOpenProduct={router.openProductDetail}
       />
       <CookieConsent />
+      <SizeGuideModal open={sizeGuideOpen} onClose={() => setSizeGuideOpen(false)} />
     </>
   );
 }
