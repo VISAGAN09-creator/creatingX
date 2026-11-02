@@ -37,6 +37,27 @@ test('does not accept a client-claimed total in place of resolved line totals', 
   assert.notEqual(pricing.totalAmount, untrustedRequest.totalAmount);
 });
 
+test('calculates the payment amount from refreshed Firestore prices for multiple items', () => {
+  const staleCart = [
+    { price: 499, quantity: 1 },
+    { price: 699, quantity: 2 },
+  ];
+  const refreshedFirestoreItems = [
+    { price: 599, quantity: 1, lineTotal: 599 },
+    { price: 799, quantity: 2, lineTotal: 1598 },
+  ];
+
+  const pricing = calculateCheckoutPricing(refreshedFirestoreItems, 60);
+
+  assert.equal(staleCart.reduce((sum, item) => sum + item.price * item.quantity, 0), 1897);
+  assert.deepEqual(pricing, {
+    subtotalAmount: 2197,
+    taxAmount: 0,
+    shippingAmount: 60,
+    totalAmount: 2257,
+  });
+});
+
 test('omits inapplicable optional size fields from a standard pending order item', () => {
   const item = pendingOrderItem({
     productId: 'tees-standard-M',

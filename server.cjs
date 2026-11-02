@@ -999,6 +999,174 @@ async function resolveProductFromFirestore(productId) {
   return null;
 }
 
+function checkoutValidationError(statusCode, message) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function productName(data, fallback) {
+  return typeof data?.name === 'string' && data.name.trim()
+    ? data.name.trim()
+    : typeof data?.title === 'string' && data.title.trim()
+      ? data.title.trim()
+      : fallback;
+}
+
+function productImage(data) {
+  return [data?.img1, data?.image, data?.imageUrl, data?.imageAddress]
+    .find((value) => typeof value === 'string' && value.trim())?.trim() || '';
+}
+
+/**
+ * Resolve cart lines using only current Firestore product data.
+ * Client prices are deliberately not read or copied here.
+ */
+async function resolveCheckoutItems(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw checkoutValidationError(400, 'Validation Error: items must be a non-empty array of { id, quantity }.');
+  }
+  if (items.length > 50) {
+    throw checkoutValidationError(400, 'Validation Error: Too many items (max 50).');
+  }
+
+  const resolvedItems = [];
+  for (const item of items) {
+    const productId = typeof item?.id === 'string' ? item.id.trim() : '';
+    const quantity = Number(item?.quantity);
+
+    if (!productId) {
+      throw checkoutValidationError(400, 'Validation Error: Each item must have a non-empty id.');
+    }
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) {
+      throw checkoutValidationError(400, `Validation Error: Quantity for "${productId}" must be an integer between 1 and 100.`);
+    }
+
+    const product = await resolveProductFromFirestore(productId);
+    if (!product) {
+      throw checkoutValidationError(404, `Product not found: "${productId}".`);
+    }
+
+    const couple = isCoupleProduct(product.data);
+    const selectedMensSize = couple ? normalizeSize(item.mensSize ?? item.selectedMensSize) : null;
+    const selectedWomensSize = couple ? normalizeSize(item.womensSize ?? item.selectedWomensSize) : null;
+    const submittedStandardSize = !couple ? normalizeSize(item.size ?? item.selectedSize) : null;
+    const selectedSize = !couple ? product.selectedSize || submittedStandardSize : null;
+
+    if (couple && (!selectedMensSize || !selectedWomensSize)) {
+      throw checkoutValidationError(400, `Select both men's and women's sizes for "${productId}" before checkout.`);
+    }
+    if (!couple && product.selectedSize && submittedStandardSize && product.selectedSize !== submittedStandardSize) {
+      throw checkoutValidationError(400, `Selected size for "${productId}" does not match the product variant.`);
+    }
+    if (!couple && !selectedSize) {
+      throw checkoutValidationError(400, `Select an in-stock size for "${productId}" before checkout.`);
+    }
+
+    const price = Number(product.data.price);
+    if (!Number.isFinite(price) || price <= 0) {
+      throw checkoutValidationError(400, `Product "${productId}" does not have a valid price.`);
+    }
+
+    const configuredColors = configuredColorLabels(product.data);
+    const submittedColor = sanitizeString(item.color ?? item.selectedColor, 100);
+    let selectedColor;
+    if (configuredColors.length > 0) {
+      if (!submittedColor) {
+        throw checkoutValidationError(400, `Select a color for "${productId}" before checkout.`);
+      }
+      selectedColor = configuredColors.find(
+        (color) => color.toLocaleLowerCase() === submittedColor.toLocaleLowerCase(),
+      );
+      if (!selectedColor) {
+        throw checkoutValidationError(400, `Selected color for "${productId}" is unavailable.`);
+      }
+    } else if (submittedColor) {
+      throw checkoutValidationError(400, `Product "${productId}" does not have configurable colors.`);
+    }
+
+    resolvedItems.push({
+      productId,
+      firestoreDocId: product.docId,
+      collectionName: product.collectionName,
+      couple,
+      independentCoupleStock: couple && Boolean(product.data.mensSizes || product.data.womensSizes),
+      ...(couple ? { selectedMensSize, selectedWomensSize } : { selectedSize }),
+      ...(selectedColor ? { selectedColor } : {}),
+      name: productName(product.data, product.docId),
+      price,
+      quantity,
+      lineTotal: price * quantity,
+      image: productImage(product.data),
+      alt: typeof product.data.alt === 'string' && product.data.alt.trim()
+        ? product.data.alt.trim()
+        : productName(product.data, product.docId),
+      model: typeof product.data.model === 'string' ? product.data.model.trim() : '',
+      theme: product.collectionName,
+    });
+  }
+
+  return resolvedItems;
+}
+
+/** Validate current stock for the resolved variants without reserving it. */
+async function validateCheckoutInventory(resolvedItems) {
+  const requestedByVariant = new Map();
+  for (const item of resolvedItems) {
+    const selections = item.couple
+      ? [
+          { role: item.independentCoupleStock ? 'mens' : 'legacy', size: item.selectedMensSize },
+          { role: item.independentCoupleStock ? 'womens' : 'legacy', size: item.selectedWomensSize },
+        ]
+      : [{ role: 'standard', size: item.selectedSize }];
+    for (const selection of selections) {
+      const key = `${item.collectionName}\u0000${item.firestoreDocId}\u0000${selection.role}\u0000${selection.size}`;
+      const current = requestedByVariant.get(key) || { item, role: selection.role, size: selection.size, quantity: 0 };
+      requestedByVariant.set(key, { ...current, quantity: current.quantity + item.quantity });
+    }
+  }
+
+  for (const request of requestedByVariant.values()) {
+    const snapshot = await db.collection(request.item.collectionName).doc(request.item.firestoreDocId).get();
+    const productData = snapshot.exists ? snapshot.data() : null;
+    if (!productData) {
+      throw checkoutValidationError(409, `${request.item.name} is no longer available.`);
+    }
+    const adapters = request.item.couple ? coupleStockAdapters(productData) : null;
+    const adapter = request.role === 'mens'
+      ? (adapters.mens.configured.size ? adapters.mens : adapters.legacy)
+      : request.role === 'womens'
+        ? (adapters.womens.configured.size ? adapters.womens : adapters.legacy)
+        : request.role === 'legacy'
+          ? adapters.legacy
+          : stockAdapter(productData);
+    const available = adapter.configured.has(request.size) ? adapter.quantities[request.size] ?? 0 : 0;
+    if (!adapter.editable || available < request.quantity) {
+      throw checkoutValidationError(409, `${request.item.name} (${request.size}) is out of stock or has insufficient stock.`);
+    }
+  }
+}
+
+function checkoutPreviewItem(item, cartId) {
+  return withoutUndefinedProperties({
+    cartId: typeof cartId === 'string' ? cartId.slice(0, 300) : undefined,
+    productId: item.productId,
+    name: item.name,
+    image: item.image,
+    alt: item.alt,
+    model: item.model,
+    theme: item.theme,
+    price: item.price,
+    quantity: item.quantity,
+    lineTotal: item.lineTotal,
+    couple: item.couple,
+    selectedSize: item.selectedSize,
+    selectedMensSize: item.selectedMensSize,
+    selectedWomensSize: item.selectedWomensSize,
+    selectedColor: item.selectedColor,
+  });
+}
+
 async function inventoryCollectionNames() {
   const names = ['products', 'TOTD'];
   const configSnap = await db.doc('_config/collections').get();
@@ -1247,6 +1415,36 @@ app.get('/api/pin-state/:pin', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/checkout-preview
+ * Resolve the browser cart against current Firestore records for checkout UI.
+ * This is a display/validation quote only; create-order repeats the lookup.
+ */
+app.post('/api/checkout-preview', async (req, res) => {
+  if (!db) {
+    return res.status(500).json({ success: false, message: 'Server database is not initialized.' });
+  }
+
+  try {
+    const resolvedItems = await resolveCheckoutItems(req.body?.items);
+    await validateCheckoutInventory(resolvedItems);
+    const pricing = calculateCheckoutPricing(resolvedItems, 0);
+
+    return res.status(200).json({
+      success: true,
+      items: resolvedItems.map((item, index) => checkoutPreviewItem(item, req.body.items[index]?.cartId)),
+      pricing,
+    });
+  } catch (error) {
+    const statusCode = Number.isInteger(error.statusCode) ? error.statusCode : 500;
+    if (statusCode >= 500) console.error('[Checkout Preview] Failed to refresh cart:', error);
+    return res.status(statusCode).json({
+      success: false,
+      message: error.message || 'Unable to refresh checkout products.',
+    });
+  }
+});
+
 app.post('/api/create-order', async (req, res) => {
   const { items, customer, shipping } = req.body;
 
@@ -1278,153 +1476,11 @@ app.post('/api/create-order', async (req, res) => {
   }
 
   try {
-    // --- Resolve each item from Firestore and compute authoritative prices ---
-    const resolvedItems = [];
-    let totalAmount = 0;
-
-    for (const item of items) {
-      const productId = typeof item.id === 'string' ? item.id.trim() : '';
-      const quantity = Number(item.quantity);
-
-      if (!productId) {
-        return res.status(400).json({
-          success: false,
-          message: 'Validation Error: Each item must have a non-empty id.',
-        });
-      }
-
-      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) {
-        return res.status(400).json({
-          success: false,
-          message: `Validation Error: Quantity for "${productId}" must be an integer between 1 and 100.`,
-        });
-      }
-
-      const product = await resolveProductFromFirestore(productId);
-      if (!product) {
-        return res.status(404).json({
-          success: false,
-          message: `Product not found: "${productId}".`,
-        });
-      }
-
-      const couple = isCoupleProduct(product.data);
-      const selectedMensSize = couple ? normalizeSize(item.mensSize ?? item.selectedMensSize) : null;
-      const selectedWomensSize = couple ? normalizeSize(item.womensSize ?? item.selectedWomensSize) : null;
-      const submittedStandardSize = !couple ? normalizeSize(item.size ?? item.selectedSize) : null;
-      const selectedSize = !couple ? product.selectedSize || submittedStandardSize : null;
-
-      if (couple && (!selectedMensSize || !selectedWomensSize)) {
-        return res.status(400).json({
-          success: false,
-          message: `Select both men's and women's sizes for "${productId}" before checkout.`,
-        });
-      }
-
-      if (!couple && product.selectedSize && submittedStandardSize && product.selectedSize !== submittedStandardSize) {
-        return res.status(400).json({
-          success: false,
-          message: `Selected size for "${productId}" does not match the product variant.`,
-        });
-      }
-
-      if (!couple && !selectedSize) {
-        return res.status(400).json({
-          success: false,
-          message: `Select an in-stock size for "${productId}" before checkout.`,
-        });
-      }
-
-      // Extract price from Firestore document (server-authoritative)
-      const firestorePrice = Number(product.data.price);
-      if (!Number.isFinite(firestorePrice) || firestorePrice <= 0) {
-        return res.status(400).json({
-          success: false,
-          message: `Product "${productId}" does not have a valid price.`,
-        });
-      }
-
-      const configuredColors = configuredColorLabels(product.data);
-      const submittedColor = sanitizeString(item.color ?? item.selectedColor, 100);
-      let selectedColor;
-
-      if (configuredColors.length > 0) {
-        if (!submittedColor) {
-          return res.status(400).json({
-            success: false,
-            message: `Select a color for "${productId}" before checkout.`,
-          });
-        }
-
-        selectedColor = configuredColors.find(
-          (color) => color.toLocaleLowerCase() === submittedColor.toLocaleLowerCase(),
-        );
-        if (!selectedColor) {
-          return res.status(400).json({
-            success: false,
-            message: `Selected color for "${productId}" is unavailable.`,
-          });
-        }
-      } else if (submittedColor) {
-        return res.status(400).json({
-          success: false,
-          message: `Product "${productId}" does not have configurable colors.`,
-        });
-      }
-
-      const lineTotal = firestorePrice * quantity;
-      totalAmount += lineTotal;
-
-      resolvedItems.push({
-        productId,
-        firestoreDocId: product.docId,
-        collectionName: product.collectionName,
-        couple,
-        independentCoupleStock: couple && Boolean(product.data.mensSizes || product.data.womensSizes),
-        ...(couple
-          ? { selectedMensSize, selectedWomensSize }
-          : { selectedSize }),
-        ...(selectedColor ? { selectedColor } : {}),
-        name: product.data.name || product.data.title || product.docId,
-        price: firestorePrice,
-        quantity,
-        lineTotal,
-        image: product.data.img1 || product.data.image || '',
-      });
-    }
-
-    // This is a checkout-time validation only; inventory is deducted atomically
-    // after Cashfree confirms payment. The paid-order transaction repeats this
-    // check so concurrent shoppers cannot oversell a size.
-    const requestedByVariant = new Map();
-    for (const item of resolvedItems) {
-      const selections = item.couple
-        ? [
-            { role: item.independentCoupleStock ? 'mens' : 'legacy', size: item.selectedMensSize },
-            { role: item.independentCoupleStock ? 'womens' : 'legacy', size: item.selectedWomensSize },
-          ]
-        : [{ role: 'standard', size: item.selectedSize }];
-      for (const selection of selections) {
-        const key = `${item.collectionName}\u0000${item.firestoreDocId}\u0000${selection.role}\u0000${selection.size}`;
-        const current = requestedByVariant.get(key) || { item, role: selection.role, size: selection.size, quantity: 0 };
-        requestedByVariant.set(key, { ...current, quantity: current.quantity + item.quantity });
-      }
-    }
-    for (const request of requestedByVariant.values()) {
-      const productData = (await db.collection(request.item.collectionName).doc(request.item.firestoreDocId).get()).data();
-      const adapters = request.item.couple ? coupleStockAdapters(productData) : null;
-      const adapter = request.role === 'mens'
-        ? (adapters.mens.configured.size ? adapters.mens : adapters.legacy)
-        : request.role === 'womens'
-          ? (adapters.womens.configured.size ? adapters.womens : adapters.legacy)
-          : request.role === 'legacy'
-            ? adapters.legacy
-            : stockAdapter(productData);
-      const available = adapter.configured.has(request.size) ? adapter.quantities[request.size] ?? 0 : 0;
-      if (!adapter.editable || available < request.quantity) {
-        return res.status(409).json({ success: false, message: `${request.item.name} (${request.size}) is out of stock or has insufficient stock.` });
-      }
-    }
+    // Resolve and validate again here. The payment amount is never taken from
+    // the checkout preview or any browser-supplied price.
+    const resolvedItems = await resolveCheckoutItems(items);
+    await validateCheckoutInventory(resolvedItems);
+    let totalAmount = resolvedItems.reduce((sum, item) => sum + item.lineTotal, 0);
 
     let verifiedState;
     try {
@@ -1509,7 +1565,7 @@ app.post('/api/create-order', async (req, res) => {
   } catch (error) {
     console.error('[Payment Error] Failed to create order:', error);
 
-    return res.status(500).json({
+    return res.status(Number.isInteger(error.statusCode) ? error.statusCode : 500).json({
       success: false,
       message: error.message || 'Failed to create payment order.',
     });
