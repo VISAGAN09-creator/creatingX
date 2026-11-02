@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { TOTD_ENABLED } from '../config/features';
 import type { Product } from '../types';
 import { scrollToHash } from '../utils/scroll';
@@ -10,6 +10,28 @@ export type AppPage = 'home' | 'products' | 'productDetail' | 'checkout' | 'totd
 
 /** Pages the user can "return to" after viewing a product detail page. */
 type ReturnablePage = 'home' | 'products' | 'totd' | 'customize';
+
+type RouterHistoryMetadata = {
+  route: AppPage;
+  origin?: { href: string; page: AppPage };
+  scrollY: number;
+};
+
+type BrowserHistoryState = Record<string, unknown> & {
+  varataaaRouter?: RouterHistoryMetadata;
+};
+
+function currentHref() {
+  return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+}
+
+function historyState(value: unknown = window.history.state): BrowserHistoryState {
+  return value && typeof value === 'object' ? value as BrowserHistoryState : {};
+}
+
+function routerMetadata(value: unknown = window.history.state) {
+  return historyState(value).varataaaRouter;
+}
 
 function isAdminPath() {
   const pathname = window.location.pathname.replace(/\/+$/, '');
@@ -59,6 +81,12 @@ function productIdFromHash(): string | null {
   return decodeURIComponent(hash.replace('#product-', ''));
 }
 
+function returnablePage(value: AppPage | undefined): ReturnablePage | null {
+  return value === 'home' || value === 'products' || value === 'totd' || value === 'customize'
+    ? value
+    : null;
+}
+
 // ============================================================================
 // useRouter — hash-based routing, page state, and navigation
 // ============================================================================
@@ -95,12 +123,28 @@ export function useRouter(): UseRouterReturn {
   const [selectedCatalogFilter, setSelectedCatalogFilter] = useState<string | null>(null);
   const [productReturnPage, setProductReturnPage] = useState<ReturnablePage>('home');
   const [paymentReturnOrderId, setPaymentReturnOrderId] = useState<string | null>(orderIdFromPaymentReturnHash);
+  const [scrollToRestore, setScrollToRestore] = useState<number | null>(null);
+  const activePageRef = useRef(activePage);
+
+  activePageRef.current = activePage;
 
   // ---- Hash ↔ state sync (fully self-contained) ----------------------------
 
   useEffect(() => {
-    const syncPageFromHash = () => {
+    if (!routerMetadata()) {
+      window.history.replaceState(
+        { ...historyState(), varataaaRouter: { route: pageFromHash(), scrollY: window.scrollY } },
+        '',
+        currentHref(),
+      );
+    }
+
+    const previousScrollRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = 'manual';
+
+    const syncPageFromHash = (stateValue?: unknown, restoreScroll = false) => {
       const hash = window.location.hash;
+      const metadata = routerMetadata(stateValue);
 
       if (isAdminPath()) {
         setSelectedProductId(null);
@@ -113,8 +157,8 @@ export function useRouter(): UseRouterReturn {
         setSelectedProductId(null);
         setSelectedCatalogFilter(null);
         setActivePage('home');
-        window.history.replaceState(null, '', '#hero');
-        window.setTimeout(() => scrollToHash('#hero'), 0);
+        window.history.replaceState({ ...historyState(), varataaaRouter: { route: 'home', scrollY: 0 } }, '', '#hero');
+        scrollToHash('#hero');
         return;
       }
 
@@ -122,58 +166,66 @@ export function useRouter(): UseRouterReturn {
         setSelectedProductId(null);
         setSelectedCatalogFilter(null);
         setActivePage('checkout');
-        return;
-      }
-
-      if (hash === '#admin') {
+      } else if (hash === '#admin') {
         setSelectedProductId(null);
         setSelectedCatalogFilter(null);
         setActivePage('admin');
-        return;
-      }
-
-      if (hash.startsWith('#payment-return')) {
+      } else if (hash.startsWith('#payment-return')) {
         setSelectedProductId(null);
         setSelectedCatalogFilter(null);
         setPaymentReturnOrderId(orderIdFromPaymentReturnHash());
         setActivePage('paymentReturn');
-        return;
-      }
-
-      if (hash.startsWith('#product-')) {
+      } else if (hash.startsWith('#product-')) {
         setSelectedProductId(decodeURIComponent(hash.replace('#product-', '')));
+        const originPage = returnablePage(metadata?.origin?.page);
+        if (originPage) setProductReturnPage(originPage);
         setActivePage('productDetail');
-        return;
-      }
-
-      if (hash === '#totd') {
+      } else if (hash === '#totd') {
         setSelectedProductId(null);
         setSelectedCatalogFilter(null);
         setActivePage('totd');
-        return;
-      }
-
-      if (hash === '#customize') {
+      } else if (hash === '#customize') {
         setSelectedProductId(null);
         setSelectedCatalogFilter(null);
         setActivePage('customize');
-        return;
+      } else {
+        setSelectedProductId(null);
+        if (hash !== '#products') setSelectedCatalogFilter(null);
+        setActivePage(hash === '#products' ? 'products' : 'home');
       }
 
-      setSelectedProductId(null);
-      if (hash !== '#products') setSelectedCatalogFilter(null);
-      setActivePage(hash === '#products' ? 'products' : 'home');
+      if (restoreScroll) setScrollToRestore(metadata?.scrollY ?? 0);
+    };
+
+    const onPopState = (event: PopStateEvent) => syncPageFromHash(event.state, true);
+    const onHashChange = () => syncPageFromHash();
+    const onPageHide = () => {
+      const existing = routerMetadata();
+      window.history.replaceState(
+        { ...historyState(), varataaaRouter: { route: activePageRef.current, origin: existing?.origin, scrollY: window.scrollY } },
+        '',
+        currentHref(),
+      );
     };
 
     syncPageFromHash();
-    window.addEventListener('hashchange', syncPageFromHash);
-    window.addEventListener('popstate', syncPageFromHash);
+    window.addEventListener('hashchange', onHashChange);
+    window.addEventListener('popstate', onPopState);
+    window.addEventListener('pagehide', onPageHide);
 
     return () => {
-      window.removeEventListener('hashchange', syncPageFromHash);
-      window.removeEventListener('popstate', syncPageFromHash);
+      window.history.scrollRestoration = previousScrollRestoration;
+      window.removeEventListener('hashchange', onHashChange);
+      window.removeEventListener('popstate', onPopState);
+      window.removeEventListener('pagehide', onPageHide);
     };
   }, []);
+
+  useLayoutEffect(() => {
+    if (scrollToRestore === null) return;
+    window.scrollTo({ top: scrollToRestore, behavior: 'instant' });
+    setScrollToRestore(null);
+  }, [activePage, scrollToRestore]);
 
   // ---- Navigation callbacks ------------------------------------------------
 
@@ -200,20 +252,40 @@ export function useRouter(): UseRouterReturn {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
-  const openProductDetail = useCallback(
-    (product: Product) => {
-      setActivePage((current) => {
-        if (current !== 'productDetail' && current !== 'checkout') {
-          setProductReturnPage(current as ReturnablePage);
-        }
-        return 'productDetail';
-      });
-      setSelectedProductId(product.id);
-      window.history.pushState(null, '', `#product-${encodeURIComponent(product.id)}`);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    },
-    [],
-  );
+  const openProductDetail = useCallback((product: Product) => {
+    const currentPage = activePageRef.current;
+    const priorMetadata = routerMetadata();
+    const originPage = returnablePage(currentPage);
+
+    window.history.replaceState(
+      {
+        ...historyState(),
+        varataaaRouter: {
+          route: currentPage,
+          origin: priorMetadata?.origin,
+          scrollY: window.scrollY,
+        },
+      },
+      '',
+      currentHref(),
+    );
+    window.history.pushState(
+      {
+        ...historyState(),
+        varataaaRouter: {
+          route: 'productDetail',
+          origin: { href: currentHref(), page: currentPage },
+          scrollY: 0,
+        },
+      },
+      '',
+      `#product-${encodeURIComponent(product.id)}`,
+    );
+    if (originPage) setProductReturnPage(originPage);
+    setActivePage('productDetail');
+    setSelectedProductId(product.id);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
 
   const navigateToHomeSection = useCallback((href: string) => {
     if (href === '#totd') {
@@ -233,11 +305,7 @@ export function useRouter(): UseRouterReturn {
       return;
     }
     if (href === '#customize') {
-      setActivePage('customize');
-      setSelectedProductId(null);
-      setSelectedCatalogFilter(null);
-      window.history.pushState(null, '', '#customize');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      openCustomizePage();
       return;
     }
     setActivePage('home');
@@ -245,11 +313,22 @@ export function useRouter(): UseRouterReturn {
     setSelectedCatalogFilter(null);
     window.history.pushState(null, '', href);
     window.setTimeout(() => scrollToHash(href), 0);
-  }, []);
+  }, [openCustomizePage]);
 
   const closeProductDetail = useCallback(() => {
+    if (routerMetadata()?.origin) {
+      window.history.back();
+      return;
+    }
     if (productReturnPage === 'products') {
-      openProductPage();
+      window.history.replaceState(
+        { ...historyState(), varataaaRouter: { route: 'products', scrollY: 0 } },
+        '',
+        '#products',
+      );
+      setActivePage('products');
+      setSelectedProductId(null);
+      window.scrollTo({ top: 0, behavior: 'instant' });
       return;
     }
     if (productReturnPage === 'totd') {
@@ -258,7 +337,7 @@ export function useRouter(): UseRouterReturn {
         return;
       }
       setActivePage('totd');
-      window.history.pushState(null, '', '#totd');
+      window.history.replaceState(null, '', '#totd');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
@@ -267,7 +346,7 @@ export function useRouter(): UseRouterReturn {
       return;
     }
     navigateToHomeSection('#hero');
-  }, [navigateToHomeSection, openCustomizePage, openProductPage, productReturnPage]);
+  }, [navigateToHomeSection, openCustomizePage, productReturnPage]);
 
   const exitAdmin = useCallback(() => {
     const storePath = window.location.pathname.startsWith('/varataaa/admin') ? '/varataaa/' : '/';

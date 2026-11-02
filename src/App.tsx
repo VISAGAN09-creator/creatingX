@@ -23,7 +23,6 @@ import { TShirtCustomizer } from './features/tshirt-customizer/TShirtCustomizer'
 import { useCart } from './hooks/useCart';
 import { useCatalog } from './hooks/useCatalog';
 import { useRouter } from './hooks/useRouter';
-import { scrollToHash } from './utils/scroll';
 
 // ============================================================================
 // App — thin composition shell
@@ -76,6 +75,10 @@ export default function App() {
 
   const effectiveActivePage =
     isTotdProduct && router.activePage === 'productDetail' ? 'totd' : router.activePage;
+  const catalogueIsVisible = router.activePage === 'products';
+  const keepCatalogueMounted = catalogueIsVisible || (
+    router.activePage === 'productDetail' && router.productReturnPage === 'products'
+  );
 
   if (router.activePage === 'admin') {
     return (
@@ -102,6 +105,19 @@ export default function App() {
       )}
 
       <main className="relative z-[1] overflow-x-hidden">
+        {keepCatalogueMounted && (
+          <div hidden={!catalogueIsVisible} aria-hidden={!catalogueIsVisible}>
+            <ProductViewingPage
+              products={catalog.catalogProducts}
+              status={catalog.catalogStatus}
+              initialFilter={router.selectedCatalogFilter}
+              onAddToCart={cart.addToCart}
+              onOpenProduct={router.openProductDetail}
+              onBack={() => router.navigateToHomeSection('#hero')}
+            />
+          </div>
+        )}
+
         {router.activePage === 'paymentReturn' ? (
           <PaymentReturnPage
             orderId={router.paymentReturnOrderId}
@@ -138,16 +154,7 @@ export default function App() {
               onBack={router.closeProductDetail}
             />
           )
-        ) : router.activePage === 'products' ? (
-          <ProductViewingPage
-            products={catalog.catalogProducts}
-            status={catalog.catalogStatus}
-            initialFilter={router.selectedCatalogFilter}
-            onAddToCart={cart.addToCart}
-            onOpenProduct={router.openProductDetail}
-            onBack={() => router.navigateToHomeSection('#hero')}
-          />
-        ) : TOTD_ENABLED && router.activePage === 'totd' ? (
+        ) : router.activePage === 'products' ? null : TOTD_ENABLED && router.activePage === 'totd' ? (
           <TOTD
             products={catalog.totdProducts}
             status={catalog.totdStatus}

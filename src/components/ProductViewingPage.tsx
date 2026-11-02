@@ -75,7 +75,7 @@ export function ProductViewingPage({
 
   useEffect(() => {
     setPage(1);
-  }, [selectedFilters, products.length, productsPerPage]);
+  }, [selectedFilters, productsPerPage]);
 
   useEffect(() => {
     setSelectedFilters(initialFilter ? [initialFilter] : []);
