@@ -16,6 +16,7 @@ import { Navbar } from './components/Navbar';
 import { ProductDetailsPage } from './components/ProductDetailsPage';
 import { ProductViewingPage } from './components/ProductViewingPage';
 import { PaymentReturnPage } from './components/PaymentReturnPage';
+import { PolicyPage } from './components/PolicyPage';
 import { SearchDrawer } from './components/SearchDrawer';
 import { SizeGuideModal } from './components/SizeGuideModal';
 import { TOTD } from './components/TOTD';
@@ -82,6 +83,14 @@ export default function App() {
     router.activePage === 'productDetail' && router.productReturnPage === 'products'
   );
 
+  const navigateFromPolicy = (href: string) => {
+    if (router.activePage === 'terms-and-conditions' || router.activePage === 'privacy-policy' || router.activePage === 'refund-policy' || router.activePage === 'shipping-policy') {
+      window.location.href = `/varataaa/${href}`;
+      return;
+    }
+    router.navigateToHomeSection(href);
+  };
+
   if (router.activePage === 'admin') {
     return (
       <>
@@ -102,7 +111,7 @@ export default function App() {
           onCartOpen={() => cart.setCartOpen(true)}
           onSearchOpen={() => setSearchOpen(true)}
           onSizeGuideOpen={() => setSizeGuideOpen(true)}
-          onNavigate={router.navigateToHomeSection}
+          onNavigate={navigateFromPolicy}
           activePage={effectiveActivePage}
         />
       )}
@@ -121,7 +130,9 @@ export default function App() {
           </div>
         )}
 
-        {router.activePage === 'paymentReturn' ? (
+        {router.activePage === 'terms-and-conditions' || router.activePage === 'privacy-policy' || router.activePage === 'refund-policy' || router.activePage === 'shipping-policy' ? (
+          <PolicyPage slug={router.activePage} />
+        ) : router.activePage === 'paymentReturn' ? (
           <PaymentReturnPage
             orderId={router.paymentReturnOrderId}
             onBack={() => {
@@ -200,7 +211,7 @@ export default function App() {
       {router.activePage !== 'checkout' && router.activePage !== 'paymentReturn' && router.activePage !== 'customize' && (
         <Footer
           activePage={effectiveActivePage}
-          onNavigate={router.navigateToHomeSection}
+          onNavigate={navigateFromPolicy}
           onSizeGuideOpen={() => setSizeGuideOpen(true)}
         />
       )}

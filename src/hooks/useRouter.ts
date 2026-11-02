@@ -6,7 +6,7 @@ import { scrollToHash } from '../utils/scroll';
 // ============================================================================
 // Page types supported by the application router.
 // ============================================================================
-export type AppPage = 'home' | 'products' | 'productDetail' | 'checkout' | 'totd' | 'customize' | 'paymentReturn' | 'admin';
+export type AppPage = 'home' | 'products' | 'productDetail' | 'checkout' | 'totd' | 'customize' | 'paymentReturn' | 'admin' | 'terms-and-conditions' | 'privacy-policy' | 'refund-policy' | 'shipping-policy';
 
 /** Pages the user can "return to" after viewing a product detail page. */
 type ReturnablePage = 'home' | 'products' | 'totd' | 'customize';
@@ -38,6 +38,15 @@ function isAdminPath() {
   return pathname === '/admin' || pathname === '/varataaa/admin';
 }
 
+function policyPageFromPath(): Extract<AppPage, 'terms-and-conditions' | 'privacy-policy' | 'refund-policy' | 'shipping-policy'> | null {
+  const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
+  const base = pathname.startsWith('/varataaa/') ? '/varataaa' : '';
+  const slug = pathname.slice(base.length + 1);
+  return ['terms-and-conditions', 'privacy-policy', 'refund-policy', 'shipping-policy'].includes(slug)
+    ? slug as Extract<AppPage, 'terms-and-conditions' | 'privacy-policy' | 'refund-policy' | 'shipping-policy'>
+    : null;
+}
+
 function isDisabledTotdRoute(hash: string) {
   return !TOTD_ENABLED && (hash === '#totd' || hash.toLowerCase().startsWith('#product-totd-'));
 }
@@ -47,6 +56,8 @@ function isDisabledTotdRoute(hash: string) {
  */
 function pageFromHash(): AppPage {
   const hash = window.location.hash;
+  const policyPage = policyPageFromPath();
+  if (policyPage) return policyPage;
   if (isAdminPath()) return 'admin';
   if (isDisabledTotdRoute(hash)) return 'home';
   if (hash === '#checkout') return 'checkout';
@@ -145,6 +156,15 @@ export function useRouter(): UseRouterReturn {
     const syncPageFromHash = (stateValue?: unknown, restoreScroll = false) => {
       const hash = window.location.hash;
       const metadata = routerMetadata(stateValue);
+
+      const policyPage = policyPageFromPath();
+      if (policyPage) {
+        setSelectedProductId(null);
+        setSelectedCatalogFilter(null);
+        setActivePage(policyPage);
+        if (restoreScroll) setScrollToRestore(metadata?.scrollY ?? 0);
+        return;
+      }
 
       if (isAdminPath()) {
         setSelectedProductId(null);

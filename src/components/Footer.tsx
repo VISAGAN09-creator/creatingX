@@ -20,12 +20,8 @@ export function Footer({ activePage, onNavigate, onSizeGuideOpen }: FooterProps)
   };
 
   const handleLinkClick = (event: React.MouseEvent, columnTitle: string, link: string) => {
+    if (columnTitle === 'Support') return;
     event.preventDefault();
-
-    if (columnTitle === 'Support') {
-      showToast('Soon');
-      return;
-    }
 
     if (link === 'New Arrivals') {
       if (onNavigate) {
@@ -126,7 +122,9 @@ export function Footer({ activePage, onNavigate, onSizeGuideOpen }: FooterProps)
                 {column.links.map((link) => (
                   <li key={link}>
                     <a
-                      href="#"
+                      href={column.title === 'Support'
+                        ? `/varataaa/${link === 'Terms & Service' ? 'terms-and-conditions' : link === 'Shipping' ? 'shipping-policy' : 'refund-policy'}`
+                        : '#'}
                       onClick={(event) => handleLinkClick(event, column.title, link)}
                      
                       className="text-sm text-metal-dark transition hover:text-black"

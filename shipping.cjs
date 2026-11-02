@@ -1,4 +1,4 @@
-const { states, rates, defaultRate } = require('./shipping-policy.json');
+const { states, rates, defaultRate } = require('./shipping-rates.json');
 
 const aliases = { orissa: 'Odisha', pondicherry: 'Puducherry', 'nct of delhi': 'Delhi', 'jammu & kashmir': 'Jammu and Kashmir', chattisgarh: 'Chhattisgarh', uttaranchal: 'Uttarakhand', 'andaman & nicobar islands': 'Andaman and Nicobar Islands', 'dadra and nagar haveli': 'Dadra and Nagar Haveli and Daman and Diu', 'daman and diu': 'Dadra and Nagar Haveli and Daman and Diu' };
 function normalizeState(value) {

@@ -1,6 +1,6 @@
 import { HelpCircle } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import policy from '../../shipping-policy.json';
+import policy from '../../shipping-rates.json';
 import type { CartLine } from '../types';
 import { formatPrice } from '../utils/format';
 import { paymentApiPath } from '../lib/paymentApi';
@@ -639,16 +639,19 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
             </button>
 
             <div className="mt-6 text-center">
-              {['Refund policy', 'Shipping policy', 'Privacy policy', 'Terms of service'].map((link) => (
-                <button
+              {[
+                ['Refund policy', '/varataaa/refund-policy'],
+                ['Shipping policy', '/varataaa/shipping-policy'],
+                ['Privacy policy', '/varataaa/privacy-policy'],
+                ['Terms of service', '/varataaa/terms-and-conditions'],
+              ].map(([link, href]) => (
+                <a
                   key={link}
-                  type="button"
-                 
+                  href={href}
                   className="mx-2 text-[11px] text-[#666666] transition hover:text-[#1a1a1a]"
-                  onClick={() => showToast(link)}
                 >
                   {link}
-                </button>
+                </a>
               ))}
             </div>
           </div>
