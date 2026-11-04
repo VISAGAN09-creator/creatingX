@@ -222,10 +222,29 @@ test('records SMTP failures without retrying a failed claim automatically', asyn
   assert.equal(failed.status, 'failed');
   assert.equal(retry.status, 'skipped');
   assert.equal(db.state.emailDelivery.status, 'failed');
+  assert.equal(db.state.emailDelivery.reason, 'smtp_delivery_failed');
 });
 
-test('does not reclaim sending, sent, failed, or skipped delivery states', async () => {
-  for (const status of ['sending', 'sent', 'failed', 'skipped']) {
+test('retries only a known pre-send configuration failure after configuration is restored', async () => {
+  const db = fakeOrderDb({
+    customer: { email: 'customer@example.com' },
+    items: [],
+    pricing: { total: 0 },
+    emailDelivery: { status: 'failed', reason: 'smtp_not_configured' },
+  });
+  let sends = 0;
+  const result = await sendOrderConfirmationEmail('order_retry_configured', null, {
+    db,
+    transporter: { sendMail: async () => { sends += 1; return { messageId: 'retry-1' }; } },
+  });
+
+  assert.equal(result.status, 'sent');
+  assert.equal(sends, 1);
+  assert.equal(db.state.emailDelivery.status, 'sent');
+});
+
+test('does not reclaim sending, sent, unknown failed, or skipped delivery states', async () => {
+  for (const status of ['sending', 'sent', 'skipped']) {
     const db = fakeOrderDb({ customer: { email: 'customer@example.com' }, emailDelivery: { status } });
     let sends = 0;
     const result = await sendOrderConfirmationEmail('order_' + status, null, {
@@ -235,4 +254,12 @@ test('does not reclaim sending, sent, failed, or skipped delivery states', async
     assert.equal(result.status, 'skipped');
     assert.equal(sends, 0);
   }
+
+  const failed = fakeOrderDb({ customer: { email: 'customer@example.com' }, emailDelivery: { status: 'failed', reason: 'smtp_delivery_failed' } });
+  const result = await sendOrderConfirmationEmail('order_failed', null, {
+    db: failed,
+    transporter: { sendMail: async () => ({ messageId: 'unexpected' }) },
+  });
+  assert.equal(result.status, 'skipped');
+  assert.equal(failed.state.emailDelivery.status, 'failed');
 });

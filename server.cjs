@@ -55,7 +55,7 @@ function roundCurrency(value) {
 }
 
 /**
- * Builds the amount passed to Cashfree from server-resolved line totals only.
+ * Builds the amount passed to Razorpay from server-resolved line totals only.
  * Client-request totals are intentionally not part of this contract.
  */
 function calculateCheckoutPricing(resolvedItems, shippingAmount = 0) {
@@ -218,6 +218,9 @@ app.use(cors({
   credentials: false,                  // Set to true if you add cookie-based auth later
   maxAge: 86400,                       // Cache preflight for 24h to reduce OPTIONS calls
 }));
+// Razorpay signs the exact webhook bytes. Parse this route as a Buffer before
+// the JSON middleware; the handler verifies the signature before decoding it.
+app.use(['/api/razorpay-webhook', '/varataaa/api/razorpay-webhook'], express.raw({ type: 'application/json', limit: '100kb' }));
 app.use(express.json({ limit: '100kb' }));
 
 // The storefront is also served behind a /varataaa reverse-proxy mount. The
@@ -548,7 +551,7 @@ function adminOrderResponse(orderId, order) {
 }
 
 /**
- * Canonical paid orders must remain in /orders because Cashfree return-page
+ * Canonical paid orders must remain in /orders because payment return-page
  * verification and webhooks use that document ID as their idempotency key.
  * The three fulfillment collections are server-managed mirrors. A transaction
  * keeps exactly one current mirror while preserving the canonical order.
@@ -689,7 +692,7 @@ app.get('/api/admin/session', (req, res) => {
 });
 
 /**
- * Create a server-authoritative in-person order. This never calls Cashfree;
+ * Create a server-authoritative in-person order. This never calls an online gateway;
  * it uses the same transaction that allocates stock for verified online orders.
  */
 app.post('/api/admin/orders/walk-in', async (req, res) => {
@@ -1502,14 +1505,6 @@ app.post('/api/create-order', async (req, res) => {
       });
     }
 
-    // --- Build return URL ---
-    // A reverse-proxied storefront can live below a path (for example,
-    // /varataaa). Origin headers never include that path, so Production uses
-    // an explicit server-side return URL when configured.
-    const configuredReturnUrl = process.env.PAYMENT_RETURN_URL?.trim();
-    const origin = req.headers.origin || req.headers.referer?.replace(/\/[^/]*$/, '') || 'https://ecommerce-f1448.web.app';
-    const returnUrl = configuredReturnUrl || `${origin}/#payment-return`;
-
     // --- Build customer info ---
     const customerName = checkoutDetails.customer.name;
     const customerEmail = checkoutDetails.customer.email;
@@ -1538,21 +1533,14 @@ app.post('/api/create-order', async (req, res) => {
       amount: totalAmount,
       currency: 'INR',
       receipt: `receipt_${Date.now()}`,
-      customer: {
-        id: `cust_${Date.now()}`,
-        email: customerEmail || 'test@cashfree.com',
-        phone: customerPhone || '9999999999',
-        name: customerName,
-      },
-      returnUrl,
       items: resolvedItems,
     });
 
-    // Store pending order data keyed by Cashfree order_id for verification later
-    if (db && order.gatewayData?.order_id) {
-      pendingOrderData.cashfreeOrderId = order.gatewayData.order_id;
-      pendingOrderData.cfOrderId = order.gatewayData.cf_order_id || '';
-      await db.collection('pendingOrders').doc(order.gatewayData.order_id).set(pendingOrderData);
+    // The Razorpay order ID is the single idempotency key used by checkout,
+    // callback verification, webhooks, and the final Firestore order document.
+    if (db && order.orderId) {
+      pendingOrderData.razorpayOrderId = order.orderId;
+      await db.collection('pendingOrders').doc(order.orderId).set(pendingOrderData);
     }
 
     return res.status(200).json({
@@ -1632,9 +1620,17 @@ function escapeHtml(str) {
 
 const ORDER_EMAIL_STATUS_FIELD = 'emailDelivery';
 let gmailTransporter = null;
+const SAFE_EMAIL_RETRY_REASONS = new Set(['smtp_not_configured']);
 
 function validEmail(value) {
   return typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function smtpErrorCategory(error) {
+  const code = typeof error?.code === 'string' ? error.code.toUpperCase() : '';
+  return ['EAUTH', 'ECONNECTION', 'ECONNREFUSED', 'ETIMEDOUT', 'ESOCKET', 'ETLS'].includes(code)
+    ? code.toLowerCase()
+    : 'unknown';
 }
 
 function orderConfirmationMessage(orderId, order, logoUrl = null) {
@@ -1717,7 +1713,9 @@ async function sendOrderConfirmationEmail(orderId, _order, dependencies = {}) {
     if (!snapshot.exists) return { claimed: false };
     const persistedOrder = snapshot.data() || {};
     const existing = persistedOrder[ORDER_EMAIL_STATUS_FIELD];
-    if (existing?.status === 'sent' || existing?.status === 'sending' || existing?.status === 'skipped' || existing?.status === 'failed') return { claimed: false };
+    const safelyRetryable = existing?.status === 'failed'
+      && SAFE_EMAIL_RETRY_REASONS.has(existing?.reason);
+    if (existing?.status === 'sent' || existing?.status === 'sending' || existing?.status === 'skipped' || (existing?.status === 'failed' && !safelyRetryable)) return { claimed: false };
     const recipient = persistedOrder?.customer?.email;
     if (!validEmail(recipient)) {
       transaction.update(orderRef, { [ORDER_EMAIL_STATUS_FIELD]: { status: 'skipped', updatedAt: now, reason: 'missing_or_invalid_recipient' } });
@@ -1742,336 +1740,186 @@ async function sendOrderConfirmationEmail(orderId, _order, dependencies = {}) {
     await orderRef.update({ [ORDER_EMAIL_STATUS_FIELD]: { status: 'sent', attemptId, sentAt: new Date().toISOString(), messageId: result.messageId || null } });
     return { status: 'sent' };
   } catch (error) {
-    console.warn(`[Email] Order confirmation delivery failed for ${orderId}:`, error.message === 'smtp_not_configured' ? 'smtp_not_configured' : 'smtp_delivery_failed');
-    try { await orderRef.update({ [ORDER_EMAIL_STATUS_FIELD]: { status: 'failed', attemptId, updatedAt: new Date().toISOString(), reason: error.message === 'smtp_not_configured' ? 'smtp_not_configured' : 'smtp_delivery_failed' } }); } catch (_) { /* order payment remains successful */ }
+    const reason = error.message === 'smtp_not_configured' ? 'smtp_not_configured' : 'smtp_delivery_failed';
+    const providerCategory = reason === 'smtp_not_configured' ? 'not_configured' : smtpErrorCategory(error);
+    console.warn(`[Email] Order confirmation delivery failed for ${orderId}: ${reason} (${providerCategory})`);
+    try { await orderRef.update({ [ORDER_EMAIL_STATUS_FIELD]: { status: 'failed', attemptId, updatedAt: new Date().toISOString(), reason, providerCategory } }); } catch (_) { /* order payment remains successful */ }
     return { status: 'failed' };
   }
 }
 
-/**
- * STEP 2: VERIFY PAYMENT ENDPOINT
- * POST /api/verify-payment
- * Receives: { orderId } — the Cashfree order_id returned in the redirect URL
- * Returns: { success, orderId, paymentStatus, order }
- *
- * This endpoint verifies the payment with Cashfree's API (server-to-server),
- * then writes the order to Firestore ONLY if the payment is genuinely PAID.
- * The operation is idempotent: refreshing the return page won't create duplicates.
- */
-app.post('/api/verify-payment', async (req, res) => {
-  const { orderId: cashfreeOrderId } = req.body;
+function paymentResponse(orderId, order) {
+  return {
+    success: true,
+    orderId,
+    paymentStatus: order.status,
+    order: {
+      items: order.items || [],
+      totalAmount: order.pricing?.total || 0,
+      customer: order.customer || {},
+    },
+  };
+}
 
-  if (!cashfreeOrderId || typeof cashfreeOrderId !== 'string') {
-    return res.status(400).json({
-      success: false,
-      message: 'Validation Error: orderId is required.',
-    });
+async function createRazorpayPaidOrder(orderId, verification, source) {
+  const paidOrderRef = db.collection('orders').doc(orderId);
+  const existing = await paidOrderRef.get();
+  if (existing.exists) return { created: false, order: existing.data() };
+
+  const pendingRef = db.collection('pendingOrders').doc(orderId);
+  const pendingSnap = await pendingRef.get();
+  const pending = pendingSnap.exists ? pendingSnap.data() : null;
+  if (!pending || pending.razorpayOrderId !== orderId) {
+    const error = new Error('Payment order context is missing. Please contact support with your order ID.');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const items = Array.isArray(pending.items) ? pending.items : [];
+  const subtotal = roundCurrency(items.reduce((total, item) => total + Number(item.price) * Number(item.quantity), 0));
+  const tax = Number.isFinite(Number(pending.taxAmount)) ? Number(pending.taxAmount) : 0;
+  const shippingAmount = Number(pending.shippingAmount) || 0;
+  const expectedTotal = Number.isFinite(Number(pending.totalAmount))
+    ? Number(pending.totalAmount)
+    : roundCurrency(subtotal + tax + shippingAmount);
+  const amount = Number(verification.orderAmount);
+  if (verification.gatewayOrderId !== orderId || verification.orderCurrency !== 'INR'
+    || !Number.isFinite(amount) || Math.round(amount * 100) !== Math.round(expectedTotal * 100)) {
+    throw new Error('Razorpay amount does not match the server-calculated order total.');
+  }
+
+  const customer = pending.customer || {};
+  const shipping = pending.shipping || {};
+  const order = {
+    customer: {
+      email: sanitizeString(customer.email, 254),
+      name: sanitizeString(customer.name, 200),
+      firstName: sanitizeString(customer.name?.split(' ')[0] || customer.firstName || '', 100),
+      lastName: sanitizeString(customer.name?.split(' ').slice(1).join(' ') || customer.lastName || '', 100),
+      phone: sanitizeString(customer.phone, 20),
+    },
+    shipping: {
+      country: sanitizeString(shipping.country, 5), doorNo: sanitizeString(shipping.doorNo, 100),
+      addressLine1: sanitizeString(shipping.addressLine1 ?? shipping.address, 500),
+      addressLine2: sanitizeString(shipping.addressLine2 ?? shipping.apartment, 500),
+      address: sanitizeString(shipping.addressLine1 ?? shipping.address, 500),
+      apartment: sanitizeString(shipping.addressLine2 ?? shipping.apartment, 500),
+      city: sanitizeString(shipping.city, 100), state: sanitizeString(shipping.state, 100),
+      pinCode: sanitizeString(shipping.pinCode, 10),
+    },
+    items: items.map(paidOrderItem),
+    pricing: { subtotal, tax, shipping: shippingAmount, total: amount },
+    payment: {
+      gateway: 'razorpay',
+      razorpayOrderId: orderId,
+      razorpayPaymentId: verification.gatewayPaymentId,
+      transactionId: verification.gatewayPaymentId,
+      paymentStatus: verification.paymentStatus,
+    },
+    status: 'paid',
+    createdAt: new Date().toISOString(),
+    ...(source === 'webhook' ? { source } : {}),
+  };
+  const result = await createPaidOrderWithFulfillment(orderId, order, items);
+  if (result.created) {
+    try { await pendingRef.delete(); } catch (_) { /* paid order remains authoritative */ }
+  }
+  // The helper's claim is the sole duplicate-email guard. Calling it for an
+  // idempotent paid-order result lets a fixed missing-configuration failure
+  // retry safely, while ambiguous SMTP failures remain protected.
+  await sendOrderConfirmationEmail(orderId, result.order);
+  return result;
+}
+
+async function claimRazorpayEvent(database, eventId, eventType, orderId) {
+  const ref = database.collection('paymentWebhookEvents')
+    .doc(crypto.createHash('sha256').update(eventId).digest('hex'));
+  return database.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (snapshot.exists && snapshot.data()?.status === 'processed') return { duplicate: true, ref };
+    transaction.set(ref, { eventId, eventType, orderId, status: 'processing', updatedAt: new Date().toISOString() }, { merge: true });
+    return { duplicate: false, ref };
+  });
+}
+
+/**
+ * Razorpay posts an HMAC over the exact request bytes. This route receives a
+ * Buffer via the route-specific express.raw middleware above; it never signs a
+ * parsed or re-serialised body.
+ */
+app.post('/api/razorpay-webhook', async (req, res) => {
+  if (!gateway.verifyWebhookSignature(req.body, req.get('x-razorpay-signature'))) {
+    return res.status(401).json({ success: false, message: 'Invalid webhook signature.' });
+  }
+  let event;
+  try { event = JSON.parse(req.body.toString('utf8')); } catch (_) {
+    return res.status(400).json({ success: false, message: 'Invalid webhook payload.' });
+  }
+  const eventId = req.get('x-razorpay-event-id');
+  const eventType = event?.event;
+  const payment = event?.payload?.payment?.entity;
+  const orderId = payment?.order_id;
+  if (!db) return res.status(503).json({ success: false, message: 'Server database is not initialized.' });
+  if (!eventId || !eventType || !orderId) {
+    return res.status(400).json({ success: false, message: 'Webhook payload is incomplete.' });
   }
 
   try {
-    // --- Idempotency check: the Cashfree order ID is the Firestore document ID. ---
-    // A deterministic document lets return-page verification and the webhook
-    // converge on the same record.
-    const paidOrderRef = db ? db.collection('orders').doc(cashfreeOrderId) : null;
-    if (db) {
-      const existingDoc = await paidOrderRef.get();
-      if (existingDoc.exists) {
-        const existingData = existingDoc.data();
-        console.log(`[Payment] Order ${cashfreeOrderId} already verified (idempotent).`);
-        return res.status(200).json({
-          success: true,
-          message: 'Payment already verified.',
-          orderId: cashfreeOrderId,
-          paymentStatus: existingData.status,
-          order: {
-            items: existingData.items,
-            totalAmount: existingData.pricing?.total,
-            customer: existingData.customer,
-          },
-        });
-      }
+    const claim = await claimRazorpayEvent(db, eventId, eventType, orderId);
+    if (claim.duplicate) return res.status(200).json({ success: true, message: 'Already processed.' });
+    if (eventType === 'payment.failed') {
+      await db.collection('pendingOrders').doc(orderId).set({
+        status: 'payment_failed', paymentStatus: 'failed', updatedAt: new Date().toISOString(),
+      }, { merge: true });
+      await claim.ref.set({ status: 'processed', outcome: 'failed', processedAt: new Date().toISOString() }, { merge: true });
+      return res.status(200).json({ success: true, message: 'Payment failure recorded.' });
     }
+    if (eventType !== 'payment.captured' || !payment?.id) {
+      await claim.ref.set({ status: 'processed', outcome: 'ignored', processedAt: new Date().toISOString() }, { merge: true });
+      return res.status(200).json({ success: true, message: 'Event ignored.' });
+    }
+    const verification = await gateway.verifyWebhookPayment({ orderId, paymentId: payment.id });
+    if (!verification.verified) {
+      await claim.ref.set({ status: 'pending_confirmation', updatedAt: new Date().toISOString() }, { merge: true });
+      return res.status(503).json({ success: false, message: 'Payment is not captured yet.' });
+    }
+    const result = await createRazorpayPaidOrder(orderId, verification, 'webhook');
+    await claim.ref.set({ status: 'processed', outcome: result.created ? 'created' : 'already_paid', processedAt: new Date().toISOString() }, { merge: true });
+    return res.status(200).json({ success: true, message: result.created ? 'Order processed.' : 'Already processed.' });
+  } catch (error) {
+    console.error('[Razorpay Webhook Error]', error.message);
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message || 'Webhook processing error.' });
+  }
+});
 
-    // --- Verify with Cashfree API ---
-    const verification = await gateway.verifyPayment({ orderId: cashfreeOrderId });
-
-    if (verification.verified) {
-      console.log(`[Payment] Verification successful for Cashfree order: ${cashfreeOrderId}`);
-
-      let firestoreOrderId = '';
-      let orderDetails = null;
-
-      if (db) {
-        // Retrieve the pending order context we saved during create-order
-        const pendingSnap = await db.collection('pendingOrders').doc(cashfreeOrderId).get();
-        const pendingData = pendingSnap.exists ? pendingSnap.data() : null;
-
-        if (!pendingData) {
-          console.warn(`[Payment] No pending order found for ${cashfreeOrderId}; refusing to persist it.`);
-          return res.status(409).json({
-            success: false,
-            message: 'Payment order context is missing. Please contact support with your order ID.',
-            orderId: cashfreeOrderId,
-            paymentStatus: verification.paymentStatus,
-          });
-        }
-
-        const items = pendingData?.items || [];
-        const customer = pendingData?.customer || {};
-        const shipping = pendingData?.shipping || {};
-        // New orders have zero additional tax. Legacy pending orders retain
-        // their stored amount so a previously created Cashfree order can still
-        // be verified accurately.
-        const serverSubtotal = Math.round(items.reduce((sum, item) => sum + (item.price * item.quantity), 0) * 100) / 100;
-        const cashfreeTotal = Number(verification.orderAmount);
-        const storedTax = Number(pendingData?.taxAmount);
-        // Legacy pending orders predate tax-inclusive Cashfree charges. Preserve
-        // their actual Cashfree amount instead of recording a different total.
-        const serverTax = Number.isFinite(storedTax)
-          ? storedTax
-          : Math.max(0, Math.round((cashfreeTotal - serverSubtotal) * 100) / 100);
-        const serverShipping = Number(pendingData?.shippingAmount) || 0;
-        const expectedTotal = Number.isFinite(Number(pendingData?.totalAmount))
-          ? Number(pendingData.totalAmount)
-          : serverSubtotal + serverTax + serverShipping;
-
-        if (verification.orderCurrency !== 'INR' || !Number.isFinite(cashfreeTotal) || cashfreeTotal <= 0 ||
-          Math.round(cashfreeTotal * 100) !== Math.round(expectedTotal * 100)) {
-          throw new Error('Cashfree amount does not match the server-calculated order total.');
-        }
-
-        const finalOrderData = {
-          customer: {
-            email: sanitizeString(customer.email, 254),
-            name: sanitizeString(customer.name, 200),
-            firstName: sanitizeString(customer.name?.split(' ')[0] || customer.firstName || '', 100),
-            lastName: sanitizeString(customer.name?.split(' ').slice(1).join(' ') || customer.lastName || '', 100),
-            phone: sanitizeString(customer.phone, 20),
-          },
-          shipping: {
-            country: sanitizeString(shipping.country, 5),
-            doorNo: sanitizeString(shipping.doorNo, 100),
-            addressLine1: sanitizeString(shipping.addressLine1 ?? shipping.address, 500),
-            addressLine2: sanitizeString(shipping.addressLine2 ?? shipping.apartment, 500),
-            address: sanitizeString(shipping.addressLine1 ?? shipping.address, 500),
-            apartment: sanitizeString(shipping.addressLine2 ?? shipping.apartment, 500),
-            city: sanitizeString(shipping.city, 100),
-            state: sanitizeString(shipping.state, 100),
-            pinCode: sanitizeString(shipping.pinCode, 10),
-          },
-          items: items.map(paidOrderItem),
-          pricing: {
-            subtotal: serverSubtotal,
-            tax: serverTax,
-            shipping: serverShipping,
-            total: cashfreeTotal,
-          },
-          payment: {
-            gateway: gateway.gatewayName,
-            cashfreeOrderId: cashfreeOrderId,
-            transactionId: verification.gatewayPaymentId,
-            paymentStatus: verification.paymentStatus,
-          },
-          status: 'paid',
-          createdAt: new Date().toISOString(),
-        };
-
-        let orderWrite;
-        try {
-          orderWrite = await createPaidOrderWithFulfillment(cashfreeOrderId, finalOrderData, items);
-        } catch (inventoryError) {
-          if (inventoryError.code === 'inventory-insufficient' || inventoryError.code === 'inventory-invalid-order') {
-            console.error(`[Inventory] Paid order ${cashfreeOrderId} requires manual resolution:`, inventoryError.message);
-            return res.status(409).json({
-              success: false,
-              message: `Payment was confirmed, but inventory could not be allocated. Please contact support with order ${cashfreeOrderId}.`,
-              orderId: cashfreeOrderId,
-              paymentStatus: 'paid',
-              inventoryConflict: true,
-            });
-          }
-          throw inventoryError;
-        }
-        if (!orderWrite.created) {
-          const existingData = orderWrite.order;
-          return res.status(200).json({
-            success: true,
-            message: 'Payment already verified.',
-            orderId: cashfreeOrderId,
-            paymentStatus: existingData?.status || 'paid',
-            order: {
-              items: existingData?.items || [],
-              totalAmount: existingData?.pricing?.total || 0,
-              customer: existingData?.customer || {},
-            },
-          });
-        }
-
-        firestoreOrderId = cashfreeOrderId;
-        orderDetails = { items: finalOrderData.items, totalAmount: finalOrderData.pricing.total, customer: finalOrderData.customer };
-        console.log(`[Firestore] Order document created: ${firestoreOrderId}`);
-
-        await sendOrderConfirmationEmail(cashfreeOrderId, orderWrite.order);
-
-        // Clean up pending order
-        try {
-          await db.collection('pendingOrders').doc(cashfreeOrderId).delete();
-        } catch (e) { /* ignore */ }
-      } else {
-        firestoreOrderId = 'dev_mock_' + Math.random().toString(36).substr(2, 9);
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: 'Payment verified and order stored successfully.',
-        orderId: firestoreOrderId,
-        paymentStatus: 'paid',
-        order: orderDetails,
-      });
-    } else {
-      // Payment not successful
-      console.warn(`[Payment] Order ${cashfreeOrderId} not paid. Status: ${verification.paymentStatus}`);
+app.post('/api/verify-payment', async (req, res) => {
+  const { orderId, payment } = req.body || {};
+  if (!db) return res.status(500).json({ success: false, message: 'Server database is not initialized.' });
+  if (!orderId || typeof orderId !== 'string' || !payment || typeof payment !== 'object') {
+    return res.status(400).json({ success: false, message: 'Validation Error: payment verification details are required.' });
+  }
+  try {
+    const pending = await db.collection('pendingOrders').doc(orderId).get();
+    if (!pending.exists || pending.data()?.razorpayOrderId !== orderId) {
+      return res.status(409).json({ success: false, message: 'Payment order context is missing. Please contact support with your order ID.' });
+    }
+    const verification = await gateway.verifyPayment({ orderId, paymentData: payment, orderDetails: pending.data() });
+    if (!verification.verified) {
+      await pending.ref.set({ paymentStatus: verification.paymentStatus || 'pending', updatedAt: new Date().toISOString() }, { merge: true });
       return res.status(200).json({
         success: false,
-        message: `Payment not completed. Status: ${verification.paymentStatus || 'UNKNOWN'}`,
-        paymentStatus: verification.paymentStatus || 'UNKNOWN',
+        paymentStatus: verification.paymentStatus || 'pending',
+        message: verification.paymentStatus === 'failed' ? 'Payment failed. Please try again.' : 'Payment is still pending confirmation.',
       });
     }
+    const result = await createRazorpayPaidOrder(orderId, verification, 'checkout');
+    return res.status(200).json(paymentResponse(orderId, result.order));
   } catch (error) {
-    console.error('[Verification Error]', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Internal verification process error.',
-    });
+    console.error('[Razorpay Verification Error]', error.message);
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message || 'Payment verification failed.' });
   }
 });
 
-/**
- * CASHFREE WEBHOOK ENDPOINT
- * POST /api/cashfree-webhook
- * Receives Cashfree webhook notifications for payment events.
- * Idempotent: if order already processed, skips.
- */
-app.post('/api/cashfree-webhook', async (req, res) => {
-  try {
-    const { data, type, event_time } = req.body || {};
-
-    // Cashfree sends different event types; we care about payment success
-    if (!data || !data.order) {
-      return res.status(200).json({ success: true, message: 'Ignored: no order data.' });
-    }
-
-    const cashfreeOrderId = data.order.order_id;
-    const paymentStatus = data.payment?.payment_status || data.order.order_status;
-
-    console.log(`[Webhook] Received ${type || 'event'} for order ${cashfreeOrderId}, status: ${paymentStatus}`);
-
-    if (paymentStatus !== 'SUCCESS' && paymentStatus !== 'PAID') {
-      console.log(`[Webhook] Ignoring non-success status: ${paymentStatus}`);
-      return res.status(200).json({ success: true, message: 'Acknowledged.' });
-    }
-
-    if (!db) {
-      console.warn('[Webhook] Firestore not initialized, cannot process webhook.');
-      return res.status(200).json({ success: true, message: 'Acknowledged (no DB).' });
-    }
-
-    // Idempotency: return-page verification and webhooks share this one
-    // deterministic document, keyed by Cashfree order ID.
-    const paidOrderRef = db.collection('orders').doc(cashfreeOrderId);
-    const existing = await paidOrderRef.get();
-
-    if (existing.exists) {
-      console.log(`[Webhook] Order ${cashfreeOrderId} already processed. Skipping.`);
-      return res.status(200).json({ success: true, message: 'Already processed.' });
-    }
-
-    // Verify with Cashfree API (don't trust webhook data alone)
-    const verification = await gateway.verifyPayment({ orderId: cashfreeOrderId });
-
-    if (!verification.verified) {
-      console.warn(`[Webhook] Server-side verification failed for ${cashfreeOrderId}`);
-      return res.status(200).json({ success: true, message: 'Verification failed.' });
-    }
-
-    // Retrieve pending order
-    const pendingSnap = await db.collection('pendingOrders').doc(cashfreeOrderId).get();
-    const pendingData = pendingSnap.exists ? pendingSnap.data() : null;
-
-    if (!pendingData) {
-      console.warn(`[Webhook] No pending order for ${cashfreeOrderId}`);
-      return res.status(200).json({ success: true, message: 'No pending order found.' });
-    }
-
-    const items = pendingData.items || [];
-    const customer = pendingData.customer || {};
-    const shipping = pendingData.shipping || {};
-    const serverSubtotal = Math.round(items.reduce((sum, item) => sum + (item.price * item.quantity), 0) * 100) / 100;
-    const cashfreeTotal = Number(verification.orderAmount);
-    const storedTax = Number(pendingData?.taxAmount);
-    const serverTax = Number.isFinite(storedTax)
-      ? storedTax
-      : Math.max(0, Math.round((cashfreeTotal - serverSubtotal) * 100) / 100);
-    const serverShipping = Number(pendingData?.shippingAmount) || 0;
-    const expectedTotal = Number.isFinite(Number(pendingData?.totalAmount))
-      ? Number(pendingData.totalAmount)
-      : serverSubtotal + serverTax + serverShipping;
-
-    if (verification.orderCurrency !== 'INR' || !Number.isFinite(cashfreeTotal) || cashfreeTotal <= 0 ||
-      Math.round(cashfreeTotal * 100) !== Math.round(expectedTotal * 100)) {
-      throw new Error('Cashfree amount does not match the server-calculated order total.');
-    }
-
-    const finalOrderData = {
-      customer: {
-        email: sanitizeString(customer.email, 254),
-        name: sanitizeString(customer.name, 200),
-        firstName: sanitizeString(customer.name?.split(' ')[0] || '', 100),
-        lastName: sanitizeString(customer.name?.split(' ').slice(1).join(' ') || '', 100),
-        phone: sanitizeString(customer.phone, 20),
-      },
-      shipping: {
-        country: sanitizeString(shipping.country, 5),
-        doorNo: sanitizeString(shipping.doorNo, 100),
-        addressLine1: sanitizeString(shipping.addressLine1 ?? shipping.address, 500),
-        addressLine2: sanitizeString(shipping.addressLine2 ?? shipping.apartment, 500),
-        address: sanitizeString(shipping.addressLine1 ?? shipping.address, 500),
-        apartment: sanitizeString(shipping.addressLine2 ?? shipping.apartment, 500),
-        city: sanitizeString(shipping.city, 100),
-        state: sanitizeString(shipping.state, 100),
-        pinCode: sanitizeString(shipping.pinCode, 10),
-      },
-      items: items.map(paidOrderItem),
-      pricing: { subtotal: serverSubtotal, tax: serverTax, shipping: serverShipping, total: cashfreeTotal },
-      payment: {
-        gateway: gateway.gatewayName,
-        cashfreeOrderId,
-        transactionId: verification.gatewayPaymentId,
-        paymentStatus: verification.paymentStatus,
-      },
-      status: 'paid',
-      createdAt: new Date().toISOString(),
-      source: 'webhook',
-    };
-
-    const orderWrite = await createPaidOrderWithFulfillment(cashfreeOrderId, finalOrderData, items);
-    if (!orderWrite.created) {
-      return res.status(200).json({ success: true, message: 'Already processed.' });
-    }
-
-    console.log(`[Webhook] Order created for ${cashfreeOrderId}`);
-    await sendOrderConfirmationEmail(cashfreeOrderId, orderWrite.order);
-
-    // Clean up pending order
-    try { await db.collection('pendingOrders').doc(cashfreeOrderId).delete(); } catch (e) { /* ignore */ }
-
-    return res.status(200).json({ success: true, message: 'Order processed via webhook.' });
-  } catch (error) {
-    console.error('[Webhook Error]', error);
-    // Always return 200 to Cashfree so they don't retry indefinitely
-    return res.status(200).json({ success: false, message: 'Webhook processing error.' });
-  }
-});
 /**
  * NEWSLETTER SUBSCRIPTION ENDPOINT
  * POST /api/subscribe
@@ -2137,4 +1985,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, calculateCheckoutPricing, validateCheckoutDetails, pendingOrderItem, paidOrderItem, walkInCustomer, walkInPayment, walkInOrderId, coupleStockAdapters, orderConfirmationMessage, sendOrderConfirmationEmail };
+module.exports = { app, calculateCheckoutPricing, validateCheckoutDetails, pendingOrderItem, paidOrderItem, walkInCustomer, walkInPayment, walkInOrderId, coupleStockAdapters, orderConfirmationMessage, sendOrderConfirmationEmail, claimRazorpayEvent };

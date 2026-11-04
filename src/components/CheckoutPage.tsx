@@ -353,11 +353,11 @@ export function CheckoutPage({ lines, onClearCart, onBack }: CheckoutPageProps) 
       // Store checkout context in sessionStorage for use after redirect
       try {
         sessionStorage.setItem(
-          'cashfree_checkout_context',
+          'razorpay_checkout_context',
           JSON.stringify({
             email: details.email,
             fullName: details.fullName,
-            orderId: orderData.gatewayData?.order_id,
+            orderId: orderData.orderId,
           }),
         );
       } catch {
@@ -374,44 +374,19 @@ export function CheckoutPage({ lines, onClearCart, onBack }: CheckoutPageProps) 
           orderData,
         },
         {
-          // For redirect-based flows (Cashfree), onSuccess is typically not called
-          // because the browser navigates away. But we handle it for completeness.
-          onSuccess: async (paymentData) => {
-            setIsPaying(true);
+          onSuccess: (paymentData) => {
             try {
-              const verifyResponse = await fetch(paymentApiPath('/verify-payment'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ orderId: paymentData.order_id || orderData.gatewayData?.order_id }),
-              });
-
-              const verifyContentType = verifyResponse.headers.get('content-type') || '';
-              if (!verifyContentType.includes('application/json')) {
-                throw new Error('Backend verification returned an invalid response.');
-              }
-
-              if (!verifyResponse.ok) {
-                const errorData = await verifyResponse.json();
-                throw new Error(errorData.message || 'Payment verification failed.');
-              }
-
-              const result = await verifyResponse.json();
-              if (result.success) {
-                onClearCart();
-                setSuccessOrderId(result.orderId);
-              } else {
-                showToast(result.message || 'Payment was not successful.', 'error');
-              }
-              setIsPaying(false);
-            } catch (err) {
-              console.error('Error verifying payment:', err);
-              showToast(err instanceof Error ? err.message : 'Payment verification failed', 'error');
+              sessionStorage.setItem('razorpay_payment_response', JSON.stringify(paymentData));
+              window.location.hash = `#payment-return?order_id=${encodeURIComponent(orderData.orderId)}`;
+            } catch {
+              showToast('Payment completed, but verification details could not be saved. Please contact support.', 'error');
               setIsPaying(false);
             }
           },
 
           onDismiss: () => {
             setIsPaying(false);
+            showToast('Payment was cancelled.', 'error');
           },
 
           onError: (message) => {

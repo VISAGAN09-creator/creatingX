@@ -49,7 +49,7 @@ function TermsPolicy() {
         <p>Submitting checkout details starts the order process; it does not by itself guarantee acceptance. An order is accepted only after the payment gateway confirms payment and the order is successfully recorded by the server. We may decline or cancel an order where the product is unavailable, the submitted information cannot be validated, a technical or pricing error occurred, or fraud or misuse is reasonably suspected. Any resulting refund is subject to the Refund and Cancellation Policy and applicable law.</p>
       </PolicySection>
       <PolicySection title="6. Payment processing">
-        <p>Online payments are processed through Cashfree’s hosted checkout. VARATAAA does not receive or store your full card, UPI or other payment credentials in the storefront code. The server verifies the payment with Cashfree before recording a paid order. Payment may be unsuccessful, pending or reversed according to the gateway’s processes.</p>
+        <p>Online payments are processed through Razorpay Checkout. VARATAAA does not receive or store your full card, UPI or other payment credentials in the storefront code. The server verifies the payment with Razorpay before recording a paid order. Payment may be unsuccessful, pending or reversed according to the gateway’s processes.</p>
       </PolicySection>
       <PolicySection title="7. Shipping, cancellation, returns and refunds">
         <p>Shipping charges, dispatch estimates and India-only delivery availability are described in the Shipping and Delivery Policy. Cancellation, returns, exchanges and refunds are described in the Refund and Cancellation Policy. Because the current implementation does not define a universal return window, refund timeline or cancellation guarantee, those matters must be confirmed as business policy before publication.</p>
@@ -76,7 +76,7 @@ function PrivacyPolicy() {
       </PolicySection>
       <PolicySection title="2. Information collected">
         <p>When you check out, the website asks for your name, email address, 10-digit phone number and Indian delivery details: country, door number, address lines, city, state and PIN code. The server validates and stores customer and shipping details with the order record after payment is verified.</p>
-        <p>The payment flow also creates a Cashfree order and receives payment status, gateway order ID and transaction ID. The website does not request or store full payment credentials such as card numbers or UPI PINs.</p>
+        <p>The payment flow also creates a Razorpay order and receives payment status, gateway order ID and transaction ID. The website does not request or store full payment credentials such as card numbers or UPI PINs.</p>
         <p>If you use the newsletter endpoint, the submitted email address and subscription timestamp may be stored in the server-side <code>newsletter</code> collection. The current storefront does not show a newsletter form, so this collection is not treated as a checkout requirement.</p>
       </PolicySection>
       <PolicySection title="3. Cart, cookies and browser storage">
@@ -97,7 +97,7 @@ function PrivacyPolicy() {
         </BulletList>
       </PolicySection>
       <PolicySection title="6. Service providers and sharing">
-        <p>Information is shared with providers only as needed for the website’s operation, including Cashfree for payment processing, Firebase/Google Cloud for database and application infrastructure, email delivery services configured by the server, and delivery/fulfilment partners selected for an order. The current code does not establish a separate analytics or advertising data-sharing flow beyond Firebase Analytics initialization, and it does not use Firebase Storage.</p>
+        <p>Information is shared with providers only as needed for the website’s operation, including Razorpay for payment processing, Firebase/Google Cloud for database and application infrastructure, email delivery services configured by the server, and delivery/fulfilment partners selected for an order. The current code does not establish a separate analytics or advertising data-sharing flow beyond Firebase Analytics initialization, and it does not use Firebase Storage.</p>
         <p>We may disclose information when required by law, to protect the website and users, or to investigate suspected fraud or abuse. We do not sell customer data.</p>
       </PolicySection>
       <PolicySection title="7. Retention and deletion">
@@ -105,7 +105,7 @@ function PrivacyPolicy() {
         <p>You may request access, correction or deletion of personal information, subject to identity checks, legal obligations, transaction records and other applicable exceptions. Send requests to {supportEmails} and include enough information for us to locate the request without sending payment credentials.</p>
       </PolicySection>
       <PolicySection title="8. Security">
-        <p>The implementation uses server-side payment verification, server-only Firebase Admin credentials, input validation, HTTPS-dependent hosted checkout, security headers and rate limits on payment endpoints. No internet service can be guaranteed completely secure. Never send card details, Cashfree secrets or passwords by email.</p>
+        <p>The implementation uses server-side payment verification, server-only Firebase Admin credentials, input validation, HTTPS-dependent hosted checkout, security headers and rate limits on payment endpoints. No internet service can be guaranteed completely secure. Never send card details, Razorpay secrets or passwords by email.</p>
       </PolicySection>
       <PolicySection title="9. Children, changes and privacy contact">
         <p>The website is intended for people able to make purchases under applicable law and is not directed at children. We may update this policy as the implementation or law changes. The Last Updated date identifies the current version.</p>
@@ -135,7 +135,7 @@ function RefundPolicy() {
       </PolicySection>
       <PolicySection title="4. Review and refund process">
         <p>After receiving a request, support will verify the order, payment and issue. If a refund is approved, it will normally be initiated using the original payment method or another lawful method agreed with the customer. The exact approval and processing timelines are not specified by the current code and must be confirmed before publication; no fixed refund-period promise is made here.</p>
-        <p>Cashfree and the customer’s bank or payment provider may apply their own processing time after VARATAAA initiates a refund. Keep the order ID and payment confirmation until the matter is resolved.</p>
+        <p>Razorpay and the customer’s bank or payment provider may apply their own processing time after VARATAAA initiates a refund. Keep the order ID and payment confirmation until the matter is resolved.</p>
       </PolicySection>
       <PolicySection title="5. Non-refundable situations">
         <p>Subject to applicable law, a request may be declined where there is no verified defect, damage or fulfilment error; the product has been used, washed, altered or damaged after delivery; required evidence is not provided; the issue is caused by incorrect customer information; or the request relates to a business rule that has not been confirmed. No exclusion in this policy removes rights that cannot lawfully be excluded.</p>

@@ -174,11 +174,9 @@ Create a `.env` in the project root. **Never commit it, and never put secrets in
 | Variable | Purpose |
 |---|---|
 | `FIREBASE_PROJECT_ID` / `FIREBASE_CLIENT_EMAIL` / `FIREBASE_PRIVATE_KEY` | Firebase **service-account** credentials — used by the Admin SDK for Firestore writes and token verification |
-| `PAYMENT_GATEWAY` | Which adapter in `gateway/` to use (`cashfree`) |
-| `CASHFREE_APP_ID` / `CASHFREE_SECRET_KEY` | Cashfree API credentials |
-| `CASHFREE_API_URL` | Cashfree base URL — **sandbox by default when unset**; set to the production URL for live sales |
-| `CASHFREE_API_VERSION` | Cashfree API version header |
-| `PAYMENT_RETURN_URL` | Where Cashfree redirects after payment |
+| `RAZORPAY_KEY_ID` | Razorpay Test Mode Key ID; returned to the browser as the public Checkout key |
+| `RAZORPAY_KEY_SECRET` | Razorpay Test Mode Key Secret; backend-only, never a `VITE_*` variable |
+| `RAZORPAY_WEBHOOK_SECRET` | Razorpay webhook signing secret; backend-only, never returned to clients |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated list of origins allowed to call the API (localhost origins are always allowed in addition) |
 
 Cloud Functions use the same variables, minus the `FIREBASE_*` names (reserved in that runtime — the copy-server script filters them out; inside Cloud Functions the Admin SDK uses the project's default service account automatically).
@@ -196,7 +194,7 @@ npm run server
 npm run dev:all
 ```
 
-The Vite dev server proxies `/api/**` to `http://localhost:5000`, so checkout works end-to-end using the Cashfree **sandbox** (set `CASHFREE_API_URL` accordingly) against your dev Firebase project.
+The Vite dev server proxies `/api/**` to `http://localhost:5000`. Local backend development reads `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and `RAZORPAY_WEBHOOK_SECRET` from the root `.env`; keep those values out of all `VITE_*` variables. Configure the same names as Firebase Functions Secret Manager secrets before deploying the API.
 
 ---
 

@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "server": "node server.cjs",
     "dev:all": "concurrently \"npm run dev\" \"npm run server\"",
-    "test": "node --test test/server-pricing.test.cjs test/cart-catalog.test.cjs"
+    "test": "node --test test/server-pricing.test.cjs test/cart-catalog.test.cjs test/razorpay-webhook.test.cjs"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.4.1",

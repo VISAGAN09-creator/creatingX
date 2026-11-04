@@ -33,7 +33,10 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
         const response = await fetch(paymentApiPath('/verify-payment'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderId }),
+          body: JSON.stringify({
+            orderId,
+            payment: JSON.parse(sessionStorage.getItem('razorpay_payment_response') || 'null'),
+          }),
         });
 
         const contentType = response.headers.get('content-type') || '';
@@ -52,6 +55,7 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
           // Clear cart after successful payment
           try {
             localStorage.removeItem('cart');
+            sessionStorage.removeItem('razorpay_payment_response');
           } catch { /* ignore */ }
         } else {
           setState({
@@ -76,7 +80,7 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
   let checkoutEmail = '';
   let checkoutName = '';
   try {
-    const ctx = JSON.parse(sessionStorage.getItem('cashfree_checkout_context') || '{}');
+    const ctx = JSON.parse(sessionStorage.getItem('razorpay_checkout_context') || '{}');
     checkoutEmail = ctx.email || '';
     checkoutName = ctx.fullName || [ctx.firstName, ctx.lastName].filter(Boolean).join(' ');
   } catch { /* ignore */ }
@@ -100,7 +104,7 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
               <span className="h-10 w-10 animate-spin rounded-full border-[3px] border-[#e0e0e0] border-t-[#1a1a1a]" />
             </div>
             <h1 className="font-display text-2xl font-bold mb-3">Verifying Payment...</h1>
-            <p className="text-[#666666]">Please wait while we confirm your payment with Cashfree.</p>
+            <p className="text-[#666666]">Please wait while we confirm your payment with Razorpay.</p>
           </>
         )}
 
