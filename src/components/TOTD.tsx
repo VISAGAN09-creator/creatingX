@@ -1,7 +1,7 @@
 import type { DataStatus, Product } from '../types';
 import { ProductCard } from './ProductCard';
 import { ArrowLeft } from 'lucide-react';
-import backImage from '../assets/back1.png';
+import backImage from '../assets/back2.png';
 
 type TOTDProps = {
   products: Product[];
