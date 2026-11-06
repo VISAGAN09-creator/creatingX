@@ -17,7 +17,7 @@ This repository is a single-package e-commerce **storefront SPA** plus an Expres
 | Client data | Firebase JS SDK → Firestore `onSnapshot` / `getDoc` |
 | Cart | React state + `localStorage` key `cart` |
 | API | Express 5 in `server.cjs` (helmet, cors, express-rate-limit) |
-| Payments | Cashfree REST + Cashfree JS SDK v3 CDN; adapter in `gateway/cashfree.cjs` |
+| Payments | Razorpay REST + Razorpay Checkout; adapter in `gateway/razorpay.cjs` |
 | Hosting | Firebase Hosting (`dist`), rewrite `/api/**` → function `api` |
 | Functions | `firebase-functions` v1 style `functions.https.onRequest` in `functions/index.js`, Node 20 |
 
@@ -40,9 +40,9 @@ Browser (Vite SPA, base '/varataaa/')
   │   Hosting rewrite /api/** ──► Cloud Function `api`
   │                                  └── Express app (server.cjs)
   │                                        ├── Admin SDK → Firestore writes
-  │                                        └── gateway → Cashfree REST
+  │                                        └── gateway → Razorpay REST
   │
-  └── Cashfree JS SDK ──► hosted checkout ──► return URL …#payment-return?order_id=…
+  └── Razorpay Checkout ──► signed callback ──► #payment-return?order_id=…
 ```
 
 Production comments and `paymentApi.ts` describe a custom-domain mount at `/varataaa` (referred to as a Vercel proxy for `thehandle.in`). That proxy configuration is **not in this repository** → behavior **UNVERIFIED**.
@@ -65,7 +65,7 @@ Production comments and `paymentApi.ts` describe a custom-domain mount at `/vara
 | `data/siteData.ts` | Static nav/footer/features; static products are **not** the live catalog source |
 | `lib/firebase.ts` | App + Firestore + Analytics init |
 | `lib/paymentApi.ts` | Chooses `/api` vs `/varataaa/api` from pathname |
-| `lib/paymentGateway.ts` | Load Cashfree SDK; `openCheckout` (mode `'production'`) |
+| `lib/paymentGateway.ts` | Load Razorpay Checkout and open the provider UI |
 | `components/*` | Storefront UI (home sections, drawers, product pages, checkout, payment return) |
 | `features/tshirt-customizer/*` | Custom tee mockup studio |
 | `styles/globals.css` | Tailwind entry + design tokens |
@@ -76,8 +76,8 @@ Production comments and `paymentApi.ts` describe a custom-domain mount at `/vara
 | Path | Role |
 |---|---|
 | `server.cjs` | Full Express API (source of truth for local + functions copy) |
-| `gateway/index.cjs` | Adapter registry (`PAYMENT_GATEWAY`); only `cashfree` registered |
-| `gateway/cashfree.cjs` | Create/verify Cashfree orders |
+| `gateway/index.cjs` | Active payment-provider boundary; exports the Razorpay adapter |
+| `gateway/razorpay.cjs` | Create/verify Razorpay orders and verify webhook signatures |
 | `functions/index.js` | `exports.api = functions.https.onRequest(app)` |
 | `functions/copy-server.js` | Copies `server.cjs`, `gateway/`, filtered `.env` into `functions/` |
 | `firebase.json` | Hosting + functions; **no** `firestore` block; **no** predeploy |
@@ -97,7 +97,7 @@ Production comments and `paymentApi.ts` describe a custom-domain mount at `/vara
 
 - `localStorage['cart']`
 - cookies: consent / recommendations (`cookie_consent`, `recently_viewed`, `you_may_also_like`)
-- `sessionStorage['cashfree_checkout_context']` (checkout display after redirect)
+- `sessionStorage['razorpay_checkout_context']` and `razorpay_payment_response` (checkout display and signed callback data)
 - URL hash for navigation
 
 **Doc inconsistency:** `App.tsx` comments claim `useCart` has “cookie persistence, Firestore sync”. Implementation uses **localStorage only** and does not sync the cart to Firestore.
@@ -151,9 +151,9 @@ Browser-only designs (`URL.createObjectURL`); presets are inline SVG data URIs. 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/health` | Status + active gateway name |
-| `POST` | `/api/create-order` | Validate items, resolve products/prices from Firestore, create Cashfree order, write `pendingOrders` |
-| `POST` | `/api/verify-payment` | Body `{ orderId }`; verify with Cashfree; write `orders`; enqueue `mail`; delete pending |
-| `POST` | `/api/cashfree-webhook` | Alternate paid-order path; re-verifies with Cashfree; **no** mail enqueue |
+| `POST` | `/api/create-order` | Validate items, resolve products/prices and shipping server-side, create Razorpay order, write `pendingOrders` |
+| `POST` | `/api/verify-payment` | Verify Razorpay callback signature and captured status, finalize the paid order, deduct inventory, send confirmation email |
+| `POST` | `/api/razorpay-webhook` | Verify raw-body signature; handle `payment.captured` and `payment.failed` idempotently |
 | `POST` | `/api/subscribe` | Newsletter email → `newsletter` (no frontend caller found) |
 
 Middleware: `helmet()`, CORS allowlist (`CORS_ALLOWED_ORIGINS` + localhost Vite ports), JSON 100kb, general rate limit 100/15min/IP on `/api/`, stricter 10/15min on create/verify.
@@ -165,12 +165,12 @@ Middleware: `helmet()`, CORS allowlist (`CORS_ALLOWED_ORIGINS` + localhost Vite 
 1. Client posts `{ items: [{id, quantity}], customer, shipping }` (no client amount).
 2. Server `resolveProductFromFirestore` (config collections + `products` + `TOTD`, strip trailing size).
 3. Charge the authoritative product subtotal; additional tax and shipping are currently 0.
-4. Cashfree order created; pending doc id = Cashfree `order_id`.
-5. Client `cashfree.checkout({ paymentSessionId, redirectTarget: '_self' })`.
-6. Return to `#payment-return?order_id=…`; `PaymentReturnPage` posts verify.
-7. Server requires Cashfree status `PAID` + non-empty transaction id; amount must match pending total; `orders/{order_id}.create()` for idempotency.
+4. Razorpay order created; pending doc id = Razorpay order ID.
+5. Client opens Razorpay Checkout and receives the signed success callback.
+6. Client opens `#payment-return?order_id=…`; `PaymentReturnPage` posts the callback fields for verification.
+7. Server validates the signature, re-queries Razorpay for `captured` status, matches the server-calculated amount, and uses the shared Firestore transaction to create `orders/{orderId}` and deduct inventory once.
 
-Webhook path: ignores non-success; does not check webhook signature; still calls `gateway.verifyPayment`; writes order with `source: 'webhook'`; returns HTTP 200 even on processing errors (to limit Cashfree retries).
+Webhook path: verifies the HMAC against the exact raw request bytes before parsing JSON. Persistent event claims suppress duplicate deliveries. `payment.captured` re-verifies the payment with Razorpay and calls the same finalization/email flow as the frontend verification path; `payment.failed` records the pending failure without creating a paid order.
 
 ### 5.3 Firestore collections touched by code
 
@@ -188,9 +188,9 @@ Actual live document contents in the Firebase project are **UNVERIFIED** from th
 
 ### 5.4 Order document shapes (from write paths)
 
-**`pendingOrders/{cashfreeOrderId}`** includes: items (`productId`, `name`, `price`, `quantity`, `lineTotal`, `image`), `subtotalAmount`, `taxAmount` (0 for current orders; retained for historical compatibility), `totalAmount`, `customer`, `shipping`, `status: 'pending'`, `createdAt`, Cashfree ids.
+**`pendingOrders/{razorpayOrderId}`** includes: authoritative items and variants, `subtotalAmount`, `taxAmount`, `shippingAmount`, `totalAmount`, `customer`, `shipping`, `status: 'pending'`, `createdAt`, and `razorpayOrderId`.
 
-**`orders/{cashfreeOrderId}`** includes: `customer` (email, first/last name, phone), `shipping`, `items` (id, name, price, quantity, image), `pricing`, `payment`, `status: 'paid'`, `createdAt`, optional `source: 'webhook'`.
+**`orders/{razorpayOrderId}`** includes: `customer`, `shipping`, variant-aware items, `pricing`, Razorpay payment metadata, `status: 'paid'`, `createdAt`, optional `source: 'webhook'`, fulfillment state, and email-delivery claim metadata. Older order documents keep their original provider-specific payment fields unchanged.
 
 Size/color/custom design metadata are **not** written on these documents.
 
@@ -257,18 +257,18 @@ Embedded in the browser bundle:
 
 - `FIREBASE_PROJECT_ID` (or `VITE_FIREBASE_PROJECT_ID`), `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` — local Admin init
 - Cloud Functions: Application Default Credentials when `FUNCTION_TARGET` or `K_SERVICE` set
-- `PAYMENT_GATEWAY` (expected `cashfree`)
-- `CASHFREE_APP_ID`, `CASHFREE_SECRET_KEY`, `CASHFREE_API_VERSION` (default `2025-01-01`), `CASHFREE_API_URL` (default **sandbox** URL)
-- `CORS_ALLOWED_ORIGINS`, `PAYMENT_RETURN_URL`, `PORT`
+- `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`
+- `GMAIL_USER`, `GMAIL_APP_PASSWORD`
+- `CORS_ALLOWED_ORIGINS`, `PORT`
 
-`functions/copy-server.js` filters out lines starting with `FIREBASE_` when copying `.env`.
+`functions/copy-server.js` filters Firebase, Gmail, and Razorpay credentials when copying `.env`; Functions receives Gmail and Razorpay values through Secret Manager bindings in `functions/index.js`.
 
 ### 8.4 GitHub Actions
 
 - Push `main` → build with seven `VITE_FIREBASE_*` secrets → Hosting live (`FIREBASE_SERVICE_ACCOUNT_ECOMMERCE_F1448`)
 - PR → preview channel deploy (same build secrets)
 
-Neither workflow deploys Cloud Functions or Firestore rules, nor injects Cashfree/Admin secrets.
+Neither workflow deploys Cloud Functions or injects backend payment/Admin secrets.
 
 ### 8.5 Base-path / proxy coupling
 
@@ -312,7 +312,7 @@ No `*.test.*` / `*.spec.*` files, no Vitest/Jest/Playwright/Cypress dependencies
 | Firebase Hosting | Serves `dist` |
 | Cloud Functions | Hosts Express `api` |
 | Firebase Analytics | `getAnalytics` initialized; no explicit event logging found |
-| Cashfree | Order create, verify, webhook, client checkout |
+| Razorpay | Order create, Checkout UI, payment verification, signed webhook |
 | Email | Writes to `mail` collection; Trigger Email extension install **UNVERIFIED** |
 | Google Fonts / Unsplash / Wikimedia / Maps / Instagram | Static/marketing assets and footer |
 
@@ -342,7 +342,7 @@ Firebase Auth / Storage: **not integrated** in app code (Storage packages may ex
 4. Whether live Cloud Function matches current `server.cjs`.
 5. Whether `https://ecommerce-f1448.web.app/` works with asset base `/varataaa/`.
 6. Local checkout under Vite `/varataaa/` + `/varataaa/api` proxy gap.
-7. Production vs sandbox Cashfree mode actually configured at runtime.
+7. Razorpay Dashboard mode, event selection, and webhook secret alignment with the deployed function.
 8. Live inventory documents and collection names in the Firebase project.
 9. Admin tooling outside this repository.
 

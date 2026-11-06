@@ -364,7 +364,7 @@ export function CheckoutPage({ lines, onClearCart, onBack }: CheckoutPageProps) 
         // sessionStorage may be unavailable; proceed anyway
       }
 
-      // Step 2: Open the gateway's checkout UI (this will redirect for Cashfree)
+      // Step 2: Open the payment provider's checkout UI.
       openCheckout(
         {
           email: details.email,

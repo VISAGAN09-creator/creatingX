@@ -20,9 +20,9 @@ Related reading: [architecture.md](architecture.md), [AGENTS.md](../AGENTS.md), 
 - Catalog maintained by writing Firestore documents (Firebase Console / scripts). Discovery via `_config/collections` (`productCollections` / `collections` / `names`) plus base collection `products` (or `VITE_FIRESTORE_PRODUCTS_COLLECTION`).
 - Fixed separate collection name: `TOTD`.
 - Client Firestore: **reads** for catalog/config; **all client writes denied** by `firestore.rules`.
-- Orders created only by Admin SDK in `server.cjs` after Cashfree verification (`orders` collection; doc id = Cashfree `order_id`).
+- Online orders are created by Admin SDK in `server.cjs` only after Razorpay verification (`orders` collection; new online doc ids use the Razorpay order ID).
 - Pending checkout context in `pendingOrders`; newsletter in `newsletter`; confirmation email trigger docs in `mail` (verify path only).
-- Public API routes have **no authentication**: `/api/health`, `/api/create-order`, `/api/verify-payment`, `/api/cashfree-webhook`, `/api/subscribe`.
+- Public API routes include `/api/health`, `/api/create-order`, `/api/verify-payment`, `/api/razorpay-webhook`, and `/api/subscribe`; administrator routes use Firebase token and custom-claim verification.
 - Firebase Auth and Firebase Storage are **not used** in application code.
 - Stock fields are mapped for display; server **does not** check or decrement stock at checkout.
 - Order line items store `id`, `name`, `price`, `quantity`, `image` — **not** size/color/custom design.
@@ -64,7 +64,7 @@ These are suggested directions that align with the verified architecture. They a
 - Prefer a **separate admin entry** (e.g. `/admin` hash route or a second Vite app) so storefront UX and bundle stay customer-focused.
 - Prefer **Firebase Authentication** (email link or Google) + **custom claims** (e.g. `admin: true`) for identity.
 - Prefer **privileged mutations via new authenticated Cloud Function / Express routes** (Admin SDK), not by opening Firestore client writes for products/orders.
-- Keep Cashfree secrets and Admin private keys server-only; never introduce `VITE_` admin secrets.
+- Keep Razorpay secrets and Admin private keys server-only; never introduce `VITE_` admin secrets.
 
 ### B.2 Suggested admin modules (priority order)
 
@@ -84,7 +84,7 @@ These are suggested directions that align with the verified architecture. They a
 ### B.3 Suggested order admin capabilities (read-first)
 
 - List `orders` newest-first; filter by date, email, `payment.paymentStatus`, `source`.
-- Detail view: customer, shipping, line items, pricing, Cashfree ids, `createdAt`.
+- Detail view: customer, shipping, line items, pricing, provider transaction references, `createdAt`.
 - Explicitly surface **missing variant data** (size/color) so operators know fulfillment limits of current records.
 - Do **not** allow client SDK reads of `orders` without Auth + rules redesign; use admin API with claim checks.
 
@@ -112,7 +112,7 @@ Rate-limit and audit-log admin routes separately from public payment limiters.
 1. Fix rules so `pendingOrders` and `newsletter` are not publicly readable; add `firestore` block to `firebase.json`; deploy and verify.  
 2. Decide Auth provider and who receives `admin` claims (manual claim set vs allowlist).  
 3. Decide whether admin is same Hosting site or separate project/site.  
-4. Align Cashfree mode (client hardcoded `production` vs server `CASHFREE_API_URL`).  
+4. Keep Razorpay Checkout and backend credentials in the same Dashboard mode; bind backend credentials through Functions Secret Manager.
 5. Document the external `/varataaa` proxy contract for admin API paths if sharing the storefront origin.
 
 ### B.7 Testing / ops recommendations
@@ -138,7 +138,7 @@ Do not implement until you explicitly choose:
 | D7 | Variant persistence | Backfill size into cart/order payloads; required before reliable fulfillment admin |
 | D8 | Customizer commerce | Dedicated custom-order API vs disable Add-to-Cart checkout vs Storage-backed designs |
 | D9 | Order lifecycle | Only `paid` vs add `processing` / `shipped` / `cancelled` / `refunded` |
-| D10 | Refunds | Out of scope vs Cashfree refund API integration |
+| D10 | Refunds | Out of scope vs Razorpay refund API integration |
 | D11 | Email | Depend on Trigger Email extension vs other provider; webhook path should also mail? |
 | D12 | Branding in admin | Use the established VARATAAA customer-facing name |
 | D13 | Who can access production admin | Named UIDs / emails list |
@@ -192,14 +192,14 @@ Only meaningful after §C decisions:
 3. Creating/updating a product with non-numeric `price` is rejected before write.  
 4. Adding a collection name to `_config/collections` makes products appear in the storefront without redeploy (existing discovery behavior).  
 5. `pendingOrders` and `newsletter` are not publicly readable under deployed rules.  
-6. Storefront checkout regression: create-order → Cashfree → verify still works for normal catalog products.  
+6. Storefront checkout regression: create-order → Razorpay Checkout → verify still works for normal catalog products.
 7. No secrets in client bundle or Git history.
 
 ---
 
 ## G. Explicit non-goals (unless you approve otherwise)
 
-- Replacing Cashfree  
+- Replacing the active Razorpay provider
 - Multi-tenant / multi-store admin  
 - Full ERP / accounting  
 - Assuming Trigger Email or production proxy behavior without verification  

@@ -61,6 +61,8 @@ export type AdminOrder = {
     gateway?: string;
     method?: 'cash' | 'other' | string;
     otherMethod?: string;
+    razorpayOrderId?: string;
+    /** Retained so older orders remain visible in the admin export. */
     cashfreeOrderId?: string;
     transactionId?: string;
     paymentStatus?: string;

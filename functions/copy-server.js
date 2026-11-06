@@ -19,12 +19,14 @@ console.log('Copied server.cjs');
 const gatewayDir = path.join(root, 'gateway');
 const destGateway = path.join(dest, 'gateway');
 if (!fs.existsSync(destGateway)) fs.mkdirSync(destGateway);
-const obsoleteCashfreeAdapter = path.join(destGateway, 'cashfree.cjs');
-if (fs.existsSync(obsoleteCashfreeAdapter)) {
-  fs.unlinkSync(obsoleteCashfreeAdapter);
-  console.log('Removed obsolete gateway/cashfree.cjs');
+const gatewayFiles = new Set(fs.readdirSync(gatewayDir));
+for (const file of fs.readdirSync(destGateway)) {
+  if (!gatewayFiles.has(file)) {
+    fs.unlinkSync(path.join(destGateway, file));
+    console.log(`Removed obsolete gateway/${file}`);
+  }
 }
-for (const file of fs.readdirSync(gatewayDir)) {
+for (const file of gatewayFiles) {
   fs.copyFileSync(path.join(gatewayDir, file), path.join(destGateway, file));
   console.log(`Copied gateway/${file}`);
 }
@@ -39,7 +41,7 @@ if (fs.existsSync(envSrc)) {
     .filter(line => !line.match(/^(FIREBASE_|GMAIL_|RAZORPAY_)/))
     .join('\n');
   fs.writeFileSync(path.join(dest, '.env'), filtered);
-  console.log('Copied .env (filtered Firebase and Gmail runtime credentials)');
+  console.log('Copied .env (filtered Firebase, Gmail, and Razorpay runtime credentials)');
 }
 
 console.log('Predeploy copy complete.');
