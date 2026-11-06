@@ -1653,9 +1653,11 @@ function orderConfirmationMessage(orderId, order, logoUrl = null) {
   }).join('\n');
   const total = formatter.format(Number(order?.pricing?.total) || 0);
   const customerName = escapeHtml(order?.customer?.firstName || order?.customer?.name || 'Customer');
+  // Keep a real text wordmark visible below the optional image. Email clients
+  // do not reliably render image alt text when remote images are blocked.
   const logo = typeof logoUrl === 'string' && /^https:\/\//i.test(logoUrl)
-    ? `<img src="${escapeHtml(logoUrl)}" alt="VARATAAA" width="180" style="display:block;width:180px;max-width:100%;height:auto;border:0;">`
-    : '<div style="font-size:26px;font-weight:700;letter-spacing:2px;">VARATAAA</div>';
+    ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;"><tr><td align="center" style="padding:0;"><img src="${escapeHtml(logoUrl)}" alt="VARATAAA" width="180" style="display:block;width:180px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;"></td></tr><tr><td align="center" style="padding:8px 0 0;font-family:Arial,sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;color:#171717;">VARATAAA</td></tr></table>`
+    : '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;"><tr><td align="center" style="padding:0;font-family:Arial,sans-serif;font-size:26px;font-weight:700;letter-spacing:2px;color:#171717;">VARATAAA</td></tr></table>';
   return {
     subject: `VARATAAA order confirmation — ${orderId}`,
     text: `Hi ${order?.customer?.firstName || order?.customer?.name || 'Customer'},\n\nYour payment has been confirmed.\nOrder ID: ${orderId}\n\n${textItems}\n\nTotal paid: ${total}\nDispatch estimate: 7 Days to dispatch\n\nQuestions? handle2227@gmail.com or varataaah@gmail.com`,

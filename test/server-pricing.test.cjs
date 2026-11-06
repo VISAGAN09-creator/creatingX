@@ -152,6 +152,9 @@ test('builds a confirmation email from persisted paid-order data', () => {
   assert.match(message.html, /tees-black-M/);
   assert.match(message.html, /https:\/\/example.com\/tee.jpg/);
   assert.match(message.html, /https:\/\/example.com\/logo.png/);
+  assert.match(message.html, /<table role="presentation"[^>]*><tr><td align="center"[^>]*><img src="https:\/\/example.com\/logo.png" alt="VARATAAA" width="180"/);
+  assert.match(message.html, /height:auto/);
+  assert.match(message.html, />VARATAAA<\/td>/);
   assert.match(message.html, /handle2227@gmail\.com/);
   assert.match(message.html, /7 Days to dispatch/);
   assert.match(message.html, /varataaah@gmail.com/);
@@ -169,6 +172,7 @@ test('renders safely when optional order fields or images are malformed', () => 
   assert.match(message.html, /Product ID unavailable/);
   assert.match(message.html, /No image/);
   assert.doesNotMatch(message.html, /<img/);
+  assert.match(message.html, />VARATAAA<\/td>/);
 });
 
 function fakeOrderDb(order) {
@@ -205,6 +209,29 @@ test('claims confirmation delivery once and uses the persisted order snapshot', 
   assert.equal(sent[0].to, 'persisted@example.com');
   assert.match(sent[0].html, /persisted-id/);
   assert.equal(db.state.emailDelivery.status, 'sent');
+});
+
+test('records smtp_not_configured without attempting delivery when Gmail credentials are unavailable', async () => {
+  const originalUser = process.env.GMAIL_USER;
+  const originalPassword = process.env.GMAIL_APP_PASSWORD;
+  delete process.env.GMAIL_USER;
+  delete process.env.GMAIL_APP_PASSWORD;
+  try {
+    const db = fakeOrderDb({
+      customer: { email: 'customer@example.com' },
+      items: [],
+      pricing: { total: 0 },
+    });
+    const result = await sendOrderConfirmationEmail('order_missing_smtp', null, { db });
+    assert.equal(result.status, 'failed');
+    assert.equal(db.state.emailDelivery.status, 'failed');
+    assert.equal(db.state.emailDelivery.reason, 'smtp_not_configured');
+  } finally {
+    if (originalUser === undefined) delete process.env.GMAIL_USER;
+    else process.env.GMAIL_USER = originalUser;
+    if (originalPassword === undefined) delete process.env.GMAIL_APP_PASSWORD;
+    else process.env.GMAIL_APP_PASSWORD = originalPassword;
+  }
 });
 
 test('records SMTP failures without retrying a failed claim automatically', async () => {

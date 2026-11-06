@@ -25,6 +25,28 @@ test('validates a Razorpay webhook HMAC over the original bytes only', () => {
   assert.equal(invalid, 'false');
 });
 
+test('accepts only captured Razorpay payments for finalisation', () => {
+  const script = [
+    "const crypto = require('node:crypto');",
+    "global.fetch = async () => ({ ok: true, json: async () => ({ id: 'pay_test', order_id: 'order_test', status: process.argv[1], currency: 'INR', amount: 12345 }) });",
+    "const gateway = require('./gateway/razorpay.cjs');",
+    "const orderId = 'order_test'; const paymentId = 'pay_test';",
+    "const signature = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET).update(orderId + '|' + paymentId).digest('hex');",
+    "gateway.verifyPayment({ orderId, paymentData: { razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature }, orderDetails: { totalAmount: 123.45 } }).then((result) => console.log(JSON.stringify(result)));",
+  ].join('');
+  const verify = (status) => JSON.parse(execFileSync(process.execPath, ['-e', script, status], {
+    cwd: process.cwd(),
+    env: {
+      RAZORPAY_KEY_ID: 'rzp_test_mock',
+      RAZORPAY_KEY_SECRET: 'test_key_secret',
+      RAZORPAY_WEBHOOK_SECRET: 'test_webhook_secret',
+    },
+  }).toString());
+
+  assert.equal(verify('captured').verified, true);
+  assert.equal(verify('paid').verified, false);
+});
+
 function eventDb() {
   const documents = new Map();
   return {
