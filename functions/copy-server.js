@@ -8,13 +8,26 @@ const dest = __dirname;
 
 // Copy server.cjs
 fs.copyFileSync(path.join(root, 'server.cjs'), path.join(dest, 'server.cjs'));
+fs.copyFileSync(path.join(root, 'shipping.cjs'), path.join(dest, 'shipping.cjs'));
+fs.copyFileSync(path.join(root, 'shipping-rates.json'), path.join(dest, 'shipping-rates.json'));
+const shippingPolicy = path.join(root, 'shipping-policy.json');
+if (fs.existsSync(shippingPolicy)) {
+  fs.copyFileSync(shippingPolicy, path.join(dest, 'shipping-policy.json'));
+}
 console.log('Copied server.cjs');
 
 // Copy gateway/ directory
 const gatewayDir = path.join(root, 'gateway');
 const destGateway = path.join(dest, 'gateway');
 if (!fs.existsSync(destGateway)) fs.mkdirSync(destGateway);
-for (const file of fs.readdirSync(gatewayDir)) {
+const gatewayFiles = new Set(fs.readdirSync(gatewayDir));
+for (const file of fs.readdirSync(destGateway)) {
+  if (!gatewayFiles.has(file)) {
+    fs.unlinkSync(path.join(destGateway, file));
+    console.log(`Removed obsolete gateway/${file}`);
+  }
+}
+for (const file of gatewayFiles) {
   fs.copyFileSync(path.join(gatewayDir, file), path.join(destGateway, file));
   console.log(`Copied gateway/${file}`);
 }
@@ -26,10 +39,10 @@ if (fs.existsSync(envSrc)) {
   const envContent = fs.readFileSync(envSrc, 'utf8');
   const filtered = envContent
     .split('\n')
-    .filter(line => !line.match(/^(FIREBASE_|GMAIL_)/))
+    .filter(line => !line.match(/^(FIREBASE_|GMAIL_|RAZORPAY_)/))
     .join('\n');
   fs.writeFileSync(path.join(dest, '.env'), filtered);
-  console.log('Copied .env (filtered Firebase and Gmail runtime credentials)');
+  console.log('Copied .env (filtered Firebase, Gmail, and Razorpay runtime credentials)');
 }
 
 console.log('Predeploy copy complete.');

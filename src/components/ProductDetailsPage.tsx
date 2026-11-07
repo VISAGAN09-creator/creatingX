@@ -4,6 +4,7 @@ import type { DataStatus, Product } from '../types';
 import { formatPrice } from '../utils/format';
 import { MagneticButton } from './Magnetic';
 import { SmartImage } from './SmartImage';
+import { DEFAULT_SIZE_GUIDE } from './SizeGuideModal';
 import { getCookie, setCookie } from '../utils/cookies';
 import { sortClothingSizes } from '../utils/sizes';
 
@@ -16,29 +17,17 @@ type ProductDetailsPageProps = {
   onBack: () => void;
 };
 
-const DEFAULT_SIZE_GUIDE = [
-  { size: 'XXS', toFitChest: '34', Chest: '40', Length: '28', shoulder: '19' },
-  { size: 'XS', toFitChest: '36', Chest: '42', Length: '28.5', shoulder: '20' },
-  { size: 'S', toFitChest: '38', Chest: '44', Length: '29', shoulder: '21' },
-  { size: 'M', toFitChest: '40', Chest: '46', Length: '29', shoulder: '22' },
-  { size: 'L', toFitChest: '42', Chest: '48', Length: '29.5', shoulder: '23' },
-  { size: 'XL', toFitChest: '44', Chest: '50', Length: '29.5', shoulder: '24' },
-  { size: 'XXL', toFitChest: '46', Chest: '52', Length: '30', shoulder: '25' },
-  { size: 'XXXL', toFitChest: '48', Chest: '54', Length: '30', shoulder: '26' },
-];
-
 const DEFAULT_DETAILS = [
   '100% organic heavyweight cotton (240 gsm)',
   'Oversized drop-shoulder silhouette',
-  'Liquid metal reflective front print',
   'Reinforced neckline with double stitching',
   'Pre-shrunk and garment-washed',
 ];
 
 const DEFAULT_SHIPPING = [
-  'Free shipping on orders above RS. 3,000',
-  'Standard delivery: 4-6 business days',
-  'Express delivery: 2-3 business days',
+  'Shipping our orders worldwide',
+  'Standard Dispatch in 7 Days',
+  'Delivery time may vary depending on your location',
 ];
 
 const DEFAULT_CARE = [
@@ -141,18 +130,24 @@ export function ProductDetailsPage({
 
   const images = useMemo(() => (product ? productImages(product) : []), [product]);
   const colors = useMemo(() => product?.colors ?? [], [product]);
-  const sizes = useMemo(() => sortClothingSizes(product?.sizes ?? []), [product]);
+  const sizes = useMemo(() => product?.sizes ?? [], [product]);
+  const mensSizes = useMemo(() => product?.mensSizes ?? sizes, [product, sizes]);
+  const womensSizes = useMemo(() => product?.womensSizes ?? sizes, [product, sizes]);
   const sizeGuide = product?.sizeGuide?.length ? product.sizeGuide : DEFAULT_SIZE_GUIDE;
   const selectedSizeData = sizes.find((size) => size.name === selectedSize);
-  const selectedMensSizeData = sizes.find((size) => size.name === selectedMensSize);
-  const selectedWomensSizeData = sizes.find((size) => size.name === selectedWomensSize);
+  const selectedMensSizeData = mensSizes.find((size) => size.name === selectedMensSize);
+  const selectedWomensSizeData = womensSizes.find((size) => size.name === selectedWomensSize);
   const isCoupleProduct = product?.isCouple === true;
+  // Legacy couple products use one shared inventory map. New products created
+  // by the admin use independent maps and can sell the same named size once
+  // from each map.
+  const hasSharedCoupleStock = mensSizes === womensSizes;
   const coupleSizesInStock = Boolean(
     selectedMensSizeData &&
     selectedWomensSizeData &&
     selectedMensSizeData.stock > 0 &&
     selectedWomensSizeData.stock > 0 &&
-    (selectedMensSize !== selectedWomensSize || selectedMensSizeData.stock >= 2),
+    (!hasSharedCoupleStock || selectedMensSize !== selectedWomensSize || selectedMensSizeData.stock >= 2),
   );
   const hasColorOptions = colors.length > 0;
   const canAddToCart = Boolean(
@@ -303,7 +298,7 @@ export function ProductDetailsPage({
         <>
           <p className="text-[13px] leading-8 text-metal-text">
             {product.description ??
-              'The Liquid Metal Tee is engineered for those who refuse to blend in. Featuring our signature liquid metal print technique, each shirt carries a unique reflective quality that shifts with light and movement.'}
+              'Crafted for people who wear their personality out loud. Bold graphics, premium comfort, and a fit made for everyday statement-making. From street-ready staples to one-of-a-kind custom prints, VARATAAA helps you stand out without trying too hard.'}
           </p>
           <ul className="mt-4 list-disc space-y-1 pl-5 text-[13px] leading-7 text-metal-text">
             {(product.details?.length ? product.details : DEFAULT_DETAILS).map((detail) => (
@@ -490,21 +485,21 @@ export function ProductDetailsPage({
                 </button>
               </div>
 
-              {sizes.length === 0 ? (
+              {(!isCoupleProduct && sizes.length === 0) || (isCoupleProduct && (!mensSizes.length || !womensSizes.length)) ? (
                 <p className="text-sm text-metal-text">No sizes are currently configured for this product.</p>
               ) : isCoupleProduct ? (
                 <div className="space-y-5">
                   {[
-                    { label: "Men's Size", selected: selectedMensSize, setSelected: setSelectedMensSize, otherSelected: selectedWomensSize },
-                    { label: "Women's Size", selected: selectedWomensSize, setSelected: setSelectedWomensSize, otherSelected: selectedMensSize },
-                  ].map(({ label, selected, setSelected, otherSelected }) => (
+                    { label: "Men's Size", selected: selectedMensSize, setSelected: setSelectedMensSize, otherSelected: selectedWomensSize, options: mensSizes },
+                    { label: "Women's Size", selected: selectedWomensSize, setSelected: setSelectedWomensSize, otherSelected: selectedMensSize, options: womensSizes },
+                  ].map(({ label, selected, setSelected, otherSelected, options }) => (
                     <div key={label}>
                       <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.16em] text-black">
                         {label} - <span className="text-metal-text">{selected || 'Select'}</span>
                       </p>
                       <div className="flex flex-wrap gap-2.5">
-                        {sizes.map((size) => {
-                          const isOutOfStock = size.stock <= 0 || (otherSelected === size.name && size.stock < 2);
+                        {options.map((size) => {
+                          const isOutOfStock = size.stock <= 0 || (hasSharedCoupleStock && otherSelected === size.name && size.stock < 2);
                           return (
                             <button
                               key={size.name}

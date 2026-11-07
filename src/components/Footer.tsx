@@ -8,9 +8,10 @@ import { scrollToHash } from '../utils/scroll';
 type FooterProps = {
   activePage?: string;
   onNavigate?: (href: string) => void;
+  onSizeGuideOpen?: () => void;
 };
 
-export function Footer({ activePage, onNavigate }: FooterProps) {
+export function Footer({ activePage, onNavigate, onSizeGuideOpen }: FooterProps) {
   const [toast, setToast] = useState<string | null>(null);
 
   const showToast = (message: string) => {
@@ -19,12 +20,8 @@ export function Footer({ activePage, onNavigate }: FooterProps) {
   };
 
   const handleLinkClick = (event: React.MouseEvent, columnTitle: string, link: string) => {
+    if (columnTitle === 'Support') return;
     event.preventDefault();
-
-    if (columnTitle === 'Support') {
-      showToast('Soon');
-      return;
-    }
 
     if (link === 'New Arrivals') {
       if (onNavigate) {
@@ -53,7 +50,12 @@ export function Footer({ activePage, onNavigate }: FooterProps) {
       return;
     }
 
-    // Default fallback (e.g. Size Guide, etc.)
+    if (link === 'Size Guide') {
+      onSizeGuideOpen?.();
+      return;
+    }
+
+    // Default fallback for unfinished footer destinations.
     showToast('Soon');
   };
 
@@ -88,13 +90,13 @@ export function Footer({ activePage, onNavigate }: FooterProps) {
               )}
             </div>
             <p className="max-w-[300px] text-[0.95rem] leading-7 text-metal-dark">
-              Custom print t-shirts for the bold. Unconventional shapes, liquid metal aesthetics, and
+              Custom print t-shirts for the bold. Unconventional shapes, aesthetics, and
               dopamine-inducing designs.
             </p>
             <div className="mt-5 space-y-2 text-sm text-metal-dark">
-              <p><span className="font-semibold text-metal-text">Contact:</span> <a href="tel:7358012011" className="transition hover:text-black">7358012011</a></p>
+              <p><span className="font-semibold text-metal-text">Contact:</span> <a href="tel:+91 7358012011" className="transition hover:text-black">+91 7358012011</a></p>
               <p><span className="font-semibold text-metal-text">Email:</span> <a href="mailto:varataaah@gmail.com" className="transition hover:text-black">varataaah@gmail.com</a></p>
-              <p><span className="font-semibold text-metal-text">Email:</span> <a href="mailto:handle2227@gmail.com" className="transition hover:text-black">handle2227@gmail.com</a></p>
+              <p><span className="font-semibold text-metal-text"></span> <a href="mailto:handle2227@gmail.com" className="transition hover:text-black">handle2227@gmail.com</a></p>
             </div>
           </div>
 
@@ -120,7 +122,9 @@ export function Footer({ activePage, onNavigate }: FooterProps) {
                 {column.links.map((link) => (
                   <li key={link}>
                     <a
-                      href="#"
+                      href={column.title === 'Support'
+                        ? `/varataaa/${link === 'Terms & Service' ? 'terms-and-conditions' : link === 'Shipping' ? 'shipping-policy' : 'refund-policy'}`
+                        : '#'}
                       onClick={(event) => handleLinkClick(event, column.title, link)}
                      
                       className="text-sm text-metal-dark transition hover:text-black"

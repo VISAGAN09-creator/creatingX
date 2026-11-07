@@ -46,6 +46,7 @@ try {
 
 
 const app = express();
+const { normalizeState, shippingCharge, lookupPin } = require('./shipping.cjs');
 app.use(helmet());
 const PORT = process.env.PORT || 5000;
 
@@ -54,7 +55,7 @@ function roundCurrency(value) {
 }
 
 /**
- * Builds the amount passed to Cashfree from server-resolved line totals only.
+ * Builds the amount passed to Razorpay from server-resolved line totals only.
  * Client-request totals are intentionally not part of this contract.
  */
 function calculateCheckoutPricing(resolvedItems, shippingAmount = 0) {
@@ -217,6 +218,9 @@ app.use(cors({
   credentials: false,                  // Set to true if you add cookie-based auth later
   maxAge: 86400,                       // Cache preflight for 24h to reduce OPTIONS calls
 }));
+// Razorpay signs the exact webhook bytes. Parse this route as a Buffer before
+// the JSON middleware; the handler verifies the signature before decoding it.
+app.use(['/api/razorpay-webhook', '/varataaa/api/razorpay-webhook'], express.raw({ type: 'application/json', limit: '100kb' }));
 app.use(express.json({ limit: '100kb' }));
 
 // The storefront is also served behind a /varataaa reverse-proxy mount. The
@@ -423,6 +427,7 @@ function stockAdapter(data, fields = ['sizes', 'sizeStock', 'stockBySize', 'stoc
     }
   }
 
+  // Top-level fields are part of the legacy standard-product schema only.
   if (fields[0] !== 'sizes') return empty;
   const quantities = {};
   const configured = new Set();
@@ -451,12 +456,11 @@ function stockSummaryFor(data, fields) {
 
 function coupleStockAdapters(data) {
   const standard = stockAdapter(data);
-  const mens = stockAdapter(data, ['mensSizes', 'mensSizeStock']);
-  const womens = stockAdapter(data, ['womensSizes', 'womensSizeStock']);
   return {
-    standard,
-    mens,
-    womens,
+    mens: stockAdapter(data, ['mensSizes', 'mensSizeStock']),
+    womens: stockAdapter(data, ['womensSizes', 'womensSizeStock']),
+    // Existing couple documents use one shared inventory map and retain their
+    // current behaviour until they are explicitly migrated.
     legacy: !data?.mensSizes && !data?.womensSizes ? standard : null,
   };
 }
@@ -510,8 +514,8 @@ function fulfillmentStatusFromOrder(order) {
   return isFulfillmentStatus(order?.fulfillmentStatus) ? order.fulfillmentStatus : 'production';
 }
 
-function fulfillmentOrderRef(status, orderId) {
-  return db.collection(FULFILLMENT_COLLECTIONS[status]).doc(orderId);
+function fulfillmentOrderRef(status, orderId, database = db) {
+  return database.collection(FULFILLMENT_COLLECTIONS[status]).doc(orderId);
 }
 
 function timestampToIso(value) {
@@ -547,7 +551,7 @@ function adminOrderResponse(orderId, order) {
 }
 
 /**
- * Canonical paid orders must remain in /orders because Cashfree return-page
+ * Canonical paid orders must remain in /orders because payment return-page
  * verification and webhooks use that document ID as their idempotency key.
  * The three fulfillment collections are server-managed mirrors. A transaction
  * keeps exactly one current mirror while preserving the canonical order.
@@ -560,8 +564,8 @@ function inventoryGroups(items) {
     const quantity = Number(item?.quantity);
     const selections = item?.couple
       ? [
-          { role: item.independentCoupleStock ? 'mens' : 'legacy', size: normalizeSize(item?.selectedMensSize) },
-          { role: item.independentCoupleStock ? 'womens' : 'legacy', size: normalizeSize(item?.selectedWomensSize) },
+          { role: 'mens', size: normalizeSize(item?.selectedMensSize) },
+          { role: 'womens', size: normalizeSize(item?.selectedWomensSize) },
         ]
       : [{ role: 'standard', size: normalizeSize(item?.selectedSize) }];
     if (!collectionName || !documentId || selections.some(({ size }) => !size) || !Number.isSafeInteger(quantity) || quantity < 1) {
@@ -570,7 +574,7 @@ function inventoryGroups(items) {
       throw error;
     }
     const key = `${collectionName}\u0000${documentId}`;
-    const group = groups.get(key) || { collectionName, documentId, quantities: { standard: {}, mens: {}, womens: {}, legacy: {} } };
+    const group = groups.get(key) || { collectionName, documentId, quantities: { standard: {}, mens: {}, womens: {} } };
     for (const { role, size } of selections) {
       group.quantities[role][size] = (group.quantities[role][size] || 0) + quantity;
     }
@@ -579,8 +583,8 @@ function inventoryGroups(items) {
   return [...groups.values()];
 }
 
-async function createPaidOrderWithFulfillment(orderId, orderData, inventoryItems = []) {
-  const orderRef = db.collection('orders').doc(orderId);
+async function createPaidOrderWithFulfillment(orderId, orderData, inventoryItems = [], database = db) {
+  const orderRef = database.collection('orders').doc(orderId);
   const now = new Date().toISOString();
   const completedOrder = {
     ...orderData,
@@ -588,7 +592,7 @@ async function createPaidOrderWithFulfillment(orderId, orderData, inventoryItems
     fulfillmentUpdatedAt: now,
   };
 
-  return db.runTransaction(async (transaction) => {
+  return database.runTransaction(async (transaction) => {
     const existing = await transaction.get(orderRef);
     if (existing.exists) {
       return { created: false, order: existing.data() };
@@ -597,8 +601,8 @@ async function createPaidOrderWithFulfillment(orderId, orderData, inventoryItems
     const groups = inventoryGroups(inventoryItems);
     const stockDocuments = await Promise.all(groups.map(async (group) => ({
       group,
-      ref: db.collection(group.collectionName).doc(group.documentId),
-      snapshot: await transaction.get(db.collection(group.collectionName).doc(group.documentId)),
+      ref: database.collection(group.collectionName).doc(group.documentId),
+      snapshot: await transaction.get(database.collection(group.collectionName).doc(group.documentId)),
     })));
 
     for (const stockDocument of stockDocuments) {
@@ -609,16 +613,16 @@ async function createPaidOrderWithFulfillment(orderId, orderData, inventoryItems
       }
       const data = stockDocument.snapshot.data();
       const adapters = coupleStockAdapters(data);
-      const legacyChanges = Object.entries(stockDocument.group.quantities.legacy)
-        .concat(Object.entries(stockDocument.group.quantities.mens), Object.entries(stockDocument.group.quantities.womens))
+      const legacyCoupleChanges = Object.entries(stockDocument.group.quantities.mens)
+        .concat(Object.entries(stockDocument.group.quantities.womens))
         .reduce((combined, [size, quantity]) => ({ ...combined, [size]: (combined[size] || 0) + quantity }), {});
       const roles = adapters.legacy
         ? [
-            { adapter: adapters.standard, changes: stockDocument.group.quantities.standard },
-            { adapter: adapters.legacy, changes: legacyChanges },
+            { adapter: stockAdapter(data), changes: stockDocument.group.quantities.standard },
+            { adapter: adapters.legacy, changes: legacyCoupleChanges },
           ]
         : [
-            { adapter: adapters.standard, changes: stockDocument.group.quantities.standard },
+            { adapter: stockAdapter(data), changes: stockDocument.group.quantities.standard },
             { adapter: adapters.mens, changes: stockDocument.group.quantities.mens },
             { adapter: adapters.womens, changes: stockDocument.group.quantities.womens },
           ];
@@ -627,8 +631,8 @@ async function createPaidOrderWithFulfillment(orderId, orderData, inventoryItems
         if (!Object.keys(changes).length) continue;
         const nextQuantities = {};
         for (const [size, requested] of Object.entries(changes)) {
-          const available = adapter.configured.has(size) ? adapter.quantities[size] ?? 0 : 0;
-          if (!adapter.editable || available < requested) {
+          const available = adapter?.configured.has(size) ? adapter.quantities[size] ?? 0 : 0;
+          if (!adapter?.editable || available < requested) {
             const error = new Error(`${data.name || data.title || stockDocument.group.documentId} (${size}) is no longer in stock.`);
             error.code = 'inventory-insufficient';
             throw error;
@@ -641,7 +645,7 @@ async function createPaidOrderWithFulfillment(orderId, orderData, inventoryItems
     }
 
     transaction.create(orderRef, completedOrder);
-    transaction.set(fulfillmentOrderRef('production', orderId), completedOrder);
+    transaction.set(fulfillmentOrderRef('production', orderId, database), completedOrder);
     return { created: true, order: completedOrder };
   });
 }
@@ -688,7 +692,7 @@ app.get('/api/admin/session', (req, res) => {
 });
 
 /**
- * Create a server-authoritative in-person order. This never calls Cashfree;
+ * Create a server-authoritative in-person order. This never calls an online gateway;
  * it uses the same transaction that allocates stock for verified online orders.
  */
 app.post('/api/admin/orders/walk-in', async (req, res) => {
@@ -998,6 +1002,174 @@ async function resolveProductFromFirestore(productId) {
   return null;
 }
 
+function checkoutValidationError(statusCode, message) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function productName(data, fallback) {
+  return typeof data?.name === 'string' && data.name.trim()
+    ? data.name.trim()
+    : typeof data?.title === 'string' && data.title.trim()
+      ? data.title.trim()
+      : fallback;
+}
+
+function productImage(data) {
+  return [data?.img1, data?.image, data?.imageUrl, data?.imageAddress]
+    .find((value) => typeof value === 'string' && value.trim())?.trim() || '';
+}
+
+/**
+ * Resolve cart lines using only current Firestore product data.
+ * Client prices are deliberately not read or copied here.
+ */
+async function resolveCheckoutItems(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw checkoutValidationError(400, 'Validation Error: items must be a non-empty array of { id, quantity }.');
+  }
+  if (items.length > 50) {
+    throw checkoutValidationError(400, 'Validation Error: Too many items (max 50).');
+  }
+
+  const resolvedItems = [];
+  for (const item of items) {
+    const productId = typeof item?.id === 'string' ? item.id.trim() : '';
+    const quantity = Number(item?.quantity);
+
+    if (!productId) {
+      throw checkoutValidationError(400, 'Validation Error: Each item must have a non-empty id.');
+    }
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) {
+      throw checkoutValidationError(400, `Validation Error: Quantity for "${productId}" must be an integer between 1 and 100.`);
+    }
+
+    const product = await resolveProductFromFirestore(productId);
+    if (!product) {
+      throw checkoutValidationError(404, `Product not found: "${productId}".`);
+    }
+
+    const couple = isCoupleProduct(product.data);
+    const selectedMensSize = couple ? normalizeSize(item.mensSize ?? item.selectedMensSize) : null;
+    const selectedWomensSize = couple ? normalizeSize(item.womensSize ?? item.selectedWomensSize) : null;
+    const submittedStandardSize = !couple ? normalizeSize(item.size ?? item.selectedSize) : null;
+    const selectedSize = !couple ? product.selectedSize || submittedStandardSize : null;
+
+    if (couple && (!selectedMensSize || !selectedWomensSize)) {
+      throw checkoutValidationError(400, `Select both men's and women's sizes for "${productId}" before checkout.`);
+    }
+    if (!couple && product.selectedSize && submittedStandardSize && product.selectedSize !== submittedStandardSize) {
+      throw checkoutValidationError(400, `Selected size for "${productId}" does not match the product variant.`);
+    }
+    if (!couple && !selectedSize) {
+      throw checkoutValidationError(400, `Select an in-stock size for "${productId}" before checkout.`);
+    }
+
+    const price = Number(product.data.price);
+    if (!Number.isFinite(price) || price <= 0) {
+      throw checkoutValidationError(400, `Product "${productId}" does not have a valid price.`);
+    }
+
+    const configuredColors = configuredColorLabels(product.data);
+    const submittedColor = sanitizeString(item.color ?? item.selectedColor, 100);
+    let selectedColor;
+    if (configuredColors.length > 0) {
+      if (!submittedColor) {
+        throw checkoutValidationError(400, `Select a color for "${productId}" before checkout.`);
+      }
+      selectedColor = configuredColors.find(
+        (color) => color.toLocaleLowerCase() === submittedColor.toLocaleLowerCase(),
+      );
+      if (!selectedColor) {
+        throw checkoutValidationError(400, `Selected color for "${productId}" is unavailable.`);
+      }
+    } else if (submittedColor) {
+      throw checkoutValidationError(400, `Product "${productId}" does not have configurable colors.`);
+    }
+
+    resolvedItems.push({
+      productId,
+      firestoreDocId: product.docId,
+      collectionName: product.collectionName,
+      couple,
+      independentCoupleStock: couple && Boolean(product.data.mensSizes || product.data.womensSizes),
+      ...(couple ? { selectedMensSize, selectedWomensSize } : { selectedSize }),
+      ...(selectedColor ? { selectedColor } : {}),
+      name: productName(product.data, product.docId),
+      price,
+      quantity,
+      lineTotal: price * quantity,
+      image: productImage(product.data),
+      alt: typeof product.data.alt === 'string' && product.data.alt.trim()
+        ? product.data.alt.trim()
+        : productName(product.data, product.docId),
+      model: typeof product.data.model === 'string' ? product.data.model.trim() : '',
+      theme: product.collectionName,
+    });
+  }
+
+  return resolvedItems;
+}
+
+/** Validate current stock for the resolved variants without reserving it. */
+async function validateCheckoutInventory(resolvedItems) {
+  const requestedByVariant = new Map();
+  for (const item of resolvedItems) {
+    const selections = item.couple
+      ? [
+          { role: item.independentCoupleStock ? 'mens' : 'legacy', size: item.selectedMensSize },
+          { role: item.independentCoupleStock ? 'womens' : 'legacy', size: item.selectedWomensSize },
+        ]
+      : [{ role: 'standard', size: item.selectedSize }];
+    for (const selection of selections) {
+      const key = `${item.collectionName}\u0000${item.firestoreDocId}\u0000${selection.role}\u0000${selection.size}`;
+      const current = requestedByVariant.get(key) || { item, role: selection.role, size: selection.size, quantity: 0 };
+      requestedByVariant.set(key, { ...current, quantity: current.quantity + item.quantity });
+    }
+  }
+
+  for (const request of requestedByVariant.values()) {
+    const snapshot = await db.collection(request.item.collectionName).doc(request.item.firestoreDocId).get();
+    const productData = snapshot.exists ? snapshot.data() : null;
+    if (!productData) {
+      throw checkoutValidationError(409, `${request.item.name} is no longer available.`);
+    }
+    const adapters = request.item.couple ? coupleStockAdapters(productData) : null;
+    const adapter = request.role === 'mens'
+      ? (adapters.mens.configured.size ? adapters.mens : adapters.legacy)
+      : request.role === 'womens'
+        ? (adapters.womens.configured.size ? adapters.womens : adapters.legacy)
+        : request.role === 'legacy'
+          ? adapters.legacy
+          : stockAdapter(productData);
+    const available = adapter.configured.has(request.size) ? adapter.quantities[request.size] ?? 0 : 0;
+    if (!adapter.editable || available < request.quantity) {
+      throw checkoutValidationError(409, `${request.item.name} (${request.size}) is out of stock or has insufficient stock.`);
+    }
+  }
+}
+
+function checkoutPreviewItem(item, cartId) {
+  return withoutUndefinedProperties({
+    cartId: typeof cartId === 'string' ? cartId.slice(0, 300) : undefined,
+    productId: item.productId,
+    name: item.name,
+    image: item.image,
+    alt: item.alt,
+    model: item.model,
+    theme: item.theme,
+    price: item.price,
+    quantity: item.quantity,
+    lineTotal: item.lineTotal,
+    couple: item.couple,
+    selectedSize: item.selectedSize,
+    selectedMensSize: item.selectedMensSize,
+    selectedWomensSize: item.selectedWomensSize,
+    selectedColor: item.selectedColor,
+  });
+}
+
 async function inventoryCollectionNames() {
   const names = ['products', 'TOTD'];
   const configSnap = await db.doc('_config/collections').get();
@@ -1218,6 +1390,91 @@ app.post('/api/admin/inventory', async (req, res) => {
   return res.status(failed.length ? 207 : 200).json({ success: failed.length === 0, successful, failed });
 });
 
+function parseNewProductSizes(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const sizes = {};
+  for (const [rawSize, rawQuantity] of Object.entries(value)) {
+    const size = normalizeSize(rawSize);
+    if (!size || !Number.isSafeInteger(rawQuantity) || rawQuantity < 0) return null;
+    sizes[size] = rawQuantity;
+  }
+  return Object.keys(sizes).length ? sizes : null;
+}
+
+function storageDownloadUrl(value) {
+  if (typeof value !== 'string' || value.length > 2000) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.hostname === 'firebasestorage.googleapis.com' ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+app.get('/api/admin/product-collections', async (req, res) => {
+  if (!db) return res.status(503).json({ success: false, message: 'Product collections are unavailable because the database is not configured.' });
+  try {
+    return res.status(200).json({ success: true, collections: await inventoryCollectionNames() });
+  } catch (error) {
+    console.error('[Admin Products] Failed to list collections:', error.message);
+    return res.status(500).json({ success: false, message: 'Unable to load product collections.' });
+  }
+});
+
+app.post('/api/admin/products', async (req, res) => {
+  if (!db) return res.status(503).json({ success: false, message: 'Product creation is unavailable because the database is not configured.' });
+
+  const name = sanitizeString(req.body?.name, 200).replace(/\s+/g, ' ');
+  const price = req.body?.price;
+  const collectionName = sanitizeString(req.body?.collectionName, 200);
+  const documentId = sanitizeString(req.body?.documentId, 160);
+  const latest = req.body?.latest === true;
+  const hero = req.body?.hero === true;
+  const couple = req.body?.couple === true;
+  const imageUrls = Array.isArray(req.body?.imageUrls) ? req.body.imageUrls.map(storageDownloadUrl) : [];
+  const standardSizes = parseNewProductSizes(req.body?.sizes);
+  const mensSizes = parseNewProductSizes(req.body?.mensSizes);
+  const womensSizes = parseNewProductSizes(req.body?.womensSizes);
+
+  if (!name || typeof price !== 'number' || !Number.isFinite(price) || price <= 0 || !collectionName || !documentId || !/^[a-z0-9][a-z0-9-]{2,159}$/i.test(documentId)) {
+    return res.status(400).json({ success: false, message: 'Enter a name, a positive numeric price, a valid collection, and a valid product identifier.' });
+  }
+  if (!imageUrls.length || imageUrls.some((url) => !url)) {
+    return res.status(400).json({ success: false, message: 'Upload at least one valid Firebase Storage image before saving the product.' });
+  }
+  if ((couple && (!mensSizes || !womensSizes)) || (!couple && !standardSizes)) {
+    return res.status(400).json({ success: false, message: couple ? "Configure at least one men's and one women's size." : 'Configure at least one size.' });
+  }
+
+  try {
+    const collectionNames = await inventoryCollectionNames();
+    if (!collectionNames.includes(collectionName)) {
+      return res.status(400).json({ success: false, message: 'Choose one existing product collection.' });
+    }
+    const reference = db.collection(collectionName).doc(documentId);
+    const existing = await reference.get();
+    if (existing.exists) return res.status(409).json({ success: false, message: 'A product with this identifier already exists. Rename the product and try again.' });
+
+    const data = {
+      name,
+      price,
+      latest: latest ? 'yes' : 'no',
+      hero: hero ? 'yes' : 'no',
+      couple: couple ? 'yes' : 'no',
+      img1: imageUrls[0],
+      images: imageUrls,
+      ...(couple ? { mensSizes, womensSizes } : { sizes: standardSizes }),
+      createdAt: new Date().toISOString(),
+      createdBy: req.adminUser.uid,
+    };
+    await reference.create(data);
+    return res.status(201).json({ success: true, productId: `${slugify(collectionName)}-${documentId}`, collectionName, documentId });
+  } catch (error) {
+    console.error('[Admin Products] Failed to create product:', error.message);
+    return res.status(500).json({ success: false, message: 'Unable to save the product.' });
+  }
+});
+
 // Health check endpoint to verify backend status
 app.get('/api/health', (req, res) => {
   return res.status(200).json({
@@ -1237,6 +1494,45 @@ app.get('/api/health', (req, res) => {
  * SECURITY: The server reads product prices from Firestore.
  * The client-supplied amount is NEVER trusted.
  */
+app.get('/api/pin-state/:pin', async (req, res) => {
+  try {
+    res.json({ success: true, state: await lookupPin(req.params.pin) });
+  } catch (error) {
+    res.status(/valid six-digit|could not be verified/.test(error.message) ? 400 : 503)
+      .json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /api/checkout-preview
+ * Resolve the browser cart against current Firestore records for checkout UI.
+ * This is a display/validation quote only; create-order repeats the lookup.
+ */
+app.post('/api/checkout-preview', async (req, res) => {
+  if (!db) {
+    return res.status(500).json({ success: false, message: 'Server database is not initialized.' });
+  }
+
+  try {
+    const resolvedItems = await resolveCheckoutItems(req.body?.items);
+    await validateCheckoutInventory(resolvedItems);
+    const pricing = calculateCheckoutPricing(resolvedItems, 0);
+
+    return res.status(200).json({
+      success: true,
+      items: resolvedItems.map((item, index) => checkoutPreviewItem(item, req.body.items[index]?.cartId)),
+      pricing,
+    });
+  } catch (error) {
+    const statusCode = Number.isInteger(error.statusCode) ? error.statusCode : 500;
+    if (statusCode >= 500) console.error('[Checkout Preview] Failed to refresh cart:', error);
+    return res.status(statusCode).json({
+      success: false,
+      message: error.message || 'Unable to refresh checkout products.',
+    });
+  }
+});
+
 app.post('/api/create-order', async (req, res) => {
   const { items, customer, shipping } = req.body;
 
@@ -1268,9 +1564,11 @@ app.post('/api/create-order', async (req, res) => {
   }
 
   try {
-    // --- Resolve each item from Firestore and compute authoritative prices ---
-    const resolvedItems = [];
-    let totalAmount = 0;
+    // Resolve and validate again here. The payment amount is never taken from
+    // the checkout preview or any browser-supplied price.
+    const resolvedItems = await resolveCheckoutItems(items);
+    await validateCheckoutInventory(resolvedItems);
+    let totalAmount = resolvedItems.reduce((sum, item) => sum + item.lineTotal, 0);
 
     for (const item of items) {
       const productId = typeof item.id === 'string' ? item.id.trim() : '';
@@ -1370,6 +1668,8 @@ app.post('/api/create-order', async (req, res) => {
         firestoreDocId: product.docId,
         collectionName: product.collectionName,
         couple,
+        // New couple products use independent stock maps. Existing documents
+        // have one shared map, which must keep counting both garments together.
         independentCoupleStock: couple && Boolean(product.data.mensSizes || product.data.womensSizes),
         ...(couple
           ? { selectedMensSize, selectedWomensSize }
@@ -1402,13 +1702,13 @@ app.post('/api/create-order', async (req, res) => {
     }
     for (const request of requestedByVariant.values()) {
       const productData = (await db.collection(request.item.collectionName).doc(request.item.firestoreDocId).get()).data();
-      const adapters = request.item.couple ? coupleStockAdapters(productData) : null;
+      const coupleAdapters = request.item.couple ? coupleStockAdapters(productData) : null;
       const adapter = request.role === 'mens'
-        ? (adapters.mens.configured.size ? adapters.mens : adapters.legacy)
+        ? (coupleAdapters.mens.configured.size ? coupleAdapters.mens : coupleAdapters.legacy)
         : request.role === 'womens'
-          ? (adapters.womens.configured.size ? adapters.womens : adapters.legacy)
+          ? (coupleAdapters.womens.configured.size ? coupleAdapters.womens : coupleAdapters.legacy)
           : request.role === 'legacy'
-            ? adapters.legacy
+            ? coupleAdapters.legacy
             : stockAdapter(productData);
       const available = adapter.configured.has(request.size) ? adapter.quantities[request.size] ?? 0 : 0;
       if (!adapter.editable || available < request.quantity) {
@@ -1429,14 +1729,6 @@ app.post('/api/create-order', async (req, res) => {
       });
     }
 
-    // --- Build return URL ---
-    // A reverse-proxied storefront can live below a path (for example,
-    // /varataaa). Origin headers never include that path, so Production uses
-    // an explicit server-side return URL when configured.
-    const configuredReturnUrl = process.env.PAYMENT_RETURN_URL?.trim();
-    const origin = req.headers.origin || req.headers.referer?.replace(/\/[^/]*$/, '') || 'https://ecommerce-f1448.web.app';
-    const returnUrl = configuredReturnUrl || `${origin}/#payment-return`;
-
     // --- Build customer info ---
     const customerName = checkoutDetails.customer.name;
     const customerEmail = checkoutDetails.customer.email;
@@ -1449,6 +1741,7 @@ app.post('/api/create-order', async (req, res) => {
       items: resolvedItems.map(pendingOrderItem),
       subtotalAmount,
       taxAmount,
+      shippingAmount,
       totalAmount,
       customer: {
         name: customerName,
@@ -1464,21 +1757,14 @@ app.post('/api/create-order', async (req, res) => {
       amount: totalAmount,
       currency: 'INR',
       receipt: `receipt_${Date.now()}`,
-      customer: {
-        id: `cust_${Date.now()}`,
-        email: customerEmail || 'test@cashfree.com',
-        phone: customerPhone || '9999999999',
-        name: customerName,
-      },
-      returnUrl,
       items: resolvedItems,
     });
 
-    // Store pending order data keyed by Cashfree order_id for verification later
-    if (db && order.gatewayData?.order_id) {
-      pendingOrderData.cashfreeOrderId = order.gatewayData.order_id;
-      pendingOrderData.cfOrderId = order.gatewayData.cf_order_id || '';
-      await db.collection('pendingOrders').doc(order.gatewayData.order_id).set(pendingOrderData);
+    // The Razorpay order ID is the single idempotency key used by checkout,
+    // callback verification, webhooks, and the final Firestore order document.
+    if (db && order.orderId) {
+      pendingOrderData.razorpayOrderId = order.orderId;
+      await db.collection('pendingOrders').doc(order.orderId).set(pendingOrderData);
     }
 
     return res.status(200).json({
@@ -1491,7 +1777,7 @@ app.post('/api/create-order', async (req, res) => {
   } catch (error) {
     console.error('[Payment Error] Failed to create order:', error);
 
-    return res.status(500).json({
+    return res.status(Number.isInteger(error.statusCode) ? error.statusCode : 500).json({
       success: false,
       message: error.message || 'Failed to create payment order.',
     });
@@ -1524,10 +1810,10 @@ function validateCheckoutDetails(customer, shipping) {
   if (!doorNo) return { valid: false, message: 'Door No. is required.' };
   if (!addressLine1) return { valid: false, message: 'Address Line 1 is required.' };
   if (!city) return { valid: false, message: 'City is required.' };
-  if (!state) return { valid: false, message: 'State is required.' };
-  if (!country) return { valid: false, message: 'Country/Region is required.' };
+  if (!normalizeState(state)) return { valid: false, message: 'Select a valid Indian state or Union Territory.' };
+  if (country !== 'IN') return { valid: false, message: 'Delivery is available in India only.' };
   if (!/^\d{10}$/.test(phone)) return { valid: false, message: 'Phone number must contain exactly 10 digits.' };
-  if (country === 'IN' && !/^\d{6}$/.test(pinCode)) return { valid: false, message: 'Indian pincode must contain exactly 6 digits.' };
+  if (!/^[1-9]\d{5}$/.test(pinCode)) return { valid: false, message: 'Indian PIN code must contain exactly 6 digits.' };
   if (!pinCode) return { valid: false, message: 'Pincode is required.' };
 
   return {
@@ -1539,7 +1825,7 @@ function validateCheckoutDetails(customer, shipping) {
       addressLine1,
       addressLine2,
       city,
-      state,
+      state: normalizeState(state),
       pinCode,
       // Retain aliases while downstream readers migrate to the explicit fields.
       address: addressLine1,
@@ -1558,9 +1844,17 @@ function escapeHtml(str) {
 
 const ORDER_EMAIL_STATUS_FIELD = 'emailDelivery';
 let gmailTransporter = null;
+const SAFE_EMAIL_RETRY_REASONS = new Set(['smtp_not_configured']);
 
 function validEmail(value) {
   return typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function smtpErrorCategory(error) {
+  const code = typeof error?.code === 'string' ? error.code.toUpperCase() : '';
+  return ['EAUTH', 'ECONNECTION', 'ECONNREFUSED', 'ETIMEDOUT', 'ESOCKET', 'ETLS'].includes(code)
+    ? code.toLowerCase()
+    : 'unknown';
 }
 
 function orderConfirmationMessage(orderId, order, logoUrl = null) {
@@ -1583,9 +1877,11 @@ function orderConfirmationMessage(orderId, order, logoUrl = null) {
   }).join('\n');
   const total = formatter.format(Number(order?.pricing?.total) || 0);
   const customerName = escapeHtml(order?.customer?.firstName || order?.customer?.name || 'Customer');
+  // Keep a real text wordmark visible below the optional image. Email clients
+  // do not reliably render image alt text when remote images are blocked.
   const logo = typeof logoUrl === 'string' && /^https:\/\//i.test(logoUrl)
-    ? `<img src="${escapeHtml(logoUrl)}" alt="VARATAAA" width="180" style="display:block;width:180px;max-width:100%;height:auto;border:0;">`
-    : '<div style="font-size:26px;font-weight:700;letter-spacing:2px;">VARATAAA</div>';
+    ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;"><tr><td align="center" style="padding:0;"><img src="${escapeHtml(logoUrl)}" alt="VARATAAA" width="180" style="display:block;width:180px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;"></td></tr><tr><td align="center" style="padding:8px 0 0;font-family:Arial,sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;color:#171717;">VARATAAA</td></tr></table>`
+    : '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;"><tr><td align="center" style="padding:0;font-family:Arial,sans-serif;font-size:26px;font-weight:700;letter-spacing:2px;color:#171717;">VARATAAA</td></tr></table>';
   return {
     subject: `VARATAAA order confirmation — ${orderId}`,
     text: `Hi ${order?.customer?.firstName || order?.customer?.name || 'Customer'},\n\nYour payment has been confirmed.\nOrder ID: ${orderId}\n\n${textItems}\n\nTotal paid: ${total}\nDispatch estimate: 7 Days to dispatch\n\nQuestions? handle2227@gmail.com or varataaah@gmail.com`,
@@ -1643,7 +1939,9 @@ async function sendOrderConfirmationEmail(orderId, _order, dependencies = {}) {
     if (!snapshot.exists) return { claimed: false };
     const persistedOrder = snapshot.data() || {};
     const existing = persistedOrder[ORDER_EMAIL_STATUS_FIELD];
-    if (existing?.status === 'sent' || existing?.status === 'sending' || existing?.status === 'skipped' || existing?.status === 'failed') return { claimed: false };
+    const safelyRetryable = existing?.status === 'failed'
+      && SAFE_EMAIL_RETRY_REASONS.has(existing?.reason);
+    if (existing?.status === 'sent' || existing?.status === 'sending' || existing?.status === 'skipped' || (existing?.status === 'failed' && !safelyRetryable)) return { claimed: false };
     const recipient = persistedOrder?.customer?.email;
     if (!validEmail(recipient)) {
       transaction.update(orderRef, { [ORDER_EMAIL_STATUS_FIELD]: { status: 'skipped', updatedAt: now, reason: 'missing_or_invalid_recipient' } });
@@ -1668,336 +1966,306 @@ async function sendOrderConfirmationEmail(orderId, _order, dependencies = {}) {
     await orderRef.update({ [ORDER_EMAIL_STATUS_FIELD]: { status: 'sent', attemptId, sentAt: new Date().toISOString(), messageId: result.messageId || null } });
     return { status: 'sent' };
   } catch (error) {
-    console.warn(`[Email] Order confirmation delivery failed for ${orderId}:`, error.message === 'smtp_not_configured' ? 'smtp_not_configured' : 'smtp_delivery_failed');
-    try { await orderRef.update({ [ORDER_EMAIL_STATUS_FIELD]: { status: 'failed', attemptId, updatedAt: new Date().toISOString(), reason: error.message === 'smtp_not_configured' ? 'smtp_not_configured' : 'smtp_delivery_failed' } }); } catch (_) { /* order payment remains successful */ }
+    const reason = error.message === 'smtp_not_configured' ? 'smtp_not_configured' : 'smtp_delivery_failed';
+    const providerCategory = reason === 'smtp_not_configured' ? 'not_configured' : smtpErrorCategory(error);
+    console.warn(`[Email] Order confirmation delivery failed for ${orderId}: ${reason} (${providerCategory})`);
+    try { await orderRef.update({ [ORDER_EMAIL_STATUS_FIELD]: { status: 'failed', attemptId, updatedAt: new Date().toISOString(), reason, providerCategory } }); } catch (_) { /* order payment remains successful */ }
     return { status: 'failed' };
   }
 }
 
-/**
- * STEP 2: VERIFY PAYMENT ENDPOINT
- * POST /api/verify-payment
- * Receives: { orderId } — the Cashfree order_id returned in the redirect URL
- * Returns: { success, orderId, paymentStatus, order }
- *
- * This endpoint verifies the payment with Cashfree's API (server-to-server),
- * then writes the order to Firestore ONLY if the payment is genuinely PAID.
- * The operation is idempotent: refreshing the return page won't create duplicates.
- */
-app.post('/api/verify-payment', async (req, res) => {
-  const { orderId: cashfreeOrderId } = req.body;
+function paymentResponse(orderId, order) {
+  return {
+    success: true,
+    orderId,
+    paymentStatus: order.status,
+    order: {
+      items: order.items || [],
+      totalAmount: order.pricing?.total || 0,
+      customer: order.customer || {},
+    },
+  };
+}
 
-  if (!cashfreeOrderId || typeof cashfreeOrderId !== 'string') {
-    return res.status(400).json({
-      success: false,
-      message: 'Validation Error: orderId is required.',
-    });
+function capturedInventoryConflictError() {
+  const error = new Error('Payment was captured, but your order needs manual review. Do not pay again. Contact support with your order ID.');
+  error.code = 'captured-inventory-conflict';
+  error.statusCode = 409;
+  return error;
+}
+
+function assertRecordedRazorpayPayment(orderId, order, paymentId) {
+  if (order?.payment?.gateway !== 'razorpay'
+    || order.payment.razorpayOrderId !== orderId
+    || order.payment.razorpayPaymentId !== paymentId) {
+    const error = new Error('Captured payment does not match the recorded order payment. Contact support with your order ID.');
+    error.statusCode = 409;
+    throw error;
+  }
+}
+
+async function recordCapturedInventoryConflict(database, pendingRef, verification, source, reason) {
+  const now = new Date().toISOString();
+  await database.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(pendingRef);
+    if (!snapshot.exists) throw new Error('Captured payment context is missing.');
+    const previous = snapshot.data() || {};
+    const capturedPaymentIds = [...new Set([
+      ...(Array.isArray(previous.capturedPaymentIds) ? previous.capturedPaymentIds : []),
+      verification.gatewayPaymentId,
+    ])];
+    transaction.set(pendingRef, {
+      status: 'captured_inventory_conflict',
+      paymentStatus: 'captured',
+      capturedPaymentIds,
+      paymentException: {
+        reason,
+        razorpayOrderId: verification.gatewayOrderId,
+        razorpayPaymentId: verification.gatewayPaymentId,
+        source,
+        detectedAt: previous.paymentException?.detectedAt || now,
+      },
+      updatedAt: now,
+    }, { merge: true });
+  });
+  console.error(`[Payment Review] Captured payment requires manual inventory reconciliation for ${pendingRef.id}.`);
+}
+
+async function createRazorpayPaidOrder(orderId, verification, source, dependencies = {}) {
+  const database = dependencies.database || db;
+  const finalize = dependencies.finalize || createPaidOrderWithFulfillment;
+  const sendConfirmation = dependencies.sendConfirmation || sendOrderConfirmationEmail;
+  const paidOrderRef = database.collection('orders').doc(orderId);
+  const existing = await paidOrderRef.get();
+  if (existing.exists) {
+    const recorded = existing.data();
+    assertRecordedRazorpayPayment(orderId, recorded, verification.gatewayPaymentId);
+    return { created: false, order: recorded };
+  }
+
+  const pendingRef = database.collection('pendingOrders').doc(orderId);
+  const pendingSnap = await pendingRef.get();
+  const pending = pendingSnap.exists ? pendingSnap.data() : null;
+  if (!pending || pending.razorpayOrderId !== orderId) {
+    const error = new Error('Payment order context is missing. Please contact support with your order ID.');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const items = Array.isArray(pending.items) ? pending.items : [];
+  const subtotal = roundCurrency(items.reduce((total, item) => total + Number(item.price) * Number(item.quantity), 0));
+  const tax = Number.isFinite(Number(pending.taxAmount)) ? Number(pending.taxAmount) : 0;
+  const shippingAmount = Number(pending.shippingAmount) || 0;
+  const expectedTotal = Number.isFinite(Number(pending.totalAmount))
+    ? Number(pending.totalAmount)
+    : roundCurrency(subtotal + tax + shippingAmount);
+  const amount = Number(verification.orderAmount);
+  if (verification.gatewayOrderId !== orderId || verification.orderCurrency !== 'INR'
+    || !Number.isFinite(amount) || Math.round(amount * 100) !== Math.round(expectedTotal * 100)) {
+    throw new Error('Razorpay amount does not match the server-calculated order total.');
+  }
+
+  // A captured payment that could not allocate stock needs an explicit human
+  // decision. A repeated callback or webhook must not silently create an order
+  // after a refund or other manual reconciliation has begun.
+  if (pending.status === 'captured_inventory_conflict') {
+    await recordCapturedInventoryConflict(database, pendingRef, verification, source, pending.paymentException?.reason || 'inventory-insufficient');
+    throw capturedInventoryConflictError();
+  }
+
+  const customer = pending.customer || {};
+  const shipping = pending.shipping || {};
+  const order = {
+    customer: {
+      email: sanitizeString(customer.email, 254),
+      name: sanitizeString(customer.name, 200),
+      firstName: sanitizeString(customer.name?.split(' ')[0] || customer.firstName || '', 100),
+      lastName: sanitizeString(customer.name?.split(' ').slice(1).join(' ') || customer.lastName || '', 100),
+      phone: sanitizeString(customer.phone, 20),
+    },
+    shipping: {
+      country: sanitizeString(shipping.country, 5), doorNo: sanitizeString(shipping.doorNo, 100),
+      addressLine1: sanitizeString(shipping.addressLine1 ?? shipping.address, 500),
+      addressLine2: sanitizeString(shipping.addressLine2 ?? shipping.apartment, 500),
+      address: sanitizeString(shipping.addressLine1 ?? shipping.address, 500),
+      apartment: sanitizeString(shipping.addressLine2 ?? shipping.apartment, 500),
+      city: sanitizeString(shipping.city, 100), state: sanitizeString(shipping.state, 100),
+      pinCode: sanitizeString(shipping.pinCode, 10),
+    },
+    items: items.map(paidOrderItem),
+    pricing: { subtotal, tax, shipping: shippingAmount, total: amount },
+    payment: {
+      gateway: 'razorpay',
+      razorpayOrderId: orderId,
+      razorpayPaymentId: verification.gatewayPaymentId,
+      transactionId: verification.gatewayPaymentId,
+      paymentStatus: verification.paymentStatus,
+    },
+    status: 'paid',
+    createdAt: new Date().toISOString(),
+    ...(source === 'webhook' ? { source } : {}),
+  };
+  let result;
+  try {
+    result = await finalize(orderId, order, items, database);
+  } catch (error) {
+    if (error.code !== 'inventory-insufficient' && error.code !== 'inventory-invalid-order') throw error;
+    await recordCapturedInventoryConflict(database, pendingRef, verification, source, error.code);
+    throw capturedInventoryConflictError();
+  }
+  assertRecordedRazorpayPayment(orderId, result.order, verification.gatewayPaymentId);
+  if (result.created) {
+    try { await pendingRef.delete(); } catch (_) { /* paid order remains authoritative */ }
+  }
+  // The helper's claim is the sole duplicate-email guard. Calling it for an
+  // idempotent paid-order result lets a fixed missing-configuration failure
+  // retry safely, while ambiguous SMTP failures remain protected.
+  await sendConfirmation(orderId, result.order, { db: database });
+  return result;
+}
+
+async function claimRazorpayEvent(database, eventId, eventType, orderId) {
+  const ref = database.collection('paymentWebhookEvents')
+    .doc(crypto.createHash('sha256').update(eventId).digest('hex'));
+  return database.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (snapshot.exists && snapshot.data()?.status === 'processed') return { duplicate: true, ref };
+    transaction.set(ref, { eventId, eventType, orderId, status: 'processing', updatedAt: new Date().toISOString() }, { merge: true });
+    return { duplicate: false, ref };
+  });
+}
+
+/**
+ * Razorpay posts an HMAC over the exact request bytes. This route receives a
+ * Buffer via the route-specific express.raw middleware above; it never signs a
+ * parsed or re-serialised body.
+ */
+async function handleRazorpayWebhookRequest(req, res, dependencies = {}) {
+  const database = dependencies.database || db;
+  const paymentGateway = dependencies.paymentGateway || gateway;
+  const finalize = dependencies.finalize || createRazorpayPaidOrder;
+  if (!paymentGateway.verifyWebhookSignature(req.body, req.get('x-razorpay-signature'))) {
+    return res.status(401).json({ success: false, message: 'Invalid webhook signature.' });
+  }
+  let event;
+  try { event = JSON.parse(req.body.toString('utf8')); } catch (_) {
+    return res.status(400).json({ success: false, message: 'Invalid webhook payload.' });
+  }
+  const eventId = req.get('x-razorpay-event-id');
+  const eventType = event?.event;
+  const payment = event?.payload?.payment?.entity;
+  const orderId = payment?.order_id;
+  if (!database) return res.status(503).json({ success: false, message: 'Server database is not initialized.' });
+  if (!eventId || !eventType || !orderId) {
+    return res.status(400).json({ success: false, message: 'Webhook payload is incomplete.' });
   }
 
   try {
-    // --- Idempotency check: the Cashfree order ID is the Firestore document ID. ---
-    // A deterministic document lets return-page verification and the webhook
-    // converge on the same record.
-    const paidOrderRef = db ? db.collection('orders').doc(cashfreeOrderId) : null;
-    if (db) {
-      const existingDoc = await paidOrderRef.get();
-      if (existingDoc.exists) {
-        const existingData = existingDoc.data();
-        console.log(`[Payment] Order ${cashfreeOrderId} already verified (idempotent).`);
-        return res.status(200).json({
-          success: true,
-          message: 'Payment already verified.',
-          orderId: cashfreeOrderId,
-          paymentStatus: existingData.status,
-          order: {
-            items: existingData.items,
-            totalAmount: existingData.pricing?.total,
-            customer: existingData.customer,
-          },
-        });
-      }
-    }
-
-    // --- Verify with Cashfree API ---
-    const verification = await gateway.verifyPayment({ orderId: cashfreeOrderId });
-
-    if (verification.verified) {
-      console.log(`[Payment] Verification successful for Cashfree order: ${cashfreeOrderId}`);
-
-      let firestoreOrderId = '';
-      let orderDetails = null;
-
-      if (db) {
-        // Retrieve the pending order context we saved during create-order
-        const pendingSnap = await db.collection('pendingOrders').doc(cashfreeOrderId).get();
-        const pendingData = pendingSnap.exists ? pendingSnap.data() : null;
-
-        if (!pendingData) {
-          console.warn(`[Payment] No pending order found for ${cashfreeOrderId}; refusing to persist it.`);
-          return res.status(409).json({
-            success: false,
-            message: 'Payment order context is missing. Please contact support with your order ID.',
-            orderId: cashfreeOrderId,
-            paymentStatus: verification.paymentStatus,
-          });
-        }
-
-        const items = pendingData?.items || [];
-        const customer = pendingData?.customer || {};
-        const shipping = pendingData?.shipping || {};
-        // New orders have zero additional tax. Legacy pending orders retain
-        // their stored amount so a previously created Cashfree order can still
-        // be verified accurately.
-        const serverSubtotal = Math.round(items.reduce((sum, item) => sum + (item.price * item.quantity), 0) * 100) / 100;
-        const cashfreeTotal = Number(verification.orderAmount);
-        const storedTax = Number(pendingData?.taxAmount);
-        // Legacy pending orders predate tax-inclusive Cashfree charges. Preserve
-        // their actual Cashfree amount instead of recording a different total.
-        const serverTax = Number.isFinite(storedTax)
-          ? storedTax
-          : Math.max(0, Math.round((cashfreeTotal - serverSubtotal) * 100) / 100);
-        const serverShipping = 0;
-        const expectedTotal = Number.isFinite(Number(pendingData?.totalAmount))
-          ? Number(pendingData.totalAmount)
-          : serverSubtotal + serverTax + serverShipping;
-
-        if (verification.orderCurrency !== 'INR' || !Number.isFinite(cashfreeTotal) || cashfreeTotal <= 0 ||
-          Math.round(cashfreeTotal * 100) !== Math.round(expectedTotal * 100)) {
-          throw new Error('Cashfree amount does not match the server-calculated order total.');
-        }
-
-        const finalOrderData = {
-          customer: {
-            email: sanitizeString(customer.email, 254),
-            name: sanitizeString(customer.name, 200),
-            firstName: sanitizeString(customer.name?.split(' ')[0] || customer.firstName || '', 100),
-            lastName: sanitizeString(customer.name?.split(' ').slice(1).join(' ') || customer.lastName || '', 100),
-            phone: sanitizeString(customer.phone, 20),
-          },
-          shipping: {
-            country: sanitizeString(shipping.country, 5),
-            doorNo: sanitizeString(shipping.doorNo, 100),
-            addressLine1: sanitizeString(shipping.addressLine1 ?? shipping.address, 500),
-            addressLine2: sanitizeString(shipping.addressLine2 ?? shipping.apartment, 500),
-            address: sanitizeString(shipping.addressLine1 ?? shipping.address, 500),
-            apartment: sanitizeString(shipping.addressLine2 ?? shipping.apartment, 500),
-            city: sanitizeString(shipping.city, 100),
-            state: sanitizeString(shipping.state, 100),
-            pinCode: sanitizeString(shipping.pinCode, 10),
-          },
-          items: items.map(paidOrderItem),
-          pricing: {
-            subtotal: serverSubtotal,
-            tax: serverTax,
-            shipping: serverShipping,
-            total: cashfreeTotal,
-          },
-          payment: {
-            gateway: gateway.gatewayName,
-            cashfreeOrderId: cashfreeOrderId,
-            transactionId: verification.gatewayPaymentId,
-            paymentStatus: verification.paymentStatus,
-          },
-          status: 'paid',
-          createdAt: new Date().toISOString(),
-        };
-
-        let orderWrite;
-        try {
-          orderWrite = await createPaidOrderWithFulfillment(cashfreeOrderId, finalOrderData, items);
-        } catch (inventoryError) {
-          if (inventoryError.code === 'inventory-insufficient' || inventoryError.code === 'inventory-invalid-order') {
-            console.error(`[Inventory] Paid order ${cashfreeOrderId} requires manual resolution:`, inventoryError.message);
-            return res.status(409).json({
-              success: false,
-              message: `Payment was confirmed, but inventory could not be allocated. Please contact support with order ${cashfreeOrderId}.`,
-              orderId: cashfreeOrderId,
-              paymentStatus: 'paid',
-              inventoryConflict: true,
-            });
-          }
-          throw inventoryError;
-        }
-        if (!orderWrite.created) {
-          const existingData = orderWrite.order;
-          return res.status(200).json({
-            success: true,
-            message: 'Payment already verified.',
-            orderId: cashfreeOrderId,
-            paymentStatus: existingData?.status || 'paid',
-            order: {
-              items: existingData?.items || [],
-              totalAmount: existingData?.pricing?.total || 0,
-              customer: existingData?.customer || {},
-            },
-          });
-        }
-
-        firestoreOrderId = cashfreeOrderId;
-        orderDetails = { items: finalOrderData.items, totalAmount: finalOrderData.pricing.total, customer: finalOrderData.customer };
-        console.log(`[Firestore] Order document created: ${firestoreOrderId}`);
-
-        await sendOrderConfirmationEmail(cashfreeOrderId, orderWrite.order);
-
-        // Clean up pending order
-        try {
-          await db.collection('pendingOrders').doc(cashfreeOrderId).delete();
-        } catch (e) { /* ignore */ }
-      } else {
-        firestoreOrderId = 'dev_mock_' + Math.random().toString(36).substr(2, 9);
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: 'Payment verified and order stored successfully.',
-        orderId: firestoreOrderId,
-        paymentStatus: 'paid',
-        order: orderDetails,
+    const claim = await claimRazorpayEvent(database, eventId, eventType, orderId);
+    if (claim.duplicate) return res.status(200).json({ success: true, message: 'Already processed.' });
+    if (eventType === 'payment.failed') {
+      const failureOutcome = await database.runTransaction(async (transaction) => {
+        const paidOrder = await transaction.get(database.collection('orders').doc(orderId));
+        const pendingRef = database.collection('pendingOrders').doc(orderId);
+        const pending = await transaction.get(pendingRef);
+        if (paidOrder.exists || pending.data()?.paymentStatus === 'captured') return 'ignored_after_capture';
+        if (!pending.exists) return 'missing_context';
+        transaction.set(pendingRef, {
+          status: 'payment_failed', paymentStatus: 'failed', updatedAt: new Date().toISOString(),
+        }, { merge: true });
+        return 'failed';
       });
-    } else {
-      // Payment not successful
-      console.warn(`[Payment] Order ${cashfreeOrderId} not paid. Status: ${verification.paymentStatus}`);
+      await claim.ref.set({ status: 'processed', outcome: failureOutcome, processedAt: new Date().toISOString() }, { merge: true });
+      return res.status(200).json({ success: true, message: failureOutcome === 'failed' ? 'Payment failure recorded.' : 'Payment failure acknowledged.' });
+    }
+    if (eventType !== 'payment.captured' || !payment?.id) {
+      await claim.ref.set({ status: 'processed', outcome: 'ignored', processedAt: new Date().toISOString() }, { merge: true });
+      return res.status(200).json({ success: true, message: 'Event ignored.' });
+    }
+    const verification = await paymentGateway.verifyWebhookPayment({ orderId, paymentId: payment.id });
+    if (!verification.verified) {
+      await claim.ref.set({ status: 'pending_confirmation', updatedAt: new Date().toISOString() }, { merge: true });
+      return res.status(503).json({ success: false, message: 'Payment is not captured yet.' });
+    }
+    let result;
+    try {
+      result = await finalize(orderId, verification, 'webhook');
+    } catch (error) {
+      if (error.code !== 'captured-inventory-conflict') throw error;
+      await claim.ref.set({ status: 'processed', outcome: 'manual_review', processedAt: new Date().toISOString() }, { merge: true });
+      return res.status(200).json({ success: true, message: 'Captured payment recorded for manual review.' });
+    }
+    await claim.ref.set({ status: 'processed', outcome: result.created ? 'created' : 'already_paid', processedAt: new Date().toISOString() }, { merge: true });
+    return res.status(200).json({ success: true, message: result.created ? 'Order processed.' : 'Already processed.' });
+  } catch (error) {
+    console.error('[Razorpay Webhook Error]', error.message);
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message || 'Webhook processing error.' });
+  }
+}
+
+app.post('/api/razorpay-webhook', (req, res) => handleRazorpayWebhookRequest(req, res));
+
+async function verifyRazorpayPaymentRequest(req, res, dependencies = {}) {
+  const database = dependencies.database || db;
+  const paymentGateway = dependencies.paymentGateway || gateway;
+  const finalize = dependencies.finalize || createRazorpayPaidOrder;
+  const { orderId, payment } = req.body || {};
+  if (!database) return res.status(500).json({ success: false, message: 'Server database is not initialized.' });
+  if (!orderId || typeof orderId !== 'string' || !payment || typeof payment !== 'object') {
+    return res.status(400).json({ success: false, message: 'Validation Error: payment verification details are required.' });
+  }
+  try {
+    const pending = await database.collection('pendingOrders').doc(orderId).get();
+    if (!pending.exists || pending.data()?.razorpayOrderId !== orderId) {
+      // A captured webhook may have finalized and deleted pending context before
+      // the browser returns. Authenticate the original callback and match the
+      // recorded payment before releasing any protected order details.
+      const paidSnapshot = await database.collection('orders').doc(orderId).get();
+      const paidOrder = paidSnapshot.exists ? paidSnapshot.data() : null;
+      const paidTotal = Number(paidOrder?.pricing?.total);
+      if (paidOrder?.status !== 'paid' || paidOrder?.payment?.gateway !== 'razorpay'
+        || paidOrder?.payment?.razorpayOrderId !== orderId || !Number.isFinite(paidTotal) || paidTotal <= 0) {
+        return res.status(409).json({ success: false, message: 'Payment order context is missing. Please contact support with your order ID.' });
+      }
+      const verification = await paymentGateway.verifyPayment({
+        orderId, paymentData: payment, orderDetails: { totalAmount: paidTotal },
+      });
+      if (!verification.verified || verification.gatewayPaymentId !== paidOrder.payment.razorpayPaymentId
+        || verification.gatewayOrderId !== orderId || verification.orderCurrency !== 'INR'
+        || Math.round(Number(verification.orderAmount) * 100) !== Math.round(paidTotal * 100)) {
+        return res.status(401).json({ success: false, paymentStatus: 'unverified', message: 'Payment could not be verified for this order.' });
+      }
+      return res.status(200).json(paymentResponse(orderId, paidOrder));
+    }
+    const verification = await paymentGateway.verifyPayment({ orderId, paymentData: payment, orderDetails: pending.data() });
+    if (!verification.verified) {
+      await database.runTransaction(async (transaction) => {
+        const current = await transaction.get(pending.ref);
+        if (!current.exists || current.data()?.paymentStatus === 'captured') return;
+        transaction.set(pending.ref, { paymentStatus: verification.paymentStatus || 'pending', updatedAt: new Date().toISOString() }, { merge: true });
+      });
       return res.status(200).json({
         success: false,
-        message: `Payment not completed. Status: ${verification.paymentStatus || 'UNKNOWN'}`,
-        paymentStatus: verification.paymentStatus || 'UNKNOWN',
+        paymentStatus: verification.paymentStatus || 'pending',
+        message: verification.paymentStatus === 'failed' ? 'Payment failed. Please try again.' : 'Payment is still pending confirmation.',
       });
     }
+    const result = await finalize(orderId, verification, 'checkout', { database });
+    return res.status(200).json(paymentResponse(orderId, result.order));
   } catch (error) {
-    console.error('[Verification Error]', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Internal verification process error.',
-    });
+    if (error.code === 'captured-inventory-conflict') {
+      return res.status(409).json({
+        success: false, orderId, orderStatus: 'requires_review', paymentStatus: 'captured',
+        message: error.message,
+      });
+    }
+    console.error('[Razorpay Verification Error]', error.message);
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message || 'Payment verification failed.' });
   }
-});
+}
 
-/**
- * CASHFREE WEBHOOK ENDPOINT
- * POST /api/cashfree-webhook
- * Receives Cashfree webhook notifications for payment events.
- * Idempotent: if order already processed, skips.
- */
-app.post('/api/cashfree-webhook', async (req, res) => {
-  try {
-    const { data, type, event_time } = req.body || {};
+app.post('/api/verify-payment', (req, res) => verifyRazorpayPaymentRequest(req, res));
 
-    // Cashfree sends different event types; we care about payment success
-    if (!data || !data.order) {
-      return res.status(200).json({ success: true, message: 'Ignored: no order data.' });
-    }
-
-    const cashfreeOrderId = data.order.order_id;
-    const paymentStatus = data.payment?.payment_status || data.order.order_status;
-
-    console.log(`[Webhook] Received ${type || 'event'} for order ${cashfreeOrderId}, status: ${paymentStatus}`);
-
-    if (paymentStatus !== 'SUCCESS' && paymentStatus !== 'PAID') {
-      console.log(`[Webhook] Ignoring non-success status: ${paymentStatus}`);
-      return res.status(200).json({ success: true, message: 'Acknowledged.' });
-    }
-
-    if (!db) {
-      console.warn('[Webhook] Firestore not initialized, cannot process webhook.');
-      return res.status(200).json({ success: true, message: 'Acknowledged (no DB).' });
-    }
-
-    // Idempotency: return-page verification and webhooks share this one
-    // deterministic document, keyed by Cashfree order ID.
-    const paidOrderRef = db.collection('orders').doc(cashfreeOrderId);
-    const existing = await paidOrderRef.get();
-
-    if (existing.exists) {
-      console.log(`[Webhook] Order ${cashfreeOrderId} already processed. Skipping.`);
-      return res.status(200).json({ success: true, message: 'Already processed.' });
-    }
-
-    // Verify with Cashfree API (don't trust webhook data alone)
-    const verification = await gateway.verifyPayment({ orderId: cashfreeOrderId });
-
-    if (!verification.verified) {
-      console.warn(`[Webhook] Server-side verification failed for ${cashfreeOrderId}`);
-      return res.status(200).json({ success: true, message: 'Verification failed.' });
-    }
-
-    // Retrieve pending order
-    const pendingSnap = await db.collection('pendingOrders').doc(cashfreeOrderId).get();
-    const pendingData = pendingSnap.exists ? pendingSnap.data() : null;
-
-    if (!pendingData) {
-      console.warn(`[Webhook] No pending order for ${cashfreeOrderId}`);
-      return res.status(200).json({ success: true, message: 'No pending order found.' });
-    }
-
-    const items = pendingData.items || [];
-    const customer = pendingData.customer || {};
-    const shipping = pendingData.shipping || {};
-    const serverSubtotal = Math.round(items.reduce((sum, item) => sum + (item.price * item.quantity), 0) * 100) / 100;
-    const cashfreeTotal = Number(verification.orderAmount);
-    const storedTax = Number(pendingData?.taxAmount);
-    const serverTax = Number.isFinite(storedTax)
-      ? storedTax
-      : Math.max(0, Math.round((cashfreeTotal - serverSubtotal) * 100) / 100);
-    const serverShipping = 0;
-    const expectedTotal = Number.isFinite(Number(pendingData?.totalAmount))
-      ? Number(pendingData.totalAmount)
-      : serverSubtotal + serverTax + serverShipping;
-
-    if (verification.orderCurrency !== 'INR' || !Number.isFinite(cashfreeTotal) || cashfreeTotal <= 0 ||
-      Math.round(cashfreeTotal * 100) !== Math.round(expectedTotal * 100)) {
-      throw new Error('Cashfree amount does not match the server-calculated order total.');
-    }
-
-    const finalOrderData = {
-      customer: {
-        email: sanitizeString(customer.email, 254),
-        name: sanitizeString(customer.name, 200),
-        firstName: sanitizeString(customer.name?.split(' ')[0] || '', 100),
-        lastName: sanitizeString(customer.name?.split(' ').slice(1).join(' ') || '', 100),
-        phone: sanitizeString(customer.phone, 20),
-      },
-      shipping: {
-        country: sanitizeString(shipping.country, 5),
-        doorNo: sanitizeString(shipping.doorNo, 100),
-        addressLine1: sanitizeString(shipping.addressLine1 ?? shipping.address, 500),
-        addressLine2: sanitizeString(shipping.addressLine2 ?? shipping.apartment, 500),
-        address: sanitizeString(shipping.addressLine1 ?? shipping.address, 500),
-        apartment: sanitizeString(shipping.addressLine2 ?? shipping.apartment, 500),
-        city: sanitizeString(shipping.city, 100),
-        state: sanitizeString(shipping.state, 100),
-        pinCode: sanitizeString(shipping.pinCode, 10),
-      },
-      items: items.map(paidOrderItem),
-      pricing: { subtotal: serverSubtotal, tax: serverTax, shipping: serverShipping, total: cashfreeTotal },
-      payment: {
-        gateway: gateway.gatewayName,
-        cashfreeOrderId,
-        transactionId: verification.gatewayPaymentId,
-        paymentStatus: verification.paymentStatus,
-      },
-      status: 'paid',
-      createdAt: new Date().toISOString(),
-      source: 'webhook',
-    };
-
-    const orderWrite = await createPaidOrderWithFulfillment(cashfreeOrderId, finalOrderData, items);
-    if (!orderWrite.created) {
-      return res.status(200).json({ success: true, message: 'Already processed.' });
-    }
-
-    console.log(`[Webhook] Order created for ${cashfreeOrderId}`);
-    await sendOrderConfirmationEmail(cashfreeOrderId, orderWrite.order);
-
-    // Clean up pending order
-    try { await db.collection('pendingOrders').doc(cashfreeOrderId).delete(); } catch (e) { /* ignore */ }
-
-    return res.status(200).json({ success: true, message: 'Order processed via webhook.' });
-  } catch (error) {
-    console.error('[Webhook Error]', error);
-    // Always return 200 to Cashfree so they don't retry indefinitely
-    return res.status(200).json({ success: false, message: 'Webhook processing error.' });
-  }
-});
 /**
  * NEWSLETTER SUBSCRIPTION ENDPOINT
  * POST /api/subscribe
@@ -2063,4 +2331,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, calculateCheckoutPricing, pendingOrderItem, paidOrderItem, walkInCustomer, walkInPayment, walkInOrderId, coupleStockAdapters, orderConfirmationMessage, sendOrderConfirmationEmail };
+module.exports = { app, calculateCheckoutPricing, validateCheckoutDetails, pendingOrderItem, paidOrderItem, parseNewProductSizes, coupleStockAdapters, createPaidOrderWithFulfillment, createRazorpayPaidOrder, verifyRazorpayPaymentRequest, handleRazorpayWebhookRequest, claimRazorpayEvent };

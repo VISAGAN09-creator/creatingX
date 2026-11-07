@@ -16,13 +16,16 @@ import { Navbar } from './components/Navbar';
 import { ProductDetailsPage } from './components/ProductDetailsPage';
 import { ProductViewingPage } from './components/ProductViewingPage';
 import { PaymentReturnPage } from './components/PaymentReturnPage';
+import { PolicyPage } from './components/PolicyPage';
 import { SearchDrawer } from './components/SearchDrawer';
+import { SizeGuideModal } from './components/SizeGuideModal';
 import { TOTD } from './components/TOTD';
 import { TOTDProductDetailsPage } from './components/TOTDProductDetailsPage';
 import { TShirtCustomizer } from './features/tshirt-customizer/TShirtCustomizer';
 import { useCart } from './hooks/useCart';
 import { useCatalog } from './hooks/useCatalog';
 import { useRouter } from './hooks/useRouter';
+import { cartCanCheckout, cartSubtotal, resolveCartLines } from './utils/cartCatalog';
 import { scrollToHash } from './utils/scroll';
 
 // ============================================================================
@@ -41,7 +44,21 @@ export default function App() {
   const catalog = useCatalog();
   const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [sizeGuideOpen, setSizeGuideOpen] = useState(false);
   const [checkoutPending, setCheckoutPending] = useState(false);
+
+  const displayCartLines = useMemo(
+    () => resolveCartLines(cart.cartLines, catalog),
+    [
+      cart.cartLines,
+      catalog.catalogProducts,
+      catalog.catalogStatus,
+      catalog.totdProducts,
+      catalog.totdStatus,
+    ],
+  );
+  const displayCartSubtotal = useMemo(() => cartSubtotal(displayCartLines), [displayCartLines]);
+  const canCheckout = useMemo(() => cartCanCheckout(displayCartLines), [displayCartLines]);
 
   // ---- Cross-concern derived value: selected product from both catalogs ----
   const selectedProduct = useMemo(
@@ -61,6 +78,7 @@ export default function App() {
 
   // ---- Cross-concern handler: checkout closes cart drawer, then navigates --
   const handleOpenCheckout = () => {
+    if (!canCheckout) return;
     // The cart's fixed exit layer covers the viewport until its motion exit
     // completes. Navigate only after that layer unmounts so it cannot capture
     // pointer or focus events intended for checkout fields.
@@ -76,6 +94,18 @@ export default function App() {
 
   const effectiveActivePage =
     isTotdProduct && router.activePage === 'productDetail' ? 'totd' : router.activePage;
+  const catalogueIsVisible = router.activePage === 'products';
+  const keepCatalogueMounted = catalogueIsVisible || (
+    router.activePage === 'productDetail' && router.productReturnPage === 'products'
+  );
+
+  const navigateFromPolicy = (href: string) => {
+    if (router.activePage === 'terms-and-conditions' || router.activePage === 'privacy-policy' || router.activePage === 'refund-policy' || router.activePage === 'shipping-policy') {
+      window.location.href = `/varataaa/${href}`;
+      return;
+    }
+    router.navigateToHomeSection(href);
+  };
 
   if (router.activePage === 'admin') {
     return (
@@ -96,13 +126,29 @@ export default function App() {
           cartCount={cart.cartCount}
           onCartOpen={() => cart.setCartOpen(true)}
           onSearchOpen={() => setSearchOpen(true)}
-          onNavigate={router.navigateToHomeSection}
+          onSizeGuideOpen={() => setSizeGuideOpen(true)}
+          onNavigate={navigateFromPolicy}
           activePage={effectiveActivePage}
         />
       )}
 
       <main className="relative z-[1] overflow-x-hidden">
-        {router.activePage === 'paymentReturn' ? (
+        {keepCatalogueMounted && (
+          <div hidden={!catalogueIsVisible} aria-hidden={!catalogueIsVisible}>
+            <ProductViewingPage
+              products={catalog.catalogProducts}
+              status={catalog.catalogStatus}
+              initialFilter={router.selectedCatalogFilter}
+              onAddToCart={cart.addToCart}
+              onOpenProduct={router.openProductDetail}
+              onBack={() => router.navigateToHomeSection('#hero')}
+            />
+          </div>
+        )}
+
+        {router.activePage === 'terms-and-conditions' || router.activePage === 'privacy-policy' || router.activePage === 'refund-policy' || router.activePage === 'shipping-policy' ? (
+          <PolicyPage slug={router.activePage} />
+        ) : router.activePage === 'paymentReturn' ? (
           <PaymentReturnPage
             orderId={router.paymentReturnOrderId}
             onBack={() => {
@@ -111,8 +157,7 @@ export default function App() {
           />
         ) : router.activePage === 'checkout' ? (
           <CheckoutPage
-            lines={cart.cartLines}
-            subtotal={cart.subtotal}
+            lines={displayCartLines}
             onClearCart={cart.clearCart}
             onBack={() => {
               router.navigateToHomeSection('#hero');
@@ -138,16 +183,7 @@ export default function App() {
               onBack={router.closeProductDetail}
             />
           )
-        ) : router.activePage === 'products' ? (
-          <ProductViewingPage
-            products={catalog.catalogProducts}
-            status={catalog.catalogStatus}
-            initialFilter={router.selectedCatalogFilter}
-            onAddToCart={cart.addToCart}
-            onOpenProduct={router.openProductDetail}
-            onBack={() => router.navigateToHomeSection('#hero')}
-          />
-        ) : TOTD_ENABLED && router.activePage === 'totd' ? (
+        ) : router.activePage === 'products' ? null : TOTD_ENABLED && router.activePage === 'totd' ? (
           <TOTD
             products={catalog.totdProducts}
             status={catalog.totdStatus}
@@ -157,7 +193,6 @@ export default function App() {
           />
         ) : router.activePage === 'customize' ? (
           <TShirtCustomizer
-            onAddToCart={cart.addToCart}
             onBack={() => router.navigateToHomeSection('#hero')}
           />
         ) : (
@@ -188,14 +223,19 @@ export default function App() {
         )}
       </main>
 
-      {router.activePage !== 'checkout' && router.activePage !== 'paymentReturn' && (
-        <Footer activePage={effectiveActivePage} onNavigate={router.navigateToHomeSection} />
+      {router.activePage !== 'checkout' && router.activePage !== 'paymentReturn' && router.activePage !== 'customize' && (
+        <Footer
+          activePage={effectiveActivePage}
+          onNavigate={navigateFromPolicy}
+          onSizeGuideOpen={() => setSizeGuideOpen(true)}
+        />
       )}
 
       <CartDrawer
         isOpen={cart.cartOpen}
-        lines={cart.cartLines}
-        subtotal={cart.subtotal}
+        lines={displayCartLines}
+        subtotal={displayCartSubtotal}
+        canCheckout={canCheckout}
         onClose={() => cart.setCartOpen(false)}
         onIncrement={cart.increment}
         onDecrement={cart.decrement}
@@ -211,6 +251,7 @@ export default function App() {
         onOpenProduct={router.openProductDetail}
       />
       <CookieConsent />
+      <SizeGuideModal open={sizeGuideOpen} onClose={() => setSizeGuideOpen(false)} />
     </>
   );
 }

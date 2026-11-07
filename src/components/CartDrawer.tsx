@@ -1,15 +1,16 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
 import { useEffect } from 'react';
-import type { CartLine } from '../types';
+import type { CartDisplayLine } from '../types';
 import { formatPrice } from '../utils/format';
 import { MagneticButton } from './Magnetic';
 import { SmartImage } from './SmartImage';
 
 type CartDrawerProps = {
   isOpen: boolean;
-  lines: CartLine[];
-  subtotal: number;
+  lines: CartDisplayLine[];
+  subtotal: number | null;
+  canCheckout: boolean;
   onClose: () => void;
   onIncrement: (id: string) => void;
   onDecrement: (id: string) => void;
@@ -23,6 +24,7 @@ export function CartDrawer({
   isOpen,
   lines,
   subtotal,
+  canCheckout,
   onClose,
   onIncrement,
   onDecrement,
@@ -31,6 +33,9 @@ export function CartDrawer({
   onExitComplete,
   checkoutPending = false,
 }: CartDrawerProps) {
+  const hasLoadingLines = lines.some((line) => line.availability === 'loading');
+  const hasUnavailableLines = lines.some((line) => line.availability !== 'available' && line.availability !== 'loading');
+
   useEffect(() => {
     if (!isOpen) return undefined;
 
@@ -119,8 +124,16 @@ export function CartDrawer({
                       <div className="min-w-0">
                         <div className="mb-3 flex items-start justify-between gap-3">
                           <div>
-                            <h3 className="font-display text-lg font-semibold text-black">{line.name}</h3>
-                            <p className="text-sm text-metal-text">{formatPrice(line.price)}</p>
+                            <h3 className="font-display text-lg font-semibold text-black">
+                              {line.availability === 'loading' ? 'Refreshing product…' : line.name}
+                            </h3>
+                            <p className="text-sm text-metal-text">
+                              {line.availability === 'loading'
+                                ? 'Updating price…'
+                                : line.availability === 'available' || line.availability === 'variant-unavailable'
+                                  ? formatPrice(line.price)
+                                  : 'Unavailable'}
+                            </p>
                             {(line.selectedSize || line.selectedMensSize || line.selectedWomensSize || line.selectedColor) && (
                               <p className="mt-1 text-xs text-metal-text">
                                 {[
@@ -131,6 +144,11 @@ export function CartDrawer({
                                 ]
                                   .filter(Boolean)
                                   .join(' · ')}
+                              </p>
+                            )}
+                            {line.availability !== 'available' && (
+                              <p role="status" className="mt-2 text-xs font-medium text-[#a33a2b]">
+                                {line.availabilityMessage}
                               </p>
                             )}
                           </div>
@@ -170,7 +188,11 @@ export function CartDrawer({
                             </button>
                           </div>
                           <p className="text-sm font-semibold text-black">
-                            {formatPrice((line.price ?? 0) * line.quantity)}
+                            {line.availability === 'loading'
+                              ? 'Updating…'
+                              : line.availability === 'available' || line.availability === 'variant-unavailable'
+                                ? formatPrice((line.price ?? 0) * line.quantity)
+                                : 'Unavailable'}
                           </p>
                         </div>
                       </div>
@@ -183,15 +205,23 @@ export function CartDrawer({
             <div className="border-t border-metal-light px-5 py-5 sm:px-6">
               <div className="mb-5 flex items-center justify-between">
                 <span className="text-sm uppercase tracking-[0.1em] text-metal-text">Subtotal</span>
-                <span className="font-display text-2xl font-bold text-black">{formatPrice(subtotal)}</span>
+                <span className="font-display text-right text-2xl font-bold text-black">
+                  {subtotal === null
+                    ? hasLoadingLines
+                      ? 'Updating…'
+                      : hasUnavailableLines
+                        ? 'Review items'
+                        : '—'
+                    : formatPrice(subtotal)}
+                </span>
               </div>
               <MagneticButton
                 type="button"
-                disabled={lines.length === 0 || checkoutPending}
+                disabled={lines.length === 0 || !canCheckout || checkoutPending}
                 onClick={onCheckout}
                 className="liquid-metal metal-sheen flex min-h-14 w-full items-center justify-center bg-black px-6 py-4 text-sm font-semibold uppercase tracking-[0.08em] text-white"
               >
-                Checkout
+                {hasLoadingLines ? 'Updating…' : hasUnavailableLines ? 'Review items' : 'Checkout'}
               </MagneticButton>
             </div>
           </motion.aside>

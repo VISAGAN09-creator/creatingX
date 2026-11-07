@@ -1,5 +1,6 @@
 import { HelpCircle } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import policy from '../../shipping-rates.json';
 import type { CartLine } from '../types';
 import { formatPrice } from '../utils/format';
 import { paymentApiPath } from '../lib/paymentApi';
@@ -9,7 +10,6 @@ import { loadGatewayScript, openCheckout } from '../lib/paymentGateway';
 
 type CheckoutPageProps = {
   lines: CartLine[];
-  subtotal: number;
   onClearCart: () => void;
   onBack: () => void;
 };
@@ -29,30 +29,160 @@ type CheckoutDetails = {
   pinCode: string;
 };
 
+type CheckoutPreviewItem = {
+  cartId?: string;
+  productId: string;
+  name: string;
+  image: string;
+  alt?: string;
+  model?: string;
+  theme?: string;
+  price: number;
+  quantity: number;
+  lineTotal: number;
+  selectedSize?: string;
+  selectedMensSize?: string;
+  selectedWomensSize?: string;
+  selectedColor?: string;
+};
+
+type CheckoutPreviewPricing = {
+  subtotalAmount: number;
+  taxAmount: number;
+};
+
 function trimText(value: string) {
   return value.trim().replace(/\s+/g, ' ');
 }
 
-export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutPageProps) {
+export function CheckoutPage({ lines, onClearCart, onBack }: CheckoutPageProps) {
   const [email, setEmail] = useState('');
-  const [country, setCountry] = useState('IN');
+  const country = 'IN';
   const [fullName, setFullName] = useState('');
   const [doorNo, setDoorNo] = useState('');
   const [addressLine1, setAddressLine1] = useState('');
   const [addressLine2, setAddressLine2] = useState('');
-  const [city, setCity] = useState('Chennai');
-  const [state, setState] = useState('TN');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
   const [pinCode, setPinCode] = useState('');
+  const [pinMessage, setPinMessage] = useState('');
   const [phone, setPhone] = useState('');
 
   const [errors, setErrors] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<ToastState>(null);
   const [isPaying, setIsPaying] = useState(false);
   const [successOrderId, setSuccessOrderId] = useState<string | null>(null);
+  const [checkoutLines, setCheckoutLines] = useState<CartLine[]>(lines);
+  const [previewPricing, setPreviewPricing] = useState<CheckoutPreviewPricing | null>(null);
+  const [refreshStatus, setRefreshStatus] = useState<'loading' | 'ready' | 'error'>(
+    lines.length > 0 ? 'loading' : 'ready',
+  );
+  const [refreshError, setRefreshError] = useState('');
+  const [refreshAttempt, setRefreshAttempt] = useState(0);
 
-  const itemCount = useMemo(() => lines.reduce((total, line) => total + line.quantity, 0), [lines]);
-  const shipping = 0;
-  const total = Math.round((subtotal + shipping) * 100) / 100;
+  useEffect(() => {
+    const controller = new AbortController();
+
+    if (lines.length === 0) {
+      setCheckoutLines([]);
+      setPreviewPricing({ subtotalAmount: 0, taxAmount: 0 });
+      setRefreshError('');
+      setRefreshStatus('ready');
+      return () => controller.abort();
+    }
+
+    setRefreshStatus('loading');
+    setRefreshError('');
+    setCheckoutLines([]);
+    setPreviewPricing(null);
+
+    fetch(paymentApiPath('/checkout-preview'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        items: lines.map((line) => ({
+          cartId: line.id,
+          id: line.checkoutProductId ?? line.id,
+          quantity: line.quantity,
+          ...(line.isCouple
+            ? { mensSize: line.selectedMensSize, womensSize: line.selectedWomensSize }
+            : { size: line.selectedSize }),
+          ...(line.selectedColor ? { color: line.selectedColor } : {}),
+        })),
+      }),
+    })
+      .then(async (response) => {
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.message || 'Unable to refresh checkout products.');
+        if (!Array.isArray(result.items) || result.items.length !== lines.length) {
+          throw new Error('The checkout product list could not be refreshed.');
+        }
+
+        const latestItems = result.items as CheckoutPreviewItem[];
+        const latestByCartId = new Map(
+          latestItems.filter((item) => item.cartId).map((item) => [item.cartId, item]),
+        );
+        const refreshedLines = lines.map((line, index) => {
+          const latest = latestByCartId.get(line.id) ?? latestItems[index];
+          if (!latest || typeof latest.price !== 'number' || !Number.isFinite(latest.price)) {
+            throw new Error(`${line.name} is no longer available for checkout.`);
+          }
+          return {
+            ...line,
+            name: latest.name,
+            image: latest.image,
+            alt: latest.alt ?? line.alt,
+            model: latest.model || line.model,
+            theme: latest.theme || line.theme,
+            price: latest.price,
+            selectedSize: latest.selectedSize ?? line.selectedSize,
+            selectedMensSize: latest.selectedMensSize ?? line.selectedMensSize,
+            selectedWomensSize: latest.selectedWomensSize ?? line.selectedWomensSize,
+            selectedColor: latest.selectedColor ?? line.selectedColor,
+          };
+        });
+
+        setCheckoutLines(refreshedLines);
+        setPreviewPricing({
+          subtotalAmount: Number(result.pricing?.subtotalAmount) || 0,
+          taxAmount: Number(result.pricing?.taxAmount) || 0,
+        });
+        setRefreshStatus('ready');
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        setCheckoutLines([]);
+        setPreviewPricing(null);
+        setRefreshError(error instanceof Error ? error.message : 'Unable to refresh checkout products.');
+        setRefreshStatus('error');
+      });
+
+    return () => controller.abort();
+  }, [lines, refreshAttempt]);
+
+  const itemCount = useMemo(() => checkoutLines.reduce((total, line) => total + line.quantity, 0), [checkoutLines]);
+  const shirtCount = useMemo(() => checkoutLines.reduce((total, line) => total + line.quantity * (line.isCouple ? 2 : 1), 0), [checkoutLines]);
+  const subtotal = previewPricing?.subtotalAmount ?? 0;
+  const shipping = state ? Math.ceil(shirtCount / 3) * (policy.rates[state as keyof typeof policy.rates] || policy.defaultRate) : null;
+  const total = refreshStatus !== 'ready' || shipping === null
+    ? null
+    : Math.round((subtotal + shipping + (previewPricing?.taxAmount ?? 0)) * 100) / 100;
+
+  useEffect(() => {
+    if (!/^[1-9]\d{5}$/.test(pinCode)) return;
+    const controller = new AbortController();
+    setPinMessage('Checking PIN code…');
+    fetch(paymentApiPath(`/pin-state/${pinCode}`), { signal: controller.signal })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || 'PIN lookup unavailable.');
+        setState(result.state);
+        setPinMessage(`PIN code found in ${result.state}.`);
+      })
+      .catch((error) => { if (!controller.signal.aborted) setPinMessage(`${error.message} Select the state manually; checkout will verify it.`); });
+    return () => controller.abort();
+  }, [pinCode]);
 
   const showToast = (message: string, type?: 'success' | 'error') => {
     setToast({ message, type });
@@ -119,7 +249,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
       nextErrors.add('phone');
       message ||= 'Phone number must contain exactly 10 digits.';
     }
-    if (details.country === 'IN' && details.pinCode && !/^\d{6}$/.test(details.pinCode)) {
+    if (details.pinCode && !/^[1-9]\d{5}$/.test(details.pinCode)) {
       nextErrors.add('pinCode');
       message ||= 'Indian pincode must contain exactly 6 digits.';
     }
@@ -144,12 +274,12 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
   const handlePayNow = async () => {
     const details = validateRequiredFields();
     if (!details) return;
-    if (lines.length === 0 || total <= 0) {
+    if (refreshStatus !== 'ready' || checkoutLines.length === 0 || total === null || total <= 0) {
       showToast('Your cart is empty', 'error');
       return;
     }
 
-    const incompleteLine = lines.find((line) =>
+    const incompleteLine = checkoutLines.find((line) =>
       line.isCouple
         ? !line.selectedMensSize || !line.selectedWomensSize
         : !line.selectedSize,
@@ -179,7 +309,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          items: lines.map((line) => ({
+          items: checkoutLines.map((line) => ({
             id: line.checkoutProductId ?? line.id,
             quantity: line.quantity,
             ...(line.isCouple
@@ -223,18 +353,18 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
       // Store checkout context in sessionStorage for use after redirect
       try {
         sessionStorage.setItem(
-          'cashfree_checkout_context',
+          'razorpay_checkout_context',
           JSON.stringify({
             email: details.email,
             fullName: details.fullName,
-            orderId: orderData.gatewayData?.order_id,
+            orderId: orderData.orderId,
           }),
         );
       } catch {
         // sessionStorage may be unavailable; proceed anyway
       }
 
-      // Step 2: Open the gateway's checkout UI (this will redirect for Cashfree)
+      // Step 2: Open the payment provider's checkout UI.
       openCheckout(
         {
           email: details.email,
@@ -244,44 +374,19 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
           orderData,
         },
         {
-          // For redirect-based flows (Cashfree), onSuccess is typically not called
-          // because the browser navigates away. But we handle it for completeness.
-          onSuccess: async (paymentData) => {
-            setIsPaying(true);
+          onSuccess: (paymentData) => {
             try {
-              const verifyResponse = await fetch(paymentApiPath('/verify-payment'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ orderId: paymentData.order_id || orderData.gatewayData?.order_id }),
-              });
-
-              const verifyContentType = verifyResponse.headers.get('content-type') || '';
-              if (!verifyContentType.includes('application/json')) {
-                throw new Error('Backend verification returned an invalid response.');
-              }
-
-              if (!verifyResponse.ok) {
-                const errorData = await verifyResponse.json();
-                throw new Error(errorData.message || 'Payment verification failed.');
-              }
-
-              const result = await verifyResponse.json();
-              if (result.success) {
-                onClearCart();
-                setSuccessOrderId(result.orderId);
-              } else {
-                showToast(result.message || 'Payment was not successful.', 'error');
-              }
-              setIsPaying(false);
-            } catch (err) {
-              console.error('Error verifying payment:', err);
-              showToast(err instanceof Error ? err.message : 'Payment verification failed', 'error');
+              sessionStorage.setItem('razorpay_payment_response', JSON.stringify(paymentData));
+              window.location.hash = `#payment-return?order_id=${encodeURIComponent(orderData.orderId)}`;
+            } catch {
+              showToast('Payment completed, but verification details could not be saved. Please contact support.', 'error');
               setIsPaying(false);
             }
           },
 
           onDismiss: () => {
             setIsPaying(false);
+            showToast('Payment was cancelled.', 'error');
           },
 
           onError: (message) => {
@@ -302,18 +407,13 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
     return (
       <section className="relative z-[1] min-h-screen bg-white font-sans text-sm leading-normal text-[#1a1a1a] flex flex-col justify-between">
         <header className="border-b border-[#e0e0e0] px-4 py-5 text-center flex justify-center">
-          <button
-            type="button"
-           
-            className="flex items-center justify-center"
-            onClick={onBack}
-          >
+          <a href="/varataaa" className="flex items-center justify-center" aria-label="VARATAAA home">
             <BrandLogo
               containerClassName="h-10 w-[140px] sm:h-11"
               imageClassName="h-full w-full object-contain"
               fallbackClassName="flex h-full w-full items-center font-display text-lg font-bold tracking-wider text-black sm:text-xl"
             />
-          </button>
+          </a>
         </header>
 
         <div className="flex-1 flex flex-col items-center justify-center px-5 py-16 text-center max-w-md mx-auto">
@@ -355,6 +455,50 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
     );
   }
 
+  if (refreshStatus === 'loading') {
+    return (
+      <section className="relative z-[1] min-h-screen bg-white font-sans text-sm leading-normal text-[#1a1a1a]">
+        <header className="border-b border-[#e0e0e0] px-4 py-5 text-center flex justify-center">
+          <BrandLogo
+            containerClassName="h-10 w-[140px] sm:h-11"
+            imageClassName="h-full w-full object-contain"
+            fallbackClassName="flex h-full w-full items-center font-display text-lg font-bold tracking-wider text-black sm:text-xl"
+          />
+        </header>
+        <div role="status" className="flex min-h-[calc(100vh-73px)] flex-col items-center justify-center gap-4 px-6 text-center">
+          <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#d8d8d8] border-t-[#1a1a1a]" />
+          <p className="text-sm text-[#666666]">Refreshing your products and prices…</p>
+        </div>
+      </section>
+    );
+  }
+
+  if (refreshStatus === 'error') {
+    return (
+      <section className="relative z-[1] min-h-screen bg-white font-sans text-sm leading-normal text-[#1a1a1a]">
+        <header className="border-b border-[#e0e0e0] px-4 py-5 text-center flex justify-center">
+          <BrandLogo
+            containerClassName="h-10 w-[140px] sm:h-11"
+            imageClassName="h-full w-full object-contain"
+            fallbackClassName="flex h-full w-full items-center font-display text-lg font-bold tracking-wider text-black sm:text-xl"
+          />
+        </header>
+        <div className="flex min-h-[calc(100vh-73px)] flex-col items-center justify-center gap-4 px-6 text-center">
+          <h1 className="font-display text-2xl font-bold">Checkout needs an update</h1>
+          <p className="max-w-md text-sm text-[#666666]">{refreshError}</p>
+          <div className="flex flex-wrap justify-center gap-3">
+            <button type="button" className="h-12 bg-black px-6 text-xs font-bold uppercase tracking-[0.12em] text-white" onClick={() => setRefreshAttempt((attempt) => attempt + 1)}>
+              Try again
+            </button>
+            <button type="button" className="h-12 border border-[#d8d8d8] px-6 text-xs font-bold uppercase tracking-[0.12em]" onClick={onBack}>
+              Return to store
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   const inputClass = (field: string) =>
     `h-12 w-full rounded-lg border bg-white px-3.5 text-sm text-[#1a1a1a] outline-none transition focus:border-[#1a1a1a] focus:shadow-[0_0_0_3px_rgba(0,0,0,0.04)] ${errors.has(field) ? 'border-[#c0392b]' : 'border-[#e0e0e0]'
     }`;
@@ -375,18 +519,13 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
       )}
 
       <header className="border-b border-[#e0e0e0] px-4 py-5 text-center flex justify-center">
-        <button
-          type="button"
-         
-          className="flex items-center justify-center"
-          onClick={onBack}
-        >
+        <a href="/varataaa" className="flex items-center justify-center" aria-label="VARATAAA home">
           <BrandLogo
             containerClassName="h-10 w-[140px] sm:h-11"
             imageClassName="h-full w-full object-contain"
             fallbackClassName="flex h-full w-full items-center font-display text-lg font-bold tracking-wider text-black sm:text-xl"
           />
-        </button>
+        </a>
       </header>
 
       <div className="grid min-h-[calc(100vh-73px)] grid-cols-1 lg:grid-cols-2">
@@ -414,17 +553,9 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
           <div className="mb-4">
             <select
               value={country}
-              onChange={(event) => setCountry(event.target.value)}
               className="h-12 w-full rounded-lg border border-[#e0e0e0] bg-white px-3.5 text-sm text-[#1a1a1a] outline-none transition focus:border-[#1a1a1a] focus:shadow-[0_0_0_3px_rgba(0,0,0,0.04)]"
             >
               <option value="IN">India</option>
-              <option value="US">United States</option>
-              <option value="UK">United Kingdom</option>
-              <option value="CA">Canada</option>
-              <option value="AU">Australia</option>
-              <option value="DE">Germany</option>
-              <option value="FR">France</option>
-              <option value="JP">Japan</option>
             </select>
           </div>
 
@@ -495,16 +626,7 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
                 <option value="" disabled>
                   Select state
                 </option>
-                <option value="TN">Tamil Nadu</option>
-                <option value="KA">Karnataka</option>
-                <option value="MH">Maharashtra</option>
-                <option value="DL">Delhi</option>
-                <option value="UP">Uttar Pradesh</option>
-                <option value="WB">West Bengal</option>
-                <option value="GJ">Gujarat</option>
-                <option value="RJ">Rajasthan</option>
-                <option value="KL">Kerala</option>
-                <option value="TS">Telangana</option>
+                {policy.states.map((name) => <option key={name} value={name}>{name}</option>)}
               </select>
             </div>
             <div className="mb-4">
@@ -517,12 +639,16 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
                 onChange={(event) => {
                   const nextPinCode = event.target.value.replace(/[^0-9]/g, '');
                   setPinCode(nextPinCode);
+                  setState('');
+                  setPinMessage('');
                 }}
                 placeholder="Pincode"
                 className={inputClass('pinCode')}
               />
             </div>
           </div>
+
+          {pinMessage && <p role="status" className="mb-4 text-xs text-[#666666]">{pinMessage}</p>}
 
           <div className="mb-4">
             <div className="relative">
@@ -553,10 +679,10 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
         <aside className="order-2 border-t border-[#e0e0e0] bg-[#f9f9f9] px-6 py-8 sm:px-8 lg:border-l lg:border-t-0 lg:px-12 lg:py-10">
           <div className="w-full lg:mr-auto lg:max-w-[440px]">
             <div className="mb-6">
-              {lines.length === 0 ? (
+              {checkoutLines.length === 0 ? (
                 <p className="text-sm text-[#666666]">Your cart is empty.</p>
               ) : (
-                lines.map((line) => (
+                checkoutLines.map((line) => (
                   <article
                     key={line.id}
                     className="flex items-center gap-4 border-b border-[#e0e0e0] py-3 last:border-b-0"
@@ -606,19 +732,19 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
 
             <div className="flex items-center justify-between py-2 text-sm">
               <span className="flex items-center gap-1.5 text-[#666666]">
-                Shipping
+                Shipping Charges
                 <button
                   type="button"
                   aria-label="Shipping information"
-                  onClick={() => showToast('Free shipping on all orders', 'success')}
+                  onClick={() => showToast('Shipping is charged per 3 T-shirts based on delivery state.')}
                 >
                   <HelpCircle size={14} strokeWidth={1.5} className="opacity-50 transition hover:opacity-100" />
                 </button>
               </span>
-              <span className="font-medium text-[#27ae60]">
-                FREE
-              </span>
+              <span className="font-medium">{shipping === null ? 'Enter state' : formatPrice(shipping)}</span>
             </div>
+
+            <div className="flex items-center justify-between py-2 text-sm"><span className="text-[#666666]">Tax</span><span className="font-medium">{formatPrice(previewPricing?.taxAmount ?? 0)}</span></div>
 
             <div className="my-3 h-px bg-[#e0e0e0]" />
 
@@ -626,13 +752,13 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
               <span className="font-display text-lg font-bold">Total</span>
               <div className="flex items-baseline gap-2">
                 <span className="text-xs font-medium text-[#666666]">INR</span>
-                <span className="font-display text-[22px] font-bold tracking-normal">{formatPrice(total)}</span>
+                <span className="font-display text-[22px] font-bold tracking-normal">{total === null ? 'Enter state' : formatPrice(total)}</span>
               </div>
             </div>
             <button
               type="button"
              
-              disabled={isPaying || lines.length === 0}
+              disabled={isPaying || refreshStatus !== 'ready' || checkoutLines.length === 0}
               className={`flex h-14 w-full items-center justify-center gap-2.5 rounded-lg bg-[#1a1a1a] text-sm font-bold uppercase tracking-[0.08em] text-white transition disabled:cursor-not-allowed disabled:opacity-50 enabled:hover:-translate-y-px enabled:hover:bg-[#333333] enabled:hover:shadow-[0_6px_20px_rgba(0,0,0,0.15)] ${isPaying ? 'pointer-events-none' : ''
                 }`}
               onClick={handlePayNow}
@@ -644,16 +770,19 @@ export function CheckoutPage({ lines, subtotal, onClearCart, onBack }: CheckoutP
             </button>
 
             <div className="mt-6 text-center">
-              {['Refund policy', 'Shipping policy', 'Privacy policy', 'Terms of service'].map((link) => (
-                <button
+              {[
+                ['Refund policy', '/varataaa/refund-policy'],
+                ['Shipping policy', '/varataaa/shipping-policy'],
+                ['Privacy policy', '/varataaa/privacy-policy'],
+                ['Terms of service', '/varataaa/terms-and-conditions'],
+              ].map(([link, href]) => (
+                <a
                   key={link}
-                  type="button"
-                 
+                  href={href}
                   className="mx-2 text-[11px] text-[#666666] transition hover:text-[#1a1a1a]"
-                  onClick={() => showToast(link)}
                 >
                   {link}
-                </button>
+                </a>
               ))}
             </div>
           </div>

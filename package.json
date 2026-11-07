@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "server": "node server.cjs",
     "dev:all": "concurrently \"npm run dev\" \"npm run server\"",
-    "test": "node --test test/server-pricing.test.cjs"
+    "test": "node --test"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.4.1",
@@ -29,6 +29,7 @@
     "framer-motion": "^11.15.0",
     "helmet": "^8.2.0",
     "lucide-react": "^0.468.0",
+    "nodemailer": "^6.9.16",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwind-merge": "^3.7.0",

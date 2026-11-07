@@ -7,19 +7,11 @@ import { useState, useRef, useEffect } from 'react';
 import { CustomizerState, PanelId, TShirtSize } from './types';
 import { PRESET_DESIGNS } from './presets';
 import { TShirt3DViewer } from './components/TShirt3DViewer';
-import { 
-  Shirt, RotateCcw, Upload, Trash2, Check, Download, 
-  Sliders, Sparkles, ArrowLeft, ShoppingBag, Layers,
-  Palette, Info
-} from 'lucide-react';
-import type { Product } from '../../types';
+import { RotateCcw, Upload, Trash2, Check, Download, Sparkles, ArrowLeft } from 'lucide-react';
 
 interface TShirtCustomizerProps {
-  onAddToCart?: (product: Product) => void;
   onBack?: () => void;
 }
-
-type MobileTab = 'upload' | 'edit' | 'presets' | null;
 
 function useIsMobile(breakpoint = 1024) {
   const [isMobile, setIsMobile] = useState(() =>
@@ -37,7 +29,7 @@ function useIsMobile(breakpoint = 1024) {
   return isMobile;
 }
 
-export function TShirtCustomizer({ onAddToCart, onBack }: TShirtCustomizerProps) {
+export function TShirtCustomizer({ onBack }: TShirtCustomizerProps) {
   // Initialize customizer state with premium defaults
   const [state, setState] = useState<CustomizerState>({
     color: 'black',
@@ -90,10 +82,8 @@ export function TShirtCustomizer({ onAddToCart, onBack }: TShirtCustomizerProps)
   });
 
   const [is3dShowcase, setIs3dShowcase] = useState(false);
-  const [showPriceBreakdown, setShowPriceBreakdown] = useState(false);
   const [showExportSuccess, setShowExportSuccess] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [mobileTab, setMobileTab] = useState<MobileTab>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
@@ -109,9 +99,14 @@ export function TShirtCustomizer({ onAddToCart, onBack }: TShirtCustomizerProps)
   };
 
   // Upload file conversion to local blob URL
-  const handleUploadFile = (panel: PanelId, file: File) => {
-    if (!file.type.startsWith('image/')) {
-      showToast('Please upload a valid image file (PNG, JPG, SVG, WebP)');
+  const handleUploadFile = async (panel: PanelId, file: File) => {
+    if (file.type !== 'image/png' || !file.name.toLowerCase().endsWith('.png')) {
+      showToast('Only PNG images are supported. Please choose a .png file.');
+      return;
+    }
+    const signature = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+    if (signature.length !== 8 || ![137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => signature[index] === byte)) {
+      showToast('This file is not a valid PNG image.');
       return;
     }
     const localUrl = URL.createObjectURL(file);
@@ -208,139 +203,79 @@ export function TShirtCustomizer({ onAddToCart, onBack }: TShirtCustomizerProps)
     showToast('Reset to default mockup');
   };
 
-  // Compute total detailed pricing breakdown
-  const computePriceBreakdown = () => {
-    const hasFrontAndBack = !!state.designs.front.url && !!state.designs.back.url;
-    
-    if (!hasFrontAndBack) {
-      return {
-        isPriceLocked: true,
-        basePrice: 0,
-        finishPrice: 0,
-        prints: [],
-        totalPrice: 0,
-      };
-    }
-
-    const basePrice = 599; 
-    const finishPrice = state.finish === 'acid wash' ? 150 : 0; 
-    
-    const prints: { panelName: string; size: string; price: number }[] = [];
-    
-    prints.push({
-      panelName: 'Front Graphic Print',
-      size: state.designs.front.sizeType,
-      price: 0,
-    });
-    
-    prints.push({
-      panelName: 'Back Graphic Print',
-      size: state.designs.back.sizeType,
-      price: 0,
-    });
-    
-    if (state.designs.leftSleeve.url) {
-      prints.push({
-        panelName: 'Left Sleeve Graphic',
-        size: state.designs.leftSleeve.sizeType,
-        price: 0,
-      });
-    }
-
-    if (state.designs.rightSleeve.url) {
-      prints.push({
-        panelName: 'Right Sleeve Graphic',
-        size: state.designs.rightSleeve.sizeType,
-        price: 0,
-      });
-    }
-
-    if (state.designs.extra.url) {
-      prints.push({
-        panelName: 'Extra Graphic (Front)',
-        size: state.designs.extra.sizeType,
-        price: 0,
-      });
-    }
-
-    const totalPrice = basePrice + finishPrice;
-
-    return {
-      isPriceLocked: false,
-      basePrice,
-      finishPrice,
-      prints,
-      totalPrice,
-    };
-  };
-
-  const { isPriceLocked, basePrice, finishPrice, prints, totalPrice } = computePriceBreakdown();
-
-  // Add customized t-shirt to Cart
-  const handleAddToCart = () => {
-    if (!onAddToCart) {
-      showToast('Cart not available');
-      return;
-    }
-
-    const customProduct: Product = {
-      id: `custom-${state.style}-${state.color}-${state.garmentSize}-${Date.now()}`,
-      name: `Custom ${state.style === 'oversized' ? 'Oversized' : 'Classic Polo'} Tee`,
-      price: totalPrice > 0 ? totalPrice : 599,
-      priceLabel: `Rs. ${totalPrice > 0 ? totalPrice : 599}`,
-      image: state.designs.front.url || state.designs.back.url || 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=600&h=800&fit=crop',
-      alt: `Custom ${state.color} ${state.style} t-shirt`,
-      tag: 'Custom Print',
-      subtitle: `${state.color.toUpperCase()} • Size ${state.garmentSize} • ${state.finish === 'acid wash' ? 'Acid Wash' : 'Classic Cotton'}`,
-      description: `Custom ${state.style} t-shirt with personalized graphics. Garment size: ${state.garmentSize}, Finish: ${state.finish}, Color: ${state.color}. Includes custom front & back placements.`,
-      details: [
-        `Style: ${state.style === 'oversized' ? 'Streetwear Oversized Fit' : 'Tailored Classic Polo'}`,
-        `Color: ${state.color.toUpperCase()}`,
-        `Size: ${state.garmentSize}`,
-        `Finish: ${state.finish.toUpperCase()}`,
-        `Front Print: ${state.designs.front.name || 'None'}`,
-        `Back Print: ${state.designs.back.name || 'None'}`,
-      ],
-      theme: 'Custom Studio',
-    };
-
-    onAddToCart(customProduct);
-    showToast('Custom tee added to cart!');
-  };
-
-  // Export Mockup SVG directly to customer local disk
-  const handleExport = () => {
+  const handleExport = async () => {
     setIsExporting(true);
-    setTimeout(() => {
-      setIsExporting(false);
-      setShowExportSuccess(true);
-      
-      const svgEl = document.querySelector('#tshirt-viewer-container svg');
-      if (svgEl) {
-        const serializer = new XMLSerializer();
-        let source = serializer.serializeToString(svgEl);
-        if (!source.match(/^<svg[^>]+xmlns="http:\/\/www\.w3\.org\/2000\/svg"/)) {
-          source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
-        }
-        if (!source.match(/^<svg[^>]+xmlns:xlink="http:\/\/www\.w3\.org\/1999\/xlink"/)) {
-          source = source.replace(/^<svg/, '<svg xmlns:xlink="http://www.w3.org/1999/xlink"');
-        }
-        
-        const blob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `varataaa-custom-mockup-${state.style}-${state.color}.svg`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+    try {
+      if (is3dShowcase) {
+        setIs3dShowcase(false);
+        await new Promise((resolve) => window.setTimeout(resolve, 100));
       }
-    }, 600);
+      const preview = document.querySelector('#tshirt-viewer-container');
+      const svg = preview?.querySelector('svg');
+      if (!preview || !svg) throw new Error('Preview is unavailable.');
+      const stage = svg.parentElement?.parentElement;
+      if (!stage) throw new Error('Preview is unavailable.');
+      const width = stage.clientWidth;
+      const height = stage.clientHeight;
+      const canvas = document.createElement('canvas');
+      canvas.width = width * 2;
+      canvas.height = height * 2;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('JPEG export is unavailable in this browser.');
+      context.scale(2, 2);
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, width, height);
+      const loadImage = (url: string) => new Promise<HTMLImageElement>((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error('An artwork image could not be rendered.'));
+        image.src = url;
+      });
+      const source = new XMLSerializer().serializeToString(svg);
+      const svgUrl = URL.createObjectURL(new Blob([source], { type: 'image/svg+xml' }));
+      try {
+        const garment = await loadImage(svgUrl);
+        const rect = svg.getBoundingClientRect();
+        const stageRect = stage.getBoundingClientRect();
+        context.drawImage(garment, rect.left - stageRect.left, rect.top - stageRect.top, rect.width, rect.height);
+      } finally {
+        URL.revokeObjectURL(svgUrl);
+      }
+      const bounds = stage.querySelector<HTMLElement>('#printable-bounds-area');
+      if (bounds) {
+        for (const art of bounds.querySelectorAll<HTMLImageElement>('img')) {
+          const box = art.parentElement as HTMLElement;
+          const image = await loadImage(art.src);
+          const x = bounds.offsetLeft + box.offsetLeft;
+          const y = bounds.offsetTop + box.offsetTop;
+          const rotation = Number(box.style.transform.match(/rotate\((-?[\d.]+)deg\)/)?.[1] || 0);
+          context.save();
+          context.globalAlpha = Number(getComputedStyle(box).opacity) || 1;
+          context.translate(x, y);
+          context.rotate(rotation * Math.PI / 180);
+          context.drawImage(image, -box.offsetWidth / 2, -box.offsetHeight / 2, box.offsetWidth, box.offsetHeight);
+          context.restore();
+        }
+      }
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+      if (!blob) throw new Error('JPEG export failed.');
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `varataaa-custom-mockup-${state.style}-${state.color}.jpg`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setShowExportSuccess(true);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'JPEG export failed.');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // 1. Upload & Layer Section
   const uploadSection = (
-    <section className="bg-white border border-metal-mid rounded-2xl p-4 sm:p-5 flex flex-col gap-4 shadow-sm">
+    <section className="min-w-0 bg-white rounded-xl p-3 sm:p-5 flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="px-2.5 py-0.5 bg-black text-white text-[10px] font-mono font-bold uppercase tracking-widest rounded">
@@ -436,15 +371,16 @@ export function TShirtCustomizer({ onAddToCart, onBack }: TShirtCustomizerProps)
           <span className="text-[10px] font-mono font-bold text-metal-dark uppercase tracking-wider">
             Upload Your Own Art ({state.activePanel === 'extra' ? 'Extra' : state.activePanel})
           </span>
-          <span className="text-[9px] text-metal-text font-mono">PNG, JPG, SVG, WebP</span>
+          <span className="text-[9px] text-metal-text font-mono">PNG only</span>
         </div>
         <input
           type="file"
           ref={fileInputRef}
-          accept="image/*"
+          accept="image/png"
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) handleUploadFile(state.activePanel, file);
+            e.target.value = '';
           }}
           className="hidden"
         />
@@ -499,7 +435,7 @@ export function TShirtCustomizer({ onAddToCart, onBack }: TShirtCustomizerProps)
 
   // 2. Garment Style, Color & Size Configuration
   const editSection = (
-    <section className="bg-white border border-metal-mid rounded-2xl p-4 sm:p-5 flex flex-col gap-4 shadow-sm">
+    <section className="min-w-0 bg-white rounded-xl p-3 sm:p-5 flex flex-col gap-4">
       <div className="flex items-center gap-2">
         <div className="px-2.5 py-0.5 bg-black text-white text-[10px] font-mono font-bold uppercase tracking-widest rounded">
           Garment
@@ -575,7 +511,7 @@ export function TShirtCustomizer({ onAddToCart, onBack }: TShirtCustomizerProps)
                     : 'bg-white border-metal-mid text-metal-dark hover:border-black hover:text-black'
                 }`}
               >
-                Acid Wash (+Rs. 150)
+                Acid Wash
               </button>
             </div>
           </div>
@@ -725,114 +661,16 @@ export function TShirtCustomizer({ onAddToCart, onBack }: TShirtCustomizerProps)
     </section>
   );
 
-  // 3. Price & Export Action Toolbar
   const actionToolbar = (
-    <div className="flex flex-col sm:flex-row gap-3">
-      {/* Price Summary Pill */}
-      <button
-        type="button"
-        onClick={isPriceLocked ? undefined : () => setShowPriceBreakdown(true)}
-        className={`flex-1 py-3 px-4 border font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-sm flex items-center justify-between ${
-          isPriceLocked 
-            ? 'border-dashed border-metal-mid bg-metal-off text-metal-text cursor-not-allowed' 
-            : 'border-metal-mid bg-metal-off hover:bg-metal-light hover:border-black text-black cursor-pointer'
-        }`}
-      >
-        <span className="flex items-center gap-1.5">
-          <Info className="w-4 h-4 text-metal-dark" />
-          <span>Package Price:</span>
-        </span>
-        <span className="font-mono text-sm font-black text-black">
-          {isPriceLocked ? '🔒 Lock (Add Front & Back)' : `Rs. ${totalPrice}`}
-        </span>
-      </button>
-
-      {/* Export SVG */}
-      <button
-        type="button"
-        onClick={handleExport}
-        disabled={isExporting}
-        className="py-3 px-5 border border-metal-mid bg-white hover:bg-metal-light text-black font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-sm flex items-center justify-center gap-2 hover:border-black"
-      >
-        <Download className="w-4 h-4 text-metal-dark" />
-        <span>{isExporting ? 'Exporting...' : 'Export SVG'}</span>
-      </button>
-
-      {/* Add to Cart CTA */}
-      <button
-        type="button"
-        onClick={handleAddToCart}
-        className="liquid-metal metal-sheen py-3.5 px-6 bg-black hover:bg-neutral-900 text-white font-bold text-xs uppercase tracking-widest rounded-xl transition-all cursor-pointer shadow-md flex items-center justify-center gap-2"
-      >
-        <ShoppingBag className="w-4 h-4" />
-        <span>Add to Cart • Rs. {totalPrice > 0 ? totalPrice : 599}</span>
-      </button>
-    </div>
+    <button type="button" onClick={handleExport} disabled={isExporting}
+      className="min-h-12 w-full rounded-xl border border-metal-mid bg-white px-5 py-3 text-xs font-bold uppercase tracking-wider text-black shadow-sm hover:border-black disabled:opacity-50 flex items-center justify-center gap-2">
+      <Download className="h-4 w-4" />{isExporting ? 'Exporting...' : 'Export JPEG'}
+    </button>
   );
 
   // 4. Overlays & Modals
   const viewerOverlays = (
     <>
-      {showPriceBreakdown && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 sm:p-6">
-          <div className="bg-white border border-metal-mid text-black rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
-            <div className="flex items-center justify-between border-b border-metal-mid pb-3">
-              <h3 className="text-sm font-black uppercase tracking-wider text-black flex items-center gap-2">
-                <Shirt className="w-4.5 h-4.5 text-black" />
-                <span>Custom Package Breakdown</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowPriceBreakdown(false)}
-                className="w-7 h-7 rounded-lg hover:bg-metal-light flex items-center justify-center text-metal-dark hover:text-black cursor-pointer font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="my-5 flex flex-col gap-2.5 text-xs">
-              <div className="flex justify-between items-center text-metal-dark">
-                <span>Base Garment: <strong className="uppercase text-black">{state.style} Tee</strong></span>
-                <span className="font-mono text-black font-semibold">Rs. {basePrice}</span>
-              </div>
-
-              <div className="flex justify-between items-center text-metal-dark">
-                <span>Fabric Coating: <strong className="uppercase text-black">{state.finish}</strong></span>
-                <span className="font-mono text-black font-semibold">{finishPrice > 0 ? `+Rs. ${finishPrice}` : 'Included'}</span>
-              </div>
-
-              {prints.length > 0 && (
-                <div className="border-t border-dashed border-metal-mid pt-2.5 flex flex-col gap-2">
-                  <span className="text-[10px] font-mono text-metal-text uppercase tracking-widest font-bold">Print Positions (Included in Bundle)</span>
-                  {prints.map((pr, i) => (
-                    <div key={i} className="flex justify-between items-center text-metal-dark">
-                      <span>{pr.panelName} ({pr.size.toUpperCase()})</span>
-                      <span className="font-mono text-black font-medium">Included</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="border-t border-metal-mid pt-4 mt-2 flex justify-between items-baseline">
-                <span className="text-sm font-black uppercase text-black">Total Price</span>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-black text-black font-mono">Rs. {totalPrice}</span>
-                  <span className="text-xs text-metal-text line-through font-mono">Rs. 1,499</span>
-                </div>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowPriceBreakdown(false)}
-              className="w-full py-3 bg-black hover:bg-neutral-900 text-white text-xs font-black uppercase rounded-xl tracking-wider cursor-pointer shadow-md transition-all"
-            >
-              Continue Customizing
-            </button>
-          </div>
-        </div>
-      )}
-
       {showExportSuccess && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 sm:p-6">
           <div className="bg-white border border-metal-mid rounded-2xl w-full max-w-sm p-6 shadow-2xl relative text-center flex flex-col items-center gap-4">
@@ -843,7 +681,7 @@ export function TShirtCustomizer({ onAddToCart, onBack }: TShirtCustomizerProps)
             <div>
               <h3 className="text-base font-black uppercase text-black">Mockup Exported Successfully</h3>
               <p className="text-xs text-metal-dark mt-1 leading-relaxed">
-                Vector SVG layout file has been generated and saved to your device.
+                JPEG mockup has been saved to your device.
               </p>
             </div>
 
@@ -881,7 +719,7 @@ export function TShirtCustomizer({ onAddToCart, onBack }: TShirtCustomizerProps)
   );
 
   return (
-    <div className="min-h-screen bg-white text-black px-4 sm:px-8 lg:px-12 pt-28 pb-16">
+    <div className="min-h-screen bg-white text-black px-4 sm:px-8 lg:px-12 pt-28 pb-4 sm:pb-8">
       <div className="mx-auto w-full max-w-shell">
         
         {/* Top Header & Breadcrumbs */}
@@ -921,9 +759,9 @@ export function TShirtCustomizer({ onAddToCart, onBack }: TShirtCustomizerProps)
 
         {/* ===== MOBILE LAYOUT ===== */}
         {isMobile ? (
-          <div className="flex flex-col gap-4 pb-20">
+          <div className="flex flex-col gap-3 min-w-0">
             {/* Viewport Card */}
-            <div className="bg-white border border-metal-mid rounded-2xl shadow-sm p-3">
+            <div className="customizer-preview sticky top-16 z-20 bg-white border border-metal-mid rounded-2xl shadow-sm p-2 sm:p-3">
               <div id="tshirt-viewer-container" className="w-full flex items-center justify-center">
                 <TShirt3DViewer
                   state={state}
@@ -934,35 +772,13 @@ export function TShirtCustomizer({ onAddToCart, onBack }: TShirtCustomizerProps)
               </div>
             </div>
 
-            {/* Mobile Tabbed Panels */}
-            <div className="flex border border-metal-mid rounded-xl overflow-hidden bg-metal-off p-1">
-              <button
-                type="button"
-                onClick={() => setMobileTab(mobileTab === 'upload' ? null : 'upload')}
-                className={`flex-1 py-2.5 text-xs font-bold uppercase rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                  mobileTab === 'upload' ? 'bg-black text-white shadow-xs' : 'text-metal-dark hover:text-black'
-                }`}
-              >
-                <Layers className="w-4 h-4" />
-                Upload & Layers
-              </button>
-              <button
-                type="button"
-                onClick={() => setMobileTab(mobileTab === 'edit' ? null : 'edit')}
-                className={`flex-1 py-2.5 text-xs font-bold uppercase rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                  mobileTab === 'edit' ? 'bg-black text-white shadow-xs' : 'text-metal-dark hover:text-black'
-                }`}
-              >
-                <Palette className="w-4 h-4" />
-                Garment Specs
-              </button>
+            <div className="customizer-controls-panel min-w-0 overflow-y-auto overscroll-contain rounded-2xl border border-metal-mid bg-white p-2 shadow-sm" aria-label="Layers and garment controls">
+              {uploadSection}
+              {editSection}
             </div>
 
-            {mobileTab === 'upload' && <div className="animate-fade-in">{uploadSection}</div>}
-            {mobileTab === 'edit' && <div className="animate-fade-in">{editSection}</div>}
-
             {/* Bottom Actions */}
-            <div className="sticky bottom-4 z-30 bg-white/95 backdrop-blur-md p-3 rounded-2xl border border-metal-mid shadow-lg">
+            <div className="bg-white p-2 rounded-2xl border border-metal-mid shadow-sm">
               {actionToolbar}
             </div>
           </div>
@@ -970,13 +786,13 @@ export function TShirtCustomizer({ onAddToCart, onBack }: TShirtCustomizerProps)
           /* ===== DESKTOP WORKSTATION LAYOUT ===== */
           <div className="grid grid-cols-12 gap-8 items-start">
             {/* Left Column: Controls (Upload & Layers, Garment Specs) */}
-            <div className="col-span-5 flex flex-col gap-6">
+            <div className="customizer-controls-panel col-span-5 min-w-0 overflow-y-auto overscroll-contain rounded-2xl border border-metal-mid bg-white p-2">
               {uploadSection}
               {editSection}
             </div>
 
             {/* Right Column: 3D/2D Viewport & Actions */}
-            <div className="col-span-7 flex flex-col gap-6 sticky top-28">
+            <div className="col-span-7 min-w-0 flex flex-col gap-6 sticky top-28">
               <div className="bg-white border border-metal-mid rounded-2xl shadow-sm p-5">
                 <div id="tshirt-viewer-container" className="w-full flex items-center justify-center min-h-[460px]">
                   <TShirt3DViewer

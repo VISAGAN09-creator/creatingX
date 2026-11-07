@@ -6,6 +6,7 @@ import { sortClothingSizes } from '../utils/sizes';
 import { MagneticButton } from './Magnetic';
 import { ProductCard } from './ProductCard';
 import { SmartImage } from './SmartImage';
+import { DEFAULT_SIZE_GUIDE } from './SizeGuideModal';
 import { getCookie, setCookie } from '../utils/cookies';
 import backImage from '../assets/back1.png';
 
@@ -27,17 +28,6 @@ const DEFAULT_SIZES = [
   { name: 'XL', stock: 1 },
   { name: 'XXL', stock: 1 },
   { name: 'XXXL', stock: 1 },
-];
-
-const DEFAULT_SIZE_GUIDE = [
-  { size: 'XXS', toFitChest: '34', Chest: '40', Length: '28', shoulder: '19' },
-  { size: 'XS', toFitChest: '36', Chest: '42', Length: '28.5', shoulder: '20' },
-  { size: 'S', toFitChest: '38', Chest: '44', Length: '29', shoulder: '21' },
-  { size: 'M', toFitChest: '40', Chest: '46', Length: '29', shoulder: '22' },
-  { size: 'L', toFitChest: '42', Chest: '48', Length: '29.5', shoulder: '23' },
-  { size: 'XL', toFitChest: '44', Chest: '50', Length: '29.5', shoulder: '24' },
-  { size: 'XXL', toFitChest: '46', Chest: '52', Length: '30', shoulder: '25' },
-  { size: 'XXXL', toFitChest: '48', Chest: '54', Length: '30', shoulder: '26' },
 ];
 
 const DEFAULT_TOTD_DETAILS = [

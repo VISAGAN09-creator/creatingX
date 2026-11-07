@@ -7,7 +7,7 @@ business data while investigating.
 
 ## 1. Locate the order
 
-1. Obtain the Cashfree order ID from the customer, payment record, or Cloud
+1. Obtain the gateway order ID from the customer, payment record, or Cloud
    Function log. It is the Firestore document ID in the `orders` collection.
 2. Open `orders/{orderId}` in the Firebase console using an appropriately
    authorized account.
@@ -113,10 +113,10 @@ the business explicitly accepts that risk; it must not be assumed safe.
 
 Email recovery must not alter:
 
-- `status: "paid"` or `payment` / Cashfree transaction fields.
+- `status: "paid"` or any current or historical provider transaction fields under `payment`.
 - `items`, `pricing`, `customer`, or `shipping`.
 - Product stock documents or fulfillment mirror documents.
-- The order document ID or Cashfree order ID.
+- The order document ID or provider order ID.
 
 Only the `emailDelivery` metadata is relevant to delivery recovery. The paid
 order and inventory transaction has already completed before the email helper

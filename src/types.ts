@@ -23,6 +23,9 @@ export type Product = {
   galleryImages?: string[];
   colors?: ProductColor[];
   sizes?: ProductSize[];
+  /** Independent stock-backed sizes for newly created couple products. */
+  mensSizes?: ProductSize[];
+  womensSizes?: ProductSize[];
   /** True only when the Firestore `couple` field explicitly enables paired sizing. */
   isCouple?: boolean;
   sizeGuide?: ProductSizeGuideRow[];
@@ -44,6 +47,18 @@ export type Product = {
 
 export type CartLine = Product & {
   quantity: number;
+};
+
+export type CartLineAvailability =
+  | 'loading'
+  | 'available'
+  | 'unavailable'
+  | 'variant-unavailable'
+  | 'catalog-error';
+
+export type CartDisplayLine = CartLine & {
+  availability: CartLineAvailability;
+  availabilityMessage?: string;
 };
 
 export type DataStatus = 'loading' | 'ready' | 'error';

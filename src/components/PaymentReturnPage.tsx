@@ -11,6 +11,7 @@ type PaymentReturnPageProps = {
 type VerificationState =
   | { status: 'loading' }
   | { status: 'success'; firestoreOrderId: string; order: { items: { id: string; name: string; price: number; quantity: number }[]; totalAmount: number; customer: { name?: string; firstName?: string; lastName?: string; email: string } } | null }
+  | { status: 'review'; message: string; orderId: string }
   | { status: 'failed'; message: string; paymentStatus?: string }
   | { status: 'error'; message: string };
 
@@ -33,7 +34,10 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
         const response = await fetch(paymentApiPath('/verify-payment'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderId }),
+          body: JSON.stringify({
+            orderId,
+            payment: JSON.parse(sessionStorage.getItem('razorpay_payment_response') || 'null'),
+          }),
         });
 
         const contentType = response.headers.get('content-type') || '';
@@ -52,7 +56,15 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
           // Clear cart after successful payment
           try {
             localStorage.removeItem('cart');
+            sessionStorage.removeItem('razorpay_payment_response');
           } catch { /* ignore */ }
+        } else if (data.orderStatus === 'requires_review' && data.paymentStatus === 'captured') {
+          setState({
+            status: 'review',
+            message: data.message || 'Your payment was received, but your order needs manual review. Please do not pay again.',
+            orderId: data.orderId || orderId,
+          });
+          try { localStorage.removeItem('cart'); } catch { /* ignore */ }
         } else {
           setState({
             status: 'failed',
@@ -76,7 +88,7 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
   let checkoutEmail = '';
   let checkoutName = '';
   try {
-    const ctx = JSON.parse(sessionStorage.getItem('cashfree_checkout_context') || '{}');
+    const ctx = JSON.parse(sessionStorage.getItem('razorpay_checkout_context') || '{}');
     checkoutEmail = ctx.email || '';
     checkoutName = ctx.fullName || [ctx.firstName, ctx.lastName].filter(Boolean).join(' ');
   } catch { /* ignore */ }
@@ -84,17 +96,13 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
   return (
     <section className="relative z-[1] min-h-screen bg-white font-sans text-sm leading-normal text-[#1a1a1a] flex flex-col justify-between">
       <header className="border-b border-[#e0e0e0] px-4 py-5 text-center flex justify-center">
-        <button
-          type="button"
-          className="flex items-center justify-center"
-          onClick={onBack}
-        >
+        <a href="/varataaa" className="flex items-center justify-center" aria-label="VARATAAA home">
           <BrandLogo
             containerClassName="h-10 w-[140px] sm:h-11"
             imageClassName="h-full w-full object-contain"
             fallbackClassName="flex h-full w-full items-center font-display text-lg font-bold tracking-wider text-black sm:text-xl"
           />
-        </button>
+        </a>
       </header>
 
       <div className="flex-1 flex flex-col items-center justify-center px-5 py-16 text-center max-w-md mx-auto">
@@ -104,7 +112,7 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
               <span className="h-10 w-10 animate-spin rounded-full border-[3px] border-[#e0e0e0] border-t-[#1a1a1a]" />
             </div>
             <h1 className="font-display text-2xl font-bold mb-3">Verifying Payment...</h1>
-            <p className="text-[#666666]">Please wait while we confirm your payment with Cashfree.</p>
+            <p className="text-[#666666]">Please wait while we confirm your payment with Razorpay.</p>
           </>
         )}
 
@@ -177,6 +185,22 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
             >
               Continue Shopping
             </button>
+          </>
+        )}
+
+        {state.status === 'review' && (
+          <>
+            <div className="h-16 w-16 bg-[#f39c12]/10 text-[#f39c12] rounded-full flex items-center justify-center mb-6">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="w-8 h-8">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+              </svg>
+            </div>
+            <h1 className="font-display text-3xl font-bold mb-3">Payment Received</h1>
+            <p className="text-[#666666] mb-3">{state.message}</p>
+            <p className="text-xs font-mono text-[#999999] mb-8 bg-[#f5f5f5] px-3 py-1.5 rounded-md">Order ID: {state.orderId}</p>
+            <a className="w-full h-14 bg-black text-white text-xs font-bold uppercase tracking-[0.16em] flex items-center justify-center" href={`mailto:varataaah@gmail.com?subject=${encodeURIComponent(`Order ${state.orderId} needs review`)}`}>
+              Contact Support
+            </a>
           </>
         )}
 

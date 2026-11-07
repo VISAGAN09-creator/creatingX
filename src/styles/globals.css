@@ -2,6 +2,34 @@
 @tailwind components;
 @tailwind utilities;
 
+.customizer-controls-panel {
+  max-height: calc(100dvh - 8rem);
+  scrollbar-width: thin;
+  scrollbar-color: #b0b0b0 transparent;
+}
+
+@media (max-width: 1023px) {
+  .customizer-controls-panel { max-height: min(48dvh, 560px); }
+  .customizer-preview svg { max-width: 100%; height: auto; }
+  .customizer-preview .flex.items-center.justify-between { flex-wrap: wrap; gap: 6px; }
+  .customizer-controls-panel .flex.items-center.gap-3 { flex-wrap: wrap; }
+  .customizer-controls-panel .grid.grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .customizer-preview .customizer-viewer-stage { min-height: 0; padding: 8px; }
+  .customizer-preview .aspect-square { width: min(100%, 36dvh); max-width: 340px; }
+  .customizer-preview #printable-bounds-area { touch-action: none; }
+}
+
+@media (max-width: 480px) {
+  .customizer-preview .w-\[340px\] { width: min(78vw, 280px); }
+  .customizer-preview .h-\[340px\] { height: min(78vw, 280px); }
+  .customizer-preview .h-\[380px\] { height: min(78vw, 300px); }
+  .customizer-preview #editor-mode-btn,
+  .customizer-preview #showroom-mode-btn { font-size: 10px; padding: 6px; }
+  .customizer-controls-panel button,
+  .customizer-controls-panel select { min-height: 40px; }
+  .customizer-controls-panel .grid { min-width: 0; }
+}
+
 :root {
   color-scheme: light;
   --pure-white: #ffffff;

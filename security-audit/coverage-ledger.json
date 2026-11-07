@@ -1,0 +1,1329 @@
+[
+  {
+    "coverage_id": ".agents%2Fskills%2Fsecurity-audit%23installed%20audit%20tooling::application%20runtime%20scope::audit-tooling::ATTACK-CLASSES.md%23Wildcard",
+    "canonical_refs": {
+      "surface": ".agents/skills/security-audit#installed audit tooling",
+      "boundary": "application runtime scope",
+      "subsystem": "audit-tooling",
+      "attack_class": "ATTACK-CLASSES.md#Wildcard"
+    },
+    "surface": ".agents/skills/security-audit#installed audit tooling",
+    "boundary": "application runtime scope",
+    "subsystem": "audit-tooling",
+    "attack_class": "ATTACK-CLASSES.md#Wildcard",
+    "starting_paths": [
+      ".agents/skills/security-audit"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Wildcard",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [],
+    "prior_status": "new",
+    "attempts": [],
+    "wave": 1,
+    "status": "out_of_scope",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [
+      "Installed audit tooling is not part of the storefront runtime, deployment artifact, or operator product surface reviewed in this run."
+    ]
+  },
+  {
+    "coverage_id": ".github%2Fworkflows%23Hosting%20deploy::GitHub%20Actions%23untrusted%20source%20to%20Firebase%20authority::ci-release::ATTACK-CLASSES.md%23Chained%20vulnerabilities%20and%20trust%20boundaries",
+    "canonical_refs": {
+      "surface": ".github/workflows#Hosting deploy",
+      "boundary": "GitHub Actions#untrusted source to Firebase authority",
+      "subsystem": "ci-release",
+      "attack_class": "ATTACK-CLASSES.md#Chained vulnerabilities and trust boundaries"
+    },
+    "surface": ".github/workflows#Hosting deploy",
+    "boundary": "GitHub Actions#untrusted source to Firebase authority",
+    "subsystem": "ci-release",
+    "attack_class": "ATTACK-CLASSES.md#Chained vulnerabilities and trust boundaries",
+    "starting_paths": [
+      ".github/workflows/firebase-hosting-merge.yml",
+      ".github/workflows/firebase-hosting-pull-request.yml",
+      "package-lock.json"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Chained vulnerabilities and trust boundaries",
+    "selected_companion_blocks": [
+      "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+      "SUPPLY-CHAIN-AND-RELEASE.md#Untrusted code in a privileged workflow",
+      "SUPPLY-CHAIN-AND-RELEASE.md#Mutable and unbound build inputs",
+      "SUPPLY-CHAIN-AND-RELEASE.md#Universal moves",
+      "SUPPLY-CHAIN-AND-RELEASE.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "new",
+    "attempts": [],
+    "wave": 1,
+    "status": "covered",
+    "agent_id": "hunter_client",
+    "reviewed_paths": [
+      ".github/workflows/firebase-hosting-merge.yml",
+      ".github/workflows/firebase-hosting-pull-request.yml",
+      "package-lock.json"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "hunter_client",
+        "reviewed_paths": [
+          ".github/workflows/firebase-hosting-merge.yml",
+          ".github/workflows/firebase-hosting-pull-request.yml",
+          "package-lock.json"
+        ],
+        "invariant": "Contributor-controlled build inputs do not gain unauthorized Firebase publication or credential access.",
+        "method": "source",
+        "result": "Fork PRs are excluded and live deploy is main-only; lower-trust same-repo authority and IAM scope are not established by source.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "hardening": [
+      "Pin actions to commit SHAs and document branch/IAM controls."
+    ]
+  },
+  {
+    "coverage_id": "firestore.rules%23top-level%20collection%20policy::firestore.rules%23public%20catalog%20versus%20protected%20PII::firestore-policy::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "firestore.rules#top-level collection policy",
+      "boundary": "firestore.rules#public catalog versus protected PII",
+      "subsystem": "firestore-policy",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "firestore.rules#top-level collection policy",
+    "boundary": "firestore.rules#public catalog versus protected PII",
+    "subsystem": "firestore-policy",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "firestore.rules",
+      "src/data/firestoreContent.ts",
+      "src/lib/websiteAssets.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "CLOUD-AND-DEPLOYMENT.md#Core discipline",
+      "CLOUD-AND-DEPLOYMENT.md#Object and signed-URL policy confusion",
+      "CLOUD-AND-DEPLOYMENT.md#Universal moves",
+      "CLOUD-AND-DEPLOYMENT.md#Validation rules",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Policy and query disagreement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "prior_needs_validation",
+    "attempts": [
+      {
+        "wave": 1,
+        "status": "candidate",
+        "agent_id": "hunter_client",
+        "reviewed_paths": [
+          "firestore.rules",
+          "firebase.json",
+          "src/data/firestoreContent.ts",
+          "src/lib/firebase.ts",
+          "src/lib/websiteAssets.ts",
+          "docs/website-assets.md"
+        ],
+        "local_checks": [
+          {
+            "agent_id": "hunter_client",
+            "reviewed_paths": [
+              "firestore.rules",
+              "firebase.json",
+              "src/data/firestoreContent.ts",
+              "src/lib/firebase.ts",
+              "src/lib/websiteAssets.ts",
+              "docs/website-assets.md"
+            ],
+            "invariant": "Anonymous data access is limited to intended public catalog and asset namespaces.",
+            "method": "source",
+            "result": "Known PII collections are denied, but Firestore uses a public denylist and Storage policy is external; deployed inventory/policy is unresolved.",
+            "artifact": null
+          }
+        ],
+        "result_fingerprints": [
+          "firestore.rules.wildcard-public-read",
+          "storage.rules.external-policy"
+        ],
+        "unresolved": [
+          "Target-controlled local validation is blocked because the required OS sandbox and race-safe artifact promotion are unavailable."
+        ],
+        "reassignment_reason": "The unit mixed Firestore and Storage policies; a fresh pass must settle Firestore alone while Storage receives its own unit."
+      }
+    ],
+    "wave": 2,
+    "status": "candidate",
+    "agent_id": "hunter_storage",
+    "reviewed_paths": [
+      "firestore.rules",
+      "firebase.json",
+      "src/data/firestoreContent.ts"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "hunter_storage",
+        "reviewed_paths": [
+          "firestore.rules",
+          "firebase.json",
+          "src/data/firestoreContent.ts"
+        ],
+        "invariant": "Anonymous Firestore reads are limited to intentionally public collections.",
+        "method": "source",
+        "result": "Known sensitive collections are denied, but every other top-level collection is public and deployed inventory is unknown.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "firestore.rules.wildcard-public-read"
+    ],
+    "unresolved": [
+      "Complete deployed collection inventory, active rules revision, and compliant emulator result are unavailable."
+    ],
+    "hardening": [
+      "Prefer explicit public collection grants."
+    ]
+  },
+  {
+    "coverage_id": "functions%2Fcopy-server.js%23predeploy%20packaging::functions%2Findex.js%23Cloud%20Function%20runtime::functions-deployment::ATTACK-CLASSES.md%23Cryptography%20and%20secrets",
+    "canonical_refs": {
+      "surface": "functions/copy-server.js#predeploy packaging",
+      "boundary": "functions/index.js#Cloud Function runtime",
+      "subsystem": "functions-deployment",
+      "attack_class": "ATTACK-CLASSES.md#Cryptography and secrets"
+    },
+    "surface": "functions/copy-server.js#predeploy packaging",
+    "boundary": "functions/index.js#Cloud Function runtime",
+    "subsystem": "functions-deployment",
+    "attack_class": "ATTACK-CLASSES.md#Cryptography and secrets",
+    "starting_paths": [
+      "functions/copy-server.js",
+      "functions/index.js",
+      "firebase.json",
+      "gateway/cashfree.cjs"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Cryptography and secrets",
+    "selected_companion_blocks": [
+      "CLOUD-AND-DEPLOYMENT.md#Core discipline",
+      "CLOUD-AND-DEPLOYMENT.md#Secret exposure across workload boundaries",
+      "CLOUD-AND-DEPLOYMENT.md#Security-control precedence drift",
+      "CLOUD-AND-DEPLOYMENT.md#Universal moves",
+      "CLOUD-AND-DEPLOYMENT.md#Validation rules",
+      "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+      "SUPPLY-CHAIN-AND-RELEASE.md#Build-context inclusion",
+      "SUPPLY-CHAIN-AND-RELEASE.md#Universal moves",
+      "SUPPLY-CHAIN-AND-RELEASE.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "prior_needs_validation",
+    "attempts": [
+      {
+        "wave": 1,
+        "status": "candidate",
+        "agent_id": "hunter_client",
+        "reviewed_paths": [
+          "firebase.json",
+          "functions/copy-server.js",
+          "functions/index.js",
+          "gateway/cashfree.cjs",
+          ".gitignore"
+        ],
+        "local_checks": [
+          {
+            "agent_id": "hunter_client",
+            "reviewed_paths": [
+              "firebase.json",
+              "functions/copy-server.js",
+              "functions/index.js",
+              "gateway/cashfree.cjs",
+              ".gitignore"
+            ],
+            "invariant": "Payment credentials do not enter deployment artifacts readable by lower-trust principals.",
+            "method": "source",
+            "result": "Predeploy copies non-Firebase/non-Gmail environment lines, including possible Cashfree variables; packaging and readers are unresolved.",
+            "artifact": null
+          }
+        ],
+        "result_fingerprints": [
+          "functions.copy-server.env-artifact"
+        ],
+        "unresolved": [
+          "Target-controlled local validation is blocked because the required OS sandbox and race-safe artifact promotion are unavailable."
+        ],
+        "reassignment_reason": "Coverage critic requires a fresh pass on actual packaging boundary and runtime secret handling."
+      }
+    ],
+    "wave": 3,
+    "status": "in_progress",
+    "agent_id": "hunter_config",
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "server.cjs%20and%20gateway%2Fcashfree.cjs%23operational%20logging::customer%20and%20provider%20response%20data%23Cloud%20Function%20log%20readers::operational-logging::DATA-ISOLATION-AND-LIFECYCLE.md%23Analytics%2C%20logs%2C%20traces%2C%20and%20diagnostics%20as%20alternate%20readers",
+    "canonical_refs": {
+      "surface": "server.cjs and gateway/cashfree.cjs#operational logging",
+      "boundary": "customer and provider response data#Cloud Function log readers",
+      "subsystem": "operational-logging",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Analytics, logs, traces, and diagnostics as alternate readers"
+    },
+    "surface": "server.cjs and gateway/cashfree.cjs#operational logging",
+    "boundary": "customer and provider response data#Cloud Function log readers",
+    "subsystem": "operational-logging",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Analytics, logs, traces, and diagnostics as alternate readers",
+    "starting_paths": [
+      "server.cjs",
+      "gateway/cashfree.cjs",
+      "functions/index.js"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Analytics, logs, traces, and diagnostics as alternate readers",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "new",
+    "attempts": [],
+    "wave": 3,
+    "status": "in_progress",
+    "agent_id": "hunter_retention",
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "server.cjs%23%2Fapi%2Fadmin%20middleware%20and%20routes::server.cjs%23requireAdmin::admin-api::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "server.cjs#/api/admin middleware and routes",
+      "boundary": "server.cjs#requireAdmin",
+      "subsystem": "admin-api",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "server.cjs#/api/admin middleware and routes",
+    "boundary": "server.cjs#requireAdmin",
+    "subsystem": "admin-api",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "server.cjs",
+      "src/hooks/useAdminAuth.ts",
+      "src/lib/adminApi.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#JWT verification and claim binding",
+      "WEB-PROTOCOL-AND-AUTH.md#Session fixation and invalidation",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "new",
+    "attempts": [],
+    "wave": 1,
+    "status": "covered",
+    "agent_id": "hunter_admin",
+    "reviewed_paths": [
+      "server.cjs",
+      "src/hooks/useAdminAuth.ts",
+      "src/lib/adminApi.ts"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "hunter_admin",
+        "reviewed_paths": [
+          "server.cjs",
+          "src/hooks/useAdminAuth.ts",
+          "src/lib/adminApi.ts"
+        ],
+        "invariant": "Every admin operation requires a current Firebase token with exact server-verified admin claim.",
+        "method": "source",
+        "result": "Shared middleware verifies token with revocation checking and exact admin Boolean before all admin routes.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "hardening": [
+      "Document admin claim removal and refresh-token revocation procedure."
+    ]
+  },
+  {
+    "coverage_id": "server.cjs%23admin%20inventory%20API::server.cjs%23versioned%20catalog%20mutation::admin-inventory::ATTACK-CLASSES.md%23Business%20logic",
+    "canonical_refs": {
+      "surface": "server.cjs#admin inventory API",
+      "boundary": "server.cjs#versioned catalog mutation",
+      "subsystem": "admin-inventory",
+      "attack_class": "ATTACK-CLASSES.md#Business logic"
+    },
+    "surface": "server.cjs#admin inventory API",
+    "boundary": "server.cjs#versioned catalog mutation",
+    "subsystem": "admin-inventory",
+    "attack_class": "ATTACK-CLASSES.md#Business logic",
+    "starting_paths": [
+      "server.cjs",
+      "src/components/InventoryManagement.tsx"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Business logic",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Migration default and ownership confusion",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "new",
+    "attempts": [],
+    "wave": 1,
+    "status": "covered",
+    "agent_id": "hunter_admin",
+    "reviewed_paths": [
+      "server.cjs",
+      "src/components/InventoryManagement.tsx",
+      "src/lib/adminApi.ts"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "hunter_admin",
+        "reviewed_paths": [
+          "server.cjs",
+          "src/components/InventoryManagement.tsx",
+          "src/lib/adminApi.ts"
+        ],
+        "invariant": "Inventory writes target real products, preserve schema, reject stale versions, and accept bounded typed changes.",
+        "method": "source",
+        "result": "Transaction re-resolves documents, checks versions, bounds batches and fields, and derives minimal patches.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "hardening": [
+      "Inventory list is unpaginated but restricted to global admins; monitor scale."
+    ]
+  },
+  {
+    "coverage_id": "server.cjs%23admin%20order%20lifecycle::server.cjs%23order%20deletion%20and%20fulfillment%20transitions::admin-orders::ATTACK-CLASSES.md%23Business%20logic",
+    "canonical_refs": {
+      "surface": "server.cjs#admin order lifecycle",
+      "boundary": "server.cjs#order deletion and fulfillment transitions",
+      "subsystem": "admin-orders",
+      "attack_class": "ATTACK-CLASSES.md#Business logic"
+    },
+    "surface": "server.cjs#admin order lifecycle",
+    "boundary": "server.cjs#order deletion and fulfillment transitions",
+    "subsystem": "admin-orders",
+    "attack_class": "ATTACK-CLASSES.md#Business logic",
+    "starting_paths": [
+      "server.cjs",
+      "src/components/AdminOrders.tsx",
+      "src/components/WalkInOrderForm.tsx"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Business logic",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Soft-delete and tombstone bypass",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Restore reintroduces invalid state",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "new",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "hunter_admin",
+    "reviewed_paths": [
+      "server.cjs",
+      "src/components/AdminOrders.tsx",
+      "src/components/WalkInOrderForm.tsx",
+      "src/lib/adminApi.ts"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "hunter_admin",
+        "reviewed_paths": [
+          "server.cjs",
+          "src/components/AdminOrders.tsx",
+          "src/components/WalkInOrderForm.tsx",
+          "src/lib/adminApi.ts"
+        ],
+        "invariant": "Deleting a paid order must preserve durable idempotency against the same payment being replayed.",
+        "method": "source",
+        "result": "Best-effort pending cleanup plus canonical deletion can remove the only idempotency record and permit a stale paid context to allocate stock again.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "server.deleted-paid-order.stale-pending-replay"
+    ],
+    "unresolved": [
+      "Target-controlled local validation is blocked because the required OS sandbox and race-safe artifact promotion are unavailable."
+    ],
+    "hardening": [
+      "Preserve immutable payment tombstones when deleting business records."
+    ]
+  },
+  {
+    "coverage_id": "server.cjs%23Express%20IP%20rate%20limiters::Firebase%20Hosting%20and%20Cloud%20Functions%20proxy%23client%20quota%20attribution::api-rate-limit-attribution::RESOURCE-EXHAUSTION-AND-AVAILABILITY.md%23Quota-accounting%20scope%20and%20reset%20gaps",
+    "canonical_refs": {
+      "surface": "server.cjs#Express IP rate limiters",
+      "boundary": "Firebase Hosting and Cloud Functions proxy#client quota attribution",
+      "subsystem": "api-rate-limit-attribution",
+      "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Quota-accounting scope and reset gaps"
+    },
+    "surface": "server.cjs#Express IP rate limiters",
+    "boundary": "Firebase Hosting and Cloud Functions proxy#client quota attribution",
+    "subsystem": "api-rate-limit-attribution",
+    "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Quota-accounting scope and reset gaps",
+    "starting_paths": [
+      "server.cjs",
+      "firebase.json",
+      "functions/index.js"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Quota-accounting scope and reset gaps",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Pre-authentication work imbalance",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules",
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Host and forwarded-header trust",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "new",
+    "attempts": [],
+    "wave": 3,
+    "status": "in_progress",
+    "agent_id": "hunter_proxy",
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "server.cjs%23payment%20completion%20paths::server.cjs%23createPaidOrderWithFulfillment::payment-lifecycle::ATTACK-CLASSES.md%23Business%20logic",
+    "canonical_refs": {
+      "surface": "server.cjs#payment completion paths",
+      "boundary": "server.cjs#createPaidOrderWithFulfillment",
+      "subsystem": "payment-lifecycle",
+      "attack_class": "ATTACK-CLASSES.md#Business logic"
+    },
+    "surface": "server.cjs#payment completion paths",
+    "boundary": "server.cjs#createPaidOrderWithFulfillment",
+    "subsystem": "payment-lifecycle",
+    "attack_class": "ATTACK-CLASSES.md#Business logic",
+    "starting_paths": [
+      "server.cjs",
+      "gateway/cashfree.cjs"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Business logic",
+    "selected_companion_blocks": [
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Duplicate delivery and idempotency gaps",
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Acknowledgment/commit ordering defects",
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Universal moves",
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Validation rules",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Restore reintroduces invalid state",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "prior_covered_same_source",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "hunter_payment",
+    "reviewed_paths": [
+      "server.cjs",
+      "gateway/cashfree.cjs"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "hunter_payment",
+        "reviewed_paths": [
+          "server.cjs",
+          "gateway/cashfree.cjs"
+        ],
+        "invariant": "Every provider-confirmed payment must have one durable idempotent order or exception record.",
+        "method": "source",
+        "result": "An inventory conflict after provider confirmation returns paid status before writing an order or exception record.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "server.paid-order.stock-race-no-record"
+    ],
+    "unresolved": [
+      "Target-controlled local validation is blocked because the required OS sandbox and race-safe artifact promotion are unavailable."
+    ],
+    "hardening": [
+      "Keep payment and reconciliation state durable even when stock allocation fails."
+    ]
+  },
+  {
+    "coverage_id": "server.cjs%23payment%20return%20URL%20construction::Cashfree%20hosted%20checkout%23browser%20callback%20destination::payment-callback::ATTACK-CLASSES.md%23Chained%20vulnerabilities%20and%20trust%20boundaries",
+    "canonical_refs": {
+      "surface": "server.cjs#payment return URL construction",
+      "boundary": "Cashfree hosted checkout#browser callback destination",
+      "subsystem": "payment-callback",
+      "attack_class": "ATTACK-CLASSES.md#Chained vulnerabilities and trust boundaries"
+    },
+    "surface": "server.cjs#payment return URL construction",
+    "boundary": "Cashfree hosted checkout#browser callback destination",
+    "subsystem": "payment-callback",
+    "attack_class": "ATTACK-CLASSES.md#Chained vulnerabilities and trust boundaries",
+    "starting_paths": [
+      "server.cjs",
+      "gateway/cashfree.cjs",
+      "src/lib/paymentGateway.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Chained vulnerabilities and trust boundaries",
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Host and forwarded-header trust",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "WEB-PROTOCOL-AND-AUTH.md#OAuth/OIDC request and callback binding",
+        "reason": "Hosted payment callback, not OAuth/OIDC."
+      }
+    ],
+    "prior_status": "new",
+    "attempts": [],
+    "wave": 2,
+    "status": "covered",
+    "agent_id": "hunter_callback",
+    "reviewed_paths": [
+      "server.cjs",
+      "gateway/cashfree.cjs",
+      "src/lib/paymentGateway.ts"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "hunter_callback",
+        "reviewed_paths": [
+          "server.cjs",
+          "gateway/cashfree.cjs",
+          "src/lib/paymentGateway.ts"
+        ],
+        "invariant": "Request-derived callback data cannot redirect another principal's payment or disclose protected payment state.",
+        "method": "source",
+        "result": "Allowed browser Origin is exact-CORS checked; no-Origin caller controls only its own newly created session. No cross-principal effect was found.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "hardening": [
+      "Require configured HTTPS PAYMENT_RETURN_URL instead of request-derived fallback."
+    ]
+  },
+  {
+    "coverage_id": "server.cjs%23pendingOrders%20creation%20and%20cleanup::anonymous%20checkout%23Firestore%20pending-order%20retention%20and%20capacity::pending-order-lifecycle::RESOURCE-EXHAUSTION-AND-AVAILABILITY.md%23Unbounded%20buffering%20and%20cardinality",
+    "canonical_refs": {
+      "surface": "server.cjs#pendingOrders creation and cleanup",
+      "boundary": "anonymous checkout#Firestore pending-order retention and capacity",
+      "subsystem": "pending-order-lifecycle",
+      "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Unbounded buffering and cardinality"
+    },
+    "surface": "server.cjs#pendingOrders creation and cleanup",
+    "boundary": "anonymous checkout#Firestore pending-order retention and capacity",
+    "subsystem": "pending-order-lifecycle",
+    "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Unbounded buffering and cardinality",
+    "starting_paths": [
+      "server.cjs",
+      "firestore.rules",
+      "firebase.json"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Unbounded buffering and cardinality",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Retention and queued-work overrun",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "new",
+    "attempts": [],
+    "wave": 3,
+    "status": "in_progress",
+    "agent_id": "hunter_retention",
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "server.cjs%23POST%20%2Fapi%2Fcashfree-webhook::server.cjs%23Cashfree%20verification%20and%20event%20identity::payment-webhook::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "server.cjs#POST /api/cashfree-webhook",
+      "boundary": "server.cjs#Cashfree verification and event identity",
+      "subsystem": "payment-webhook",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "server.cjs#POST /api/cashfree-webhook",
+    "boundary": "server.cjs#Cashfree verification and event identity",
+    "subsystem": "payment-webhook",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "server.cjs",
+      "gateway/cashfree.cjs"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Untrusted producer treated as control plane",
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Duplicate delivery and idempotency gaps",
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Universal moves",
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "new",
+    "attempts": [
+      {
+        "wave": 1,
+        "status": "candidate",
+        "agent_id": "hunter_payment",
+        "reviewed_paths": [
+          "server.cjs",
+          "gateway/cashfree.cjs"
+        ],
+        "local_checks": [
+          {
+            "agent_id": "hunter_payment",
+            "reviewed_paths": [
+              "server.cjs",
+              "gateway/cashfree.cjs"
+            ],
+            "invariant": "Unauthenticated webhook input must not authorize order mutation or create meaningful provider work beyond effective bounds.",
+            "method": "source",
+            "result": "Provider re-verification prevents payment forgery, but arbitrary success-shaped input reaches authenticated Cashfree lookups; deployed quota impact is unresolved.",
+            "artifact": null
+          }
+        ],
+        "result_fingerprints": [
+          "server.webhook.unauthenticated-cashfree-query"
+        ],
+        "unresolved": [
+          "Target-controlled local validation is blocked because the required OS sandbox and race-safe artifact promotion are unavailable."
+        ],
+        "reassignment_reason": "Coverage critic requires a fresh pass that includes proxy/client-IP quota attribution before treating rate limiting as effective."
+      }
+    ],
+    "wave": 3,
+    "status": "in_progress",
+    "agent_id": "hunter_proxy",
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "server.cjs%23POST%20%2Fapi%2Fcheckout-quote%20and%20%2Fapi%2Fcreate-order::server.cjs%23server-authoritative%20checkout::checkout-api::ATTACK-CLASSES.md%23Business%20logic",
+    "canonical_refs": {
+      "surface": "server.cjs#POST /api/checkout-quote and /api/create-order",
+      "boundary": "server.cjs#server-authoritative checkout",
+      "subsystem": "checkout-api",
+      "attack_class": "ATTACK-CLASSES.md#Business logic"
+    },
+    "surface": "server.cjs#POST /api/checkout-quote and /api/create-order",
+    "boundary": "server.cjs#server-authoritative checkout",
+    "subsystem": "checkout-api",
+    "attack_class": "ATTACK-CLASSES.md#Business logic",
+    "starting_paths": [
+      "server.cjs",
+      "shipping.cjs",
+      "gateway/index.cjs"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Business logic",
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Database and downstream query amplification",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "prior_covered_same_source",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "hunter_payment",
+    "reviewed_paths": [
+      "server.cjs",
+      "shipping.cjs",
+      "gateway/index.cjs"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "hunter_payment",
+        "reviewed_paths": [
+          "server.cjs",
+          "shipping.cjs",
+          "gateway/index.cjs"
+        ],
+        "invariant": "Checkout derives price, variants, shipping, and stock from trusted server data and uses a consistent stock schema through payment completion.",
+        "method": "source",
+        "result": "Server authority and bounds are present, but alias couple-stock fields are detected differently before and after payment.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "server.couple.alias-stock-mismatch"
+    ],
+    "unresolved": [
+      "Target-controlled local validation is blocked because the required OS sandbox and race-safe artifact promotion are unavailable."
+    ],
+    "hardening": [
+      "Set PAYMENT_RETURN_URL explicitly instead of relying on request-derived callback construction."
+    ]
+  },
+  {
+    "coverage_id": "server.cjs%23POST%20%2Fapi%2Fverify-payment::server.cjs%23paid-order%20confidentiality::payment-api::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "server.cjs#POST /api/verify-payment",
+      "boundary": "server.cjs#paid-order confidentiality",
+      "subsystem": "payment-api",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "server.cjs#POST /api/verify-payment",
+    "boundary": "server.cjs#paid-order confidentiality",
+    "subsystem": "payment-api",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "server.cjs",
+      "src/components/PaymentReturnPage.tsx",
+      "gateway/cashfree.cjs",
+      "firestore.rules"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "prior_covered_same_source",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "hunter_payment",
+    "reviewed_paths": [
+      "server.cjs",
+      "src/components/PaymentReturnPage.tsx",
+      "gateway/cashfree.cjs",
+      "firestore.rules"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "hunter_payment",
+        "reviewed_paths": [
+          "server.cjs",
+          "src/components/PaymentReturnPage.tsx",
+          "gateway/cashfree.cjs",
+          "firestore.rules"
+        ],
+        "invariant": "An order ID alone must not authorize disclosure of protected customer and purchase data.",
+        "method": "source",
+        "result": "The public route reads a protected paid order by supplied ID and returns customer, items, and total without a separate owner credential.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "server.verify-payment.known-order-pii"
+    ],
+    "unresolved": [
+      "Target-controlled local validation is blocked because the required OS sandbox and race-safe artifact promotion are unavailable."
+    ],
+    "hardening": [
+      "Use cryptographic order identifiers if identifiers retain any capability-like role."
+    ]
+  },
+  {
+    "coverage_id": "server.cjs%23public%20utility%20routes::server.cjs%23shared%20service%20and%20paid%20dependency%20cost::public-api::ATTACK-CLASSES.md%23Feature%20abuse%20and%20data%20leakage",
+    "canonical_refs": {
+      "surface": "server.cjs#public utility routes",
+      "boundary": "server.cjs#shared service and paid dependency cost",
+      "subsystem": "public-api",
+      "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage"
+    },
+    "surface": "server.cjs#public utility routes",
+    "boundary": "server.cjs#shared service and paid dependency cost",
+    "subsystem": "public-api",
+    "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+    "starting_paths": [
+      "server.cjs",
+      "shipping.cjs"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+    "selected_companion_blocks": [
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Pre-authentication work imbalance",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Database and downstream query amplification",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "new",
+    "attempts": [],
+    "wave": 1,
+    "status": "covered",
+    "agent_id": "hunter_payment",
+    "reviewed_paths": [
+      "server.cjs",
+      "shipping.cjs"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "hunter_payment",
+        "reviewed_paths": [
+          "server.cjs",
+          "shipping.cjs"
+        ],
+        "invariant": "Anonymous utility routes have effective input/work bounds and do not disclose protected records.",
+        "method": "source",
+        "result": "Body, cardinality, syntax, timeout, and IP limits bound the visible paths; no protected disclosure was found.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "hardening": [
+      "Avoid logging raw newsletter email addresses."
+    ]
+  },
+  {
+    "coverage_id": "server.cjs%23sendOrderConfirmationEmail::paid%20order%20data%23SMTP%20recipient%20and%20rendered%20message::order-email::ATTACK-CLASSES.md%23Injection",
+    "canonical_refs": {
+      "surface": "server.cjs#sendOrderConfirmationEmail",
+      "boundary": "paid order data#SMTP recipient and rendered message",
+      "subsystem": "order-email",
+      "attack_class": "ATTACK-CLASSES.md#Injection"
+    },
+    "surface": "server.cjs#sendOrderConfirmationEmail",
+    "boundary": "paid order data#SMTP recipient and rendered message",
+    "subsystem": "order-email",
+    "attack_class": "ATTACK-CLASSES.md#Injection",
+    "starting_paths": [
+      "server.cjs",
+      "functions/index.js",
+      "src/lib/websiteAssets.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Injection",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Analytics, logs, traces, and diagnostics as alternate readers",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Retry storm and fail-open amplification",
+        "reason": "No automatic retry loop."
+      }
+    ],
+    "prior_status": "new",
+    "attempts": [],
+    "wave": 2,
+    "status": "covered",
+    "agent_id": "hunter_callback",
+    "reviewed_paths": [
+      "server.cjs",
+      "functions/index.js",
+      "src/lib/websiteAssets.ts",
+      "firestore.rules"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "hunter_callback",
+        "reviewed_paths": [
+          "server.cjs",
+          "functions/index.js",
+          "src/lib/websiteAssets.ts",
+          "firestore.rules"
+        ],
+        "invariant": "Email uses the persisted paid-order recipient, escapes lower-trust content, and claims delivery idempotently.",
+        "method": "source",
+        "result": "Persisted recipient is reloaded and validated; content is escaped; sending state is transactionally claimed; no unauthorized disclosure path was found.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "hardening": [
+      "Use a recoverable email sending lease and restrict remote image origins."
+    ]
+  },
+  {
+    "coverage_id": "src%2Ffeatures%2Ftshirt-customizer%23PNG%20import::src%2Ffeatures%2Ftshirt-customizer%23decode%20render%20and%20export::browser-customizer::ATTACK-CLASSES.md%23Resource%20and%20file%20handling",
+    "canonical_refs": {
+      "surface": "src/features/tshirt-customizer#PNG import",
+      "boundary": "src/features/tshirt-customizer#decode render and export",
+      "subsystem": "browser-customizer",
+      "attack_class": "ATTACK-CLASSES.md#Resource and file handling"
+    },
+    "surface": "src/features/tshirt-customizer#PNG import",
+    "boundary": "src/features/tshirt-customizer#decode render and export",
+    "subsystem": "browser-customizer",
+    "attack_class": "ATTACK-CLASSES.md#Resource and file handling",
+    "starting_paths": [
+      "src/features/tshirt-customizer"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Resource and file handling",
+    "selected_companion_blocks": [
+      "CLIENT-SIDE.md#Core discipline",
+      "CLIENT-SIDE.md#DOM-based XSS",
+      "CLIENT-SIDE.md#Universal moves",
+      "CLIENT-SIDE.md#Validation rules",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Decompression and representation amplification",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "new",
+    "attempts": [],
+    "wave": 1,
+    "status": "covered",
+    "agent_id": "hunter_client",
+    "reviewed_paths": [
+      "src/features/tshirt-customizer/TShirtCustomizer.tsx",
+      "src/features/tshirt-customizer/components/TShirt3DViewer.tsx",
+      "src/features/tshirt-customizer/presets.ts",
+      "src/features/tshirt-customizer/types.ts"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "hunter_client",
+        "reviewed_paths": [
+          "src/features/tshirt-customizer/TShirtCustomizer.tsx",
+          "src/features/tshirt-customizer/components/TShirt3DViewer.tsx",
+          "src/features/tshirt-customizer/presets.ts",
+          "src/features/tshirt-customizer/types.ts"
+        ],
+        "invariant": "Local artwork does not execute active content or consume shared cross-principal resources.",
+        "method": "source",
+        "result": "PNG signature/type checks precede local image rendering; missing size limits affect only the uploader's tab.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "hardening": [
+      "Bound PNG bytes/dimensions and revoke replaced blob URLs."
+    ]
+  },
+  {
+    "coverage_id": "src%2Fhooks%2FuseRouter.ts%23browser%20URL%20and%20storage::src%2Fcomponents%23React%20rendering%20and%20navigation::browser-spa::ATTACK-CLASSES.md%23Injection",
+    "canonical_refs": {
+      "surface": "src/hooks/useRouter.ts#browser URL and storage",
+      "boundary": "src/components#React rendering and navigation",
+      "subsystem": "browser-spa",
+      "attack_class": "ATTACK-CLASSES.md#Injection"
+    },
+    "surface": "src/hooks/useRouter.ts#browser URL and storage",
+    "boundary": "src/components#React rendering and navigation",
+    "subsystem": "browser-spa",
+    "attack_class": "ATTACK-CLASSES.md#Injection",
+    "starting_paths": [
+      "src/hooks/useRouter.ts",
+      "src/hooks/useCart.ts",
+      "src/lib/websiteAssets.ts",
+      "src/components"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Injection",
+    "selected_companion_blocks": [
+      "CLIENT-SIDE.md#Core discipline",
+      "CLIENT-SIDE.md#DOM-based XSS",
+      "CLIENT-SIDE.md#Browser-storage disclosure and stale authorization",
+      "CLIENT-SIDE.md#Client-side navigation confusion",
+      "CLIENT-SIDE.md#Universal moves",
+      "CLIENT-SIDE.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "new",
+    "attempts": [],
+    "wave": 1,
+    "status": "covered",
+    "agent_id": "hunter_client",
+    "reviewed_paths": [
+      "src/hooks/useRouter.ts",
+      "src/hooks/useCart.ts",
+      "src/lib/websiteAssets.ts",
+      "src/components/BrandLogo.tsx",
+      "src/components/Hero.tsx",
+      "src/components/PaymentReturnPage.tsx",
+      "src/components/SectionHeader.tsx",
+      "src/components/SmartImage.tsx",
+      "src/data/firestoreContent.ts"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "hunter_client",
+        "reviewed_paths": [
+          "src/hooks/useRouter.ts",
+          "src/hooks/useCart.ts",
+          "src/lib/websiteAssets.ts",
+          "src/components/BrandLogo.tsx",
+          "src/components/Hero.tsx",
+          "src/components/PaymentReturnPage.tsx",
+          "src/components/SectionHeader.tsx",
+          "src/components/SmartImage.tsx",
+          "src/data/firestoreContent.ts"
+        ],
+        "invariant": "URL, storage, and catalog values do not reach executable DOM/navigation sinks or another principal's authority.",
+        "method": "source",
+        "result": "React escaping and fixed/internal navigation prevent visible execution sinks; stored values are shopper-owned, not authorization decisions.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "hardening": [
+      "Catch malformed percent decoding and consider asset-origin allowlists."
+    ]
+  },
+  {
+    "coverage_id": "src%2Flib%2Ffirebase.ts%23Firebase%20Analytics%20initialization::browser%20consent%20state%23analytics%20collection::browser-analytics-consent::DATA-ISOLATION-AND-LIFECYCLE.md%23Analytics%2C%20logs%2C%20traces%2C%20and%20diagnostics%20as%20alternate%20readers",
+    "canonical_refs": {
+      "surface": "src/lib/firebase.ts#Firebase Analytics initialization",
+      "boundary": "browser consent state#analytics collection",
+      "subsystem": "browser-analytics-consent",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Analytics, logs, traces, and diagnostics as alternate readers"
+    },
+    "surface": "src/lib/firebase.ts#Firebase Analytics initialization",
+    "boundary": "browser consent state#analytics collection",
+    "subsystem": "browser-analytics-consent",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Analytics, logs, traces, and diagnostics as alternate readers",
+    "starting_paths": [
+      "src/lib/firebase.ts",
+      "src/components/CookieConsent.tsx",
+      "src/utils/cookies.ts",
+      "src/App.tsx"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Analytics, logs, traces, and diagnostics as alternate readers",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Stale authorization and derived copy use",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules",
+      "CLIENT-SIDE.md#Core discipline",
+      "CLIENT-SIDE.md#Browser-storage disclosure and stale authorization",
+      "CLIENT-SIDE.md#Universal moves",
+      "CLIENT-SIDE.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "new",
+    "attempts": [],
+    "wave": 3,
+    "status": "in_progress",
+    "agent_id": "hunter_config",
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "src%2Flib%2FpaymentGateway.ts%23Cashfree%20SDK%20loader::Browser%23third-party%20payment%20code%20execution::browser-payment-sdk::SUPPLY-CHAIN-AND-RELEASE.md%23Mutable%20and%20unbound%20build%20inputs",
+    "canonical_refs": {
+      "surface": "src/lib/paymentGateway.ts#Cashfree SDK loader",
+      "boundary": "Browser#third-party payment code execution",
+      "subsystem": "browser-payment-sdk",
+      "attack_class": "SUPPLY-CHAIN-AND-RELEASE.md#Mutable and unbound build inputs"
+    },
+    "surface": "src/lib/paymentGateway.ts#Cashfree SDK loader",
+    "boundary": "Browser#third-party payment code execution",
+    "subsystem": "browser-payment-sdk",
+    "attack_class": "SUPPLY-CHAIN-AND-RELEASE.md#Mutable and unbound build inputs",
+    "starting_paths": [
+      "src/lib/paymentGateway.ts"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [
+      "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+      "SUPPLY-CHAIN-AND-RELEASE.md#Mutable and unbound build inputs",
+      "SUPPLY-CHAIN-AND-RELEASE.md#Universal moves",
+      "SUPPLY-CHAIN-AND-RELEASE.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "new",
+    "attempts": [],
+    "wave": 2,
+    "status": "covered",
+    "agent_id": "hunter_sdk",
+    "reviewed_paths": [
+      "src/lib/paymentGateway.ts",
+      "index.html",
+      "firebase.json"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "hunter_sdk",
+        "reviewed_paths": [
+          "src/lib/paymentGateway.ts",
+          "index.html",
+          "firebase.json"
+        ],
+        "invariant": "A lower-trust principal cannot substitute payment SDK code with storefront-origin authority.",
+        "method": "source",
+        "result": "The URL is fixed to Cashfree HTTPS; no source-visible lower-trust publisher or URL/DOM control exists. Vendor/CDN mutability is an external trust dependency.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "hardening": [
+      "Pin immutable SDK/integrity metadata if the provider supports it and document CDN trust."
+    ]
+  },
+  {
+    "coverage_id": "src%2Flib%2FwebsiteAssets.ts%23Firebase%20Storage%20asset%20resolution::Firebase%20Storage%23deployed%20object%20read%20and%20write%20policy::storage-policy::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/lib/websiteAssets.ts#Firebase Storage asset resolution",
+      "boundary": "Firebase Storage#deployed object read and write policy",
+      "subsystem": "storage-policy",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/lib/websiteAssets.ts#Firebase Storage asset resolution",
+    "boundary": "Firebase Storage#deployed object read and write policy",
+    "subsystem": "storage-policy",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/lib/firebase.ts",
+      "src/lib/websiteAssets.ts",
+      "docs/website-assets.md",
+      "firebase.json"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "CLOUD-AND-DEPLOYMENT.md#Core discipline",
+      "CLOUD-AND-DEPLOYMENT.md#Object and signed-URL policy confusion",
+      "CLOUD-AND-DEPLOYMENT.md#Universal moves",
+      "CLOUD-AND-DEPLOYMENT.md#Validation rules",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Blob and signed-reference overreach",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "CLIENT-SIDE.md#DOM-based XSS",
+        "reason": "Resolved Storage URLs are rendered as media sources; no executable DOM sink is source-visible."
+      }
+    ],
+    "prior_status": "new",
+    "attempts": [],
+    "wave": 2,
+    "status": "candidate",
+    "agent_id": "hunter_storage",
+    "reviewed_paths": [
+      "src/lib/firebase.ts",
+      "src/lib/websiteAssets.ts",
+      "docs/website-assets.md",
+      "firebase.json"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "hunter_storage",
+        "reviewed_paths": [
+          "src/lib/firebase.ts",
+          "src/lib/websiteAssets.ts",
+          "docs/website-assets.md",
+          "firebase.json"
+        ],
+        "invariant": "Public browsers read only intended website assets and cannot write, list, replace, or delete Storage objects.",
+        "method": "source",
+        "result": "Storage is used by the public client but its rules and bucket IAM are outside repository source.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "storage.rules.external-policy"
+    ],
+    "unresolved": [
+      "Active Storage rules/IAM and compliant emulator result are unavailable."
+    ],
+    "hardening": [
+      "Version and deploy Storage rules with the repository."
+    ]
+  },
+  {
+    "coverage_id": "tools%20and%20firestore-upload%23operator%20scripts::Firebase%20Admin%23operator%20credential%20authority::operator-tools::ATTACK-CLASSES.md%23Cryptography%20and%20secrets",
+    "canonical_refs": {
+      "surface": "tools and firestore-upload#operator scripts",
+      "boundary": "Firebase Admin#operator credential authority",
+      "subsystem": "operator-tools",
+      "attack_class": "ATTACK-CLASSES.md#Cryptography and secrets"
+    },
+    "surface": "tools and firestore-upload#operator scripts",
+    "boundary": "Firebase Admin#operator credential authority",
+    "subsystem": "operator-tools",
+    "attack_class": "ATTACK-CLASSES.md#Cryptography and secrets",
+    "starting_paths": [
+      "tools/set-admin-claim.cjs",
+      "firestore-upload/upload.js",
+      "firestore-upload/package.json"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Cryptography and secrets",
+    "selected_companion_blocks": [
+      "CLOUD-AND-DEPLOYMENT.md#Core discipline",
+      "CLOUD-AND-DEPLOYMENT.md#Workload identity overreach",
+      "CLOUD-AND-DEPLOYMENT.md#Secret exposure across workload boundaries",
+      "CLOUD-AND-DEPLOYMENT.md#Universal moves",
+      "CLOUD-AND-DEPLOYMENT.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "new",
+    "attempts": [],
+    "wave": 1,
+    "status": "covered",
+    "agent_id": "hunter_admin",
+    "reviewed_paths": [
+      ".gitignore",
+      "firestore-upload/package.json",
+      "firestore-upload/upload.js",
+      "tools/set-admin-claim.cjs"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "hunter_admin",
+        "reviewed_paths": [
+          ".gitignore",
+          "firestore-upload/package.json",
+          "firestore-upload/upload.js",
+          "tools/set-admin-claim.cjs"
+        ],
+        "invariant": "Operator scripts do not expose Admin credentials to lower-trust readers or silently exceed operator-selected authority.",
+        "method": "source",
+        "result": "Credential files are ignored and scripts are manual Admin operations; no automatic lower-trust path was found.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "hardening": [
+      "Allowlist catalog collections accepted by bulk upload."
+    ]
+  }
+]

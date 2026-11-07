@@ -61,6 +61,8 @@ export type AdminOrder = {
     gateway?: string;
     method?: 'cash' | 'other' | string;
     otherMethod?: string;
+    razorpayOrderId?: string;
+    /** Retained so older orders remain visible in the admin export. */
     cashfreeOrderId?: string;
     transactionId?: string;
     paymentStatus?: string;
@@ -255,4 +257,39 @@ export async function saveInventory(
     throw new Error('Unable to save inventory changes.');
   }
   return result;
+}
+
+type ProductCollectionsResponse = { success: boolean; collections?: string[]; message?: string };
+type CreateProductResponse = { success: boolean; productId?: string; message?: string };
+
+export type NewProductPayload = {
+  name: string;
+  price: number;
+  collectionName: string;
+  documentId: string;
+  latest: boolean;
+  hero: boolean;
+  couple: boolean;
+  imageUrls: string[];
+  sizes?: Partial<Record<InventorySize, number>>;
+  mensSizes?: Partial<Record<InventorySize, number>>;
+  womensSizes?: Partial<Record<InventorySize, number>>;
+};
+
+export async function fetchProductCollections(signal?: AbortSignal): Promise<string[]> {
+  const { body } = await adminFetch('/admin/product-collections', { signal });
+  const result = body as ProductCollectionsResponse | null;
+  if (!result?.success || !Array.isArray(result.collections)) throw new Error(result?.message || 'Unable to load product collections.');
+  return result.collections;
+}
+
+export async function createProduct(payload: NewProductPayload): Promise<string> {
+  const { body } = await adminFetch('/admin/products', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const result = body as CreateProductResponse | null;
+  if (!result?.success || !result.productId) throw new Error(result?.message || 'Unable to save product.');
+  return result.productId;
 }

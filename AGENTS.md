@@ -18,7 +18,7 @@ Do **not** invent Firestore schemas, API endpoints, or security guarantees. Pref
 ## What this repo is
 
 - **VARATAAA** storefront (with a separate TOTD product section): Vite + React 18 + TypeScript SPA.
-- Catalog from **Firestore** (public client reads). Checkout via **Express API** (`server.cjs`) → **Cashfree** hosted checkout.
+- Catalog from **Firestore** (public client reads). Checkout via **Express API** (`server.cjs`) → **Razorpay Checkout**.
 - API is exposed as Firebase Cloud Function `api` with Hosting rewrite `/api/**`.
 - **No Firebase Auth, no Storage usage, no admin UI, no automated tests** in the current codebase.
 
@@ -34,7 +34,7 @@ Firebase project id (from `.firebaserc`): `ecommerce-f1448`.
 Browser SPA (src/)
   ├─ Firestore SDK → catalog / TOTD / _config (reads only)
   ├─ fetch → /api/* (create-order, verify-payment, …)
-  └─ Cashfree JS SDK → hosted checkout → #payment-return?order_id=…
+  └─ Razorpay Checkout → signed callback → #payment-return?order_id=…
 
 Firebase Hosting (dist)
   └─ /api/** → Cloud Function `api` (functions/ wraps server.cjs)
@@ -58,7 +58,7 @@ Firebase Hosting (dist)
 
 **Price authority:** server reads Firestore `price` (numeric). Client amounts are not trusted. The current policy charges no additional tax and shipping is **0**; checkout display and `server.cjs` must remain aligned.
 
-**Paid order doc id** = Cashfree `order_id` (idempotency key).
+**New paid order doc id** = Razorpay order ID (idempotency key). Historical provider metadata on older orders must remain readable.
 
 ---
 
@@ -74,11 +74,11 @@ Firebase Hosting (dist)
 
 ## Security constraints (non-negotiable)
 
-1. Do not print, commit, or document secret values (`.env`, service accounts, Cashfree secret, private keys, `firebase-debug.log`).
-2. Server-only: `CASHFREE_SECRET_KEY`, `FIREBASE_PRIVATE_KEY`, Admin credentials.
+1. Do not print, commit, or document secret values (`.env`, service accounts, Razorpay secrets, private keys, `firebase-debug.log`).
+2. Server-only: `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `FIREBASE_PRIVATE_KEY`, Admin credentials.
 3. `firestore.rules` currently allows **public read** of every top-level collection except `orders` and `mail` — including **`pendingOrders` and `newsletter` (PII)**. Treat as a known risk; do not widen reads.
 4. There is **no auth**. Any admin surface needs Auth + server-side authorization before privileged APIs or rules.
-5. Webhook `/api/cashfree-webhook` does not verify Cashfree signatures; it re-queries Cashfree before writing orders.
+5. Webhook `/api/razorpay-webhook` must verify the signature against the exact raw body before parsing and must re-query Razorpay before writing orders.
 6. Edit `server.cjs` / `gateway/`, then run `functions` copy-server before deploying functions. `firebase.json` has **no** functions predeploy hook and **no** `firestore` rules block.
 
 ---
@@ -105,7 +105,7 @@ There is **no** test runner, ESLint, or Prettier config in this repo. `npm run b
 - Customizer cart IDs (`custom-…`) are **not** resolvable by `resolveProductFromFirestore` → checkout fails for custom tees.
 - Orders store product id/name/price/qty/image; **size/color are not persisted** on the order document.
 - Stock is displayed client-side; server does **not** reserve or decrement stock.
-- Client Cashfree mode is hardcoded `production`; server API URL defaults to **sandbox** if `CASHFREE_API_URL` unset.
+- Razorpay Checkout Key ID and backend Key Secret must always come from the same Dashboard mode; never mix Test and Live credentials.
 - Local Vite proxies `/api` only; under `/varataaa/` the client may call `/varataaa/api/...` (path mismatch risk).
 
 When proposing an admin panel, follow [docs/admin-panel-spec.md](docs/admin-panel-spec.md) and get explicit approval for decisions marked there.

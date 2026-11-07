@@ -357,7 +357,12 @@ function toProduct(id: string, data: DocumentData, sourceCollectionName = produc
     ...numberedColorFields(data),
   ]);
   const sizes = sizeList(data.sizes ?? data.sizeStock ?? data.stockBySize ?? data.stock);
-  const mappedSizes = sortClothingSizes(sizes.length > 0 ? sizes : sizeFields(data));
+  const mappedSizes = sizes.length > 0 ? sizes : sizeFields(data);
+  const isCouple = booleanValue(data.couple) === true;
+  // Older couple products used one shared stock map. Keep that representation
+  // readable while new product creation stores independent maps.
+  const mensSizes = sizeList(data.mensSizes ?? data.mensSizeStock);
+  const womensSizes = sizeList(data.womensSizes ?? data.womensSizeStock);
 
   return {
     id: `${slugify(sourceCollectionName)}-${id}`,
@@ -377,7 +382,9 @@ function toProduct(id: string, data: DocumentData, sourceCollectionName = produc
     galleryImages,
     colors,
     sizes: mappedSizes,
-    isCouple: booleanValue(data.couple) === true,
+    mensSizes: isCouple ? (mensSizes.length ? mensSizes : mappedSizes) : undefined,
+    womensSizes: isCouple ? (womensSizes.length ? womensSizes : mappedSizes) : undefined,
+    isCouple,
     sizeGuide: sizeGuideList(data.sizeGuide),
     theme: sourceLabel,
     collectionImage:
@@ -410,6 +417,23 @@ function toLookbookItem(id: string, data: DocumentData): LookbookItem {
   };
 }
 
+const retryableFirestoreErrorCodes = new Set([
+  'aborted',
+  'cancelled',
+  'deadline-exceeded',
+  'internal',
+  'resource-exhausted',
+  'unavailable',
+  'unknown',
+]);
+
+function isRetryableFirestoreError(error: unknown) {
+  const code = error && typeof error === 'object' && 'code' in error
+    ? String((error as { code?: unknown }).code)
+    : '';
+  return retryableFirestoreErrorCodes.has(code);
+}
+
 
 
 /**
@@ -431,6 +455,10 @@ export function subscribeToProducts(
 
   // Accumulator: stores the latest snapshot per collection
   const snapshotsByCollection = new Map<string, Product[]>();
+  let pendingInitialCollections = new Set<string>();
+  const retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const retryAttempts = new Map<string, number>();
+  let listenerGeneration = 0;
 
   function emitMerged() {
     const merged: Product[] = [];
@@ -439,9 +467,55 @@ export function subscribeToProducts(
   }
 
   function teardownProductListeners() {
+    listenerGeneration += 1;
     productUnsubscribes.forEach((u) => u());
     productUnsubscribes = [];
     snapshotsByCollection.clear();
+    pendingInitialCollections = new Set();
+    retryTimers.forEach((timer) => clearTimeout(timer));
+    retryTimers.clear();
+    retryAttempts.clear();
+  }
+
+  function attachProductListener(collectionName: string, collectionNames: string[], generation: number) {
+    const unsub = onSnapshot(
+      collection(db, collectionName),
+      (snapshot) => {
+        if (destroyed || generation !== listenerGeneration) return;
+
+        const products = snapshot.docs.map((d) =>
+          toProduct(d.id, d.data(), collectionName),
+        );
+        snapshotsByCollection.set(collectionName, products);
+        retryAttempts.delete(collectionName);
+        pendingInitialCollections.delete(collectionName);
+        if (pendingInitialCollections.size === 0) emitMerged();
+      },
+      (error) => {
+        if (destroyed || generation !== listenerGeneration) return;
+
+        console.error(`Firestore snapshot error for "${collectionName}":`, error);
+        onError?.(error);
+
+        if (!isRetryableFirestoreError(error)) {
+          pendingInitialCollections.delete(collectionName);
+          if (pendingInitialCollections.size === 0) emitMerged();
+          return;
+        }
+
+        if (retryTimers.has(collectionName)) return;
+        const attempt = (retryAttempts.get(collectionName) ?? 0) + 1;
+        retryAttempts.set(collectionName, attempt);
+        const delay = Math.min(30_000, 1_000 * 2 ** Math.min(attempt - 1, 5));
+        retryTimers.set(collectionName, setTimeout(() => {
+          retryTimers.delete(collectionName);
+          if (!destroyed && generation === listenerGeneration) {
+            attachProductListener(collectionName, collectionNames, generation);
+          }
+        }, delay));
+      },
+    );
+    productUnsubscribes.push(unsub);
   }
 
   function setupProductListeners(collectionNames: string[]) {
@@ -450,24 +524,10 @@ export function subscribeToProducts(
 
     if (destroyed) return;
 
-    collectionNames.forEach((collectionName) => {
-      const colRef = collection(db, collectionName);
-      const unsub = onSnapshot(
-        colRef,
-        (snapshot) => {
-          const products = snapshot.docs.map((d) =>
-            toProduct(d.id, d.data(), collectionName),
-          );
-          snapshotsByCollection.set(collectionName, products);
-          emitMerged();
-        },
-        (error) => {
-          console.error(`Firestore snapshot error for "${collectionName}":`, error);
-          onError?.(error);
-        },
-      );
-      productUnsubscribes.push(unsub);
-    });
+    pendingInitialCollections = new Set(collectionNames);
+
+    const generation = listenerGeneration;
+    collectionNames.forEach((collectionName) => attachProductListener(collectionName, collectionNames, generation));
   }
 
   // Initial setup
@@ -523,15 +583,41 @@ export function subscribeToTOTD(
   onUpdate: (products: Product[]) => void,
   onError?: (error: Error) => void,
 ): Unsubscribe {
-  return onSnapshot(
-    collection(db, 'TOTD'),
-    (snapshot) => {
-      const items = snapshot.docs.map((d) => toProduct(d.id, d.data(), 'TOTD'));
-      onUpdate(sortByOrder(items));
-    },
-    (error) => {
-      console.error('Firestore TOTD snapshot error:', error);
-      onError?.(error);
-    },
-  );
+  let unsubscribe: Unsubscribe | null = null;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let retryAttempt = 0;
+  let destroyed = false;
+
+  const listen = () => {
+    unsubscribe = onSnapshot(
+      collection(db, 'TOTD'),
+      (snapshot) => {
+        if (destroyed) return;
+        retryAttempt = 0;
+        const items = snapshot.docs.map((d) => toProduct(d.id, d.data(), 'TOTD'));
+        onUpdate(sortByOrder(items));
+      },
+      (error) => {
+        if (destroyed) return;
+        console.error('Firestore TOTD snapshot error:', error);
+        onError?.(error);
+        if (!isRetryableFirestoreError(error) || retryTimer) return;
+
+        retryAttempt += 1;
+        const delay = Math.min(30_000, 1_000 * 2 ** Math.min(retryAttempt - 1, 5));
+        retryTimer = setTimeout(() => {
+          retryTimer = null;
+          if (!destroyed) listen();
+        }, delay);
+      },
+    );
+  };
+
+  listen();
+  return () => {
+    destroyed = true;
+    unsubscribe?.();
+    if (retryTimer) clearTimeout(retryTimer);
+    retryTimer = null;
+  };
 }

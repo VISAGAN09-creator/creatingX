@@ -85,7 +85,7 @@ function orderItemsForCsv(order: AdminOrder) {
 
 function downloadOrdersCsv(orders: AdminOrder[]) {
   const rows = [
-    ['Order ID', 'Order Type', 'Order Date', 'Customer Name', 'Customer Email', 'Phone Number', 'Shipping Address', 'Products / Items', 'Order Total (INR)', 'Payment Method', 'Payment Status', 'Fulfillment Status', 'Cashfree Order ID'],
+    ['Order ID', 'Order Type', 'Order Date', 'Customer Name', 'Customer Email', 'Phone Number', 'Shipping Address', 'Products / Items', 'Order Total (INR)', 'Payment Method', 'Payment Status', 'Fulfillment Status', 'Gateway Order ID'],
     ...orders.map((order) => [
       order.orderId,
       order.orderType === 'walk-in' ? 'Walk-in' : 'Online',
@@ -99,7 +99,7 @@ function downloadOrdersCsv(orders: AdminOrder[]) {
       order.payment.method === 'other' ? order.payment.otherMethod || 'Other' : order.payment.method || order.payment.gateway || '',
       order.paymentStatus || '',
       statusLabels[order.fulfillmentStatus],
-      order.payment.cashfreeOrderId || '',
+      order.payment.razorpayOrderId || order.payment.cashfreeOrderId || '',
     ]),
   ];
   const csv = `\ufeff${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}`;

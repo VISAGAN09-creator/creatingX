@@ -12,5 +12,13 @@ const functions = require('firebase-functions');
 const { app } = require('./server.cjs');
 
 exports.api = functions
-  .runWith({ secrets: ['GMAIL_USER', 'GMAIL_APP_PASSWORD'] })
+  .runWith({
+    secrets: [
+      'GMAIL_USER',
+      'GMAIL_APP_PASSWORD',
+      'RAZORPAY_KEY_ID',
+      'RAZORPAY_KEY_SECRET',
+      'RAZORPAY_WEBHOOK_SECRET',
+    ],
+  })
   .https.onRequest(app);
