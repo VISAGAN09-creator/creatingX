@@ -48,7 +48,8 @@ async function razorpayRequest(path, options = {}) {
 async function createOrder({ amount, currency = 'INR', receipt, items }) {
   if (!Number.isFinite(amount) || amount <= 0) throw new Error('A positive payment amount is required.');
   const amountInPaise = Math.round(amount * 100);
-  if (!Number.isSafeInteger(amountInPaise)) throw new Error('Payment amount is invalid.');
+  if (!Number.isSafeInteger(amountInPaise) || amountInPaise <= 0 || currency !== 'INR'
+    || Math.abs(amount * 100 - amountInPaise) > 0.000001) throw new Error('Payment amount is invalid.');
   const order = await razorpayRequest('/orders', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -59,7 +60,8 @@ async function createOrder({ amount, currency = 'INR', receipt, items }) {
       notes: { item_count: String(Array.isArray(items) ? items.length : 0) },
     }),
   });
-  if (typeof order.id !== 'string' || order.currency !== currency || order.amount !== amountInPaise) {
+  if (typeof order.id !== 'string' || !order.id || order.currency !== currency || order.amount !== amountInPaise) {
+    console.error('[Payment Amount] Provider mismatch', { orderId: order.id, amountPaise: amountInPaise, razorpayAmountPaise: order.amount, currency: order.currency, amountValid: false });
     throw new Error('Razorpay returned an invalid order.');
   }
   return {
@@ -80,7 +82,7 @@ async function verifyPayment({ orderId, paymentData, orderDetails }) {
   const payment = await razorpayRequest(`/payments/${encodeURIComponent(paymentId)}`);
   const expectedAmount = Math.round(Number(orderDetails?.totalAmount) * 100);
   const verified = payment.order_id === orderId && payment.status === 'captured'
-    && payment.currency === 'INR' && (!Number.isFinite(expectedAmount) || payment.amount === expectedAmount);
+    && payment.currency === 'INR' && Number.isSafeInteger(expectedAmount) && expectedAmount > 0 && payment.amount === expectedAmount;
   return {
     verified,
     gatewayPaymentId: payment.id || paymentId,

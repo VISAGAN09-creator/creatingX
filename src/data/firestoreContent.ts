@@ -8,7 +8,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { slugify } from '../utils/string';
-import { sortClothingSizes } from '../utils/sizes';
+import { CLOTHING_SIZE_ORDER, sortClothingSizes } from '../utils/sizes';
 import type { LookbookItem, Product, ProductColor, ProductSize, ProductSizeGuideRow } from '../types';
 
 const productsCollectionName = import.meta.env.VITE_FIRESTORE_PRODUCTS_COLLECTION || 'products';
@@ -50,7 +50,9 @@ async function discoverCollectionNames(): Promise<string[]> {
   // or fall back to it if no other collections are discovered.
   return [...new Set([...discovered, productsCollectionName])];
 }
-const sizeFieldNames = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
+// Top-level size fields are the legacy eight-size inventory format. Other
+// configured sizes continue to be read from `sizes`/stock maps unchanged.
+const sizeFieldNames = CLOTHING_SIZE_ORDER.slice(0, 8);
 
 function text(value: unknown) {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
@@ -381,9 +383,9 @@ function toProduct(id: string, data: DocumentData, sourceCollectionName = produc
     careInstructions: lineList(data.careInstructions ?? data.care),
     galleryImages,
     colors,
-    sizes: mappedSizes,
-    mensSizes: isCouple ? (mensSizes.length ? mensSizes : mappedSizes) : undefined,
-    womensSizes: isCouple ? (womensSizes.length ? womensSizes : mappedSizes) : undefined,
+    sizes: sortClothingSizes(mappedSizes),
+    mensSizes: isCouple ? sortClothingSizes(mensSizes.length ? mensSizes : mappedSizes) : undefined,
+    womensSizes: isCouple ? sortClothingSizes(womensSizes.length ? womensSizes : mappedSizes) : undefined,
     isCouple,
     sizeGuide: sizeGuideList(data.sizeGuide),
     theme: sourceLabel,
