@@ -372,6 +372,7 @@ export function CheckoutPage({ lines, onClearCart, onBack }: CheckoutPageProps) 
           name: details.fullName,
           itemCount,
           orderData,
+          expectedAmountPaise: Math.round(total * 100),
         },
         {
           onSuccess: (paymentData) => {

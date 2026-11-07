@@ -367,6 +367,29 @@ test('captured webhook records depleted stock for manual review and acknowledges
   assert.equal(database.read('pendingOrders', 'order_depleted').paymentStatus, 'captured');
 });
 
+test('captured webhook with 200 paise cannot finalize a persisted 6100 paise checkout', async () => {
+  const database = fakeDatabase();
+  const pending = pendingOrder('order_amount');
+  pending.items[0].price = 1;
+  pending.items[0].lineTotal = 1;
+  pending.totalAmount = 61;
+  pending.shippingAmount = 60;
+  database.seed('pendingOrders', 'order_amount', pending);
+  database.seed('products', 'tee', { sizes: { M: 1 } });
+  const res = response();
+  const paymentGateway = webhookGateway();
+  paymentGateway.verifyWebhookPayment = async () => ({ ...capturedPayment('order_amount'), orderAmount: 2 });
+  await handleRazorpayWebhookRequest(capturedWebhook('order_amount'), res, {
+    database, paymentGateway,
+    finalize: (id, verification, source) => createRazorpayPaidOrder(id, verification, source, {
+      database, sendConfirmation: async () => assert.fail('Unverified amount must not email'),
+    }),
+  });
+  assert.equal(res.code, 500);
+  assert.equal(database.count('orders'), 0);
+  assert.equal(database.read('products', 'tee').sizes.M, 1);
+});
+
 test('failed webhook still marks a pending payment as failed', async () => {
   const database = fakeDatabase();
   database.seed('pendingOrders', 'order_failed', pendingOrder('order_failed'));

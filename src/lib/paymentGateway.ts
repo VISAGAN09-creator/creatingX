@@ -12,7 +12,7 @@ export type CheckoutCallbacks = {
 };
 
 export type CheckoutContext = {
-  email: string; phone: string; name: string; itemCount: number; orderData: CreateOrderResponse;
+  email: string; phone: string; name: string; itemCount: number; orderData: CreateOrderResponse; expectedAmountPaise: number;
 };
 
 declare global {
@@ -48,6 +48,13 @@ export function openCheckout(context: CheckoutContext, callbacks: CheckoutCallba
   const { keyId, razorpayOrderId, amount } = context.orderData.gatewayData;
   if (!window.Razorpay || !keyId || !razorpayOrderId || typeof amount !== 'number' || !Number.isSafeInteger(amount)) {
     callbacks.onError('Payment checkout could not be initialised.');
+    return;
+  }
+  if (amount <= 0 || context.orderData.currency !== 'INR' || razorpayOrderId !== context.orderData.orderId
+    || !Number.isFinite(context.orderData.amount) || Math.round(context.orderData.amount * 100) !== amount
+    || !Number.isSafeInteger(context.expectedAmountPaise) || amount !== context.expectedAmountPaise) {
+    console.error('[Payment Amount] Checkout blocked', { orderId: context.orderData.orderId, amountPaise: amount, expectedAmountPaise: context.expectedAmountPaise });
+    callbacks.onError('Checkout prices have changed or the payment amount could not be validated. Refresh checkout before paying.');
     return;
   }
   const checkout = new window.Razorpay({

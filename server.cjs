@@ -54,6 +54,15 @@ function roundCurrency(value) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+function monetaryPaise(value) {
+  const paise = Math.round(value * 100);
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0
+    || !Number.isSafeInteger(paise) || Math.abs(value * 100 - paise) > 0.000001) {
+    throw new Error('Invalid monetary amount.');
+  }
+  return paise;
+}
+
 /**
  * Builds the amount passed to Razorpay from server-resolved line totals only.
  * Client-request totals are intentionally not part of this contract.
@@ -64,12 +73,13 @@ function calculateCheckoutPricing(resolvedItems, shippingAmount = 0) {
     throw new Error('Shipping amount must be a non-negative number.');
   }
 
-  const subtotalAmount = roundCurrency(
-    resolvedItems.reduce((sum, item) => sum + Number(item.lineTotal), 0),
-  );
+  const subtotalPaise = resolvedItems.reduce((sum, item) => sum + monetaryPaise(item.lineTotal), 0);
+  const shippingPaise = monetaryPaise(normalizedShipping);
+  if (!Number.isSafeInteger(subtotalPaise + shippingPaise)) throw new Error('Invalid monetary total.');
+  const subtotalAmount = subtotalPaise / 100;
   const taxAmount = 0;
-  const roundedShippingAmount = roundCurrency(normalizedShipping);
-  const totalAmount = roundCurrency(subtotalAmount + roundedShippingAmount);
+  const roundedShippingAmount = shippingPaise / 100;
+  const totalAmount = (subtotalPaise + shippingPaise) / 100;
 
   return { subtotalAmount, taxAmount, shippingAmount: roundedShippingAmount, totalAmount };
 }
@@ -1025,7 +1035,7 @@ function productImage(data) {
  * Resolve cart lines using only current Firestore product data.
  * Client prices are deliberately not read or copied here.
  */
-async function resolveCheckoutItems(items) {
+async function resolveCheckoutItems(items, resolveProduct = resolveProductFromFirestore) {
   if (!Array.isArray(items) || items.length === 0) {
     throw checkoutValidationError(400, 'Validation Error: items must be a non-empty array of { id, quantity }.');
   }
@@ -1045,7 +1055,7 @@ async function resolveCheckoutItems(items) {
       throw checkoutValidationError(400, `Validation Error: Quantity for "${productId}" must be an integer between 1 and 100.`);
     }
 
-    const product = await resolveProductFromFirestore(productId);
+    const product = await resolveProduct(productId);
     if (!product) {
       throw checkoutValidationError(404, `Product not found: "${productId}".`);
     }
@@ -1070,6 +1080,8 @@ async function resolveCheckoutItems(items) {
     if (!Number.isFinite(price) || price <= 0) {
       throw checkoutValidationError(400, `Product "${productId}" does not have a valid price.`);
     }
+    const unitPaise = monetaryPaise(price);
+    if (unitPaise <= 0) throw checkoutValidationError(400, 'Product price must be positive.');
 
     const configuredColors = configuredColorLabels(product.data);
     const submittedColor = sanitizeString(item.color ?? item.selectedColor, 100);
@@ -1099,7 +1111,7 @@ async function resolveCheckoutItems(items) {
       name: productName(product.data, product.docId),
       price,
       quantity,
-      lineTotal: price * quantity,
+      lineTotal: unitPaise * quantity / 100,
       image: productImage(product.data),
       alt: typeof product.data.alt === 'string' && product.data.alt.trim()
         ? product.data.alt.trim()
@@ -1533,8 +1545,10 @@ app.post('/api/checkout-preview', async (req, res) => {
   }
 });
 
-app.post('/api/create-order', async (req, res) => {
-  const { items, customer, shipping } = req.body;
+async function createPaymentOrderRequest(req, res, dependencies = {}) {
+  const database = dependencies.database || db;
+  const paymentGateway = dependencies.paymentGateway || gateway;
+  const { items, customer, shipping } = req.body || {};
 
   // --- Validate items array ---
   if (!Array.isArray(items) || items.length === 0) {
@@ -1551,7 +1565,7 @@ app.post('/api/create-order', async (req, res) => {
     });
   }
 
-  if (!db) {
+  if (!database) {
     return res.status(500).json({
       success: false,
       message: 'Server database is not initialized.',
@@ -1566,161 +1580,15 @@ app.post('/api/create-order', async (req, res) => {
   try {
     // Resolve and validate again here. The payment amount is never taken from
     // the checkout preview or any browser-supplied price.
-    const resolvedItems = await resolveCheckoutItems(items);
-    await validateCheckoutInventory(resolvedItems);
-    let totalAmount = resolvedItems.reduce((sum, item) => sum + item.lineTotal, 0);
-
-    for (const item of items) {
-      const productId = typeof item.id === 'string' ? item.id.trim() : '';
-      const quantity = Number(item.quantity);
-
-      if (!productId) {
-        return res.status(400).json({
-          success: false,
-          message: 'Validation Error: Each item must have a non-empty id.',
-        });
-      }
-
-      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) {
-        return res.status(400).json({
-          success: false,
-          message: `Validation Error: Quantity for "${productId}" must be an integer between 1 and 100.`,
-        });
-      }
-
-      const product = await resolveProductFromFirestore(productId);
-      if (!product) {
-        return res.status(404).json({
-          success: false,
-          message: `Product not found: "${productId}".`,
-        });
-      }
-
-      const couple = isCoupleProduct(product.data);
-      const selectedMensSize = couple ? normalizeSize(item.mensSize ?? item.selectedMensSize) : null;
-      const selectedWomensSize = couple ? normalizeSize(item.womensSize ?? item.selectedWomensSize) : null;
-      const submittedStandardSize = !couple ? normalizeSize(item.size ?? item.selectedSize) : null;
-      const selectedSize = !couple ? product.selectedSize || submittedStandardSize : null;
-
-      if (couple && (!selectedMensSize || !selectedWomensSize)) {
-        return res.status(400).json({
-          success: false,
-          message: `Select both men's and women's sizes for "${productId}" before checkout.`,
-        });
-      }
-
-      if (!couple && product.selectedSize && submittedStandardSize && product.selectedSize !== submittedStandardSize) {
-        return res.status(400).json({
-          success: false,
-          message: `Selected size for "${productId}" does not match the product variant.`,
-        });
-      }
-
-      if (!couple && !selectedSize) {
-        return res.status(400).json({
-          success: false,
-          message: `Select an in-stock size for "${productId}" before checkout.`,
-        });
-      }
-
-      // Extract price from Firestore document (server-authoritative)
-      const firestorePrice = Number(product.data.price);
-      if (!Number.isFinite(firestorePrice) || firestorePrice <= 0) {
-        return res.status(400).json({
-          success: false,
-          message: `Product "${productId}" does not have a valid price.`,
-        });
-      }
-
-      const configuredColors = configuredColorLabels(product.data);
-      const submittedColor = sanitizeString(item.color ?? item.selectedColor, 100);
-      let selectedColor;
-
-      if (configuredColors.length > 0) {
-        if (!submittedColor) {
-          return res.status(400).json({
-            success: false,
-            message: `Select a color for "${productId}" before checkout.`,
-          });
-        }
-
-        selectedColor = configuredColors.find(
-          (color) => color.toLocaleLowerCase() === submittedColor.toLocaleLowerCase(),
-        );
-        if (!selectedColor) {
-          return res.status(400).json({
-            success: false,
-            message: `Selected color for "${productId}" is unavailable.`,
-          });
-        }
-      } else if (submittedColor) {
-        return res.status(400).json({
-          success: false,
-          message: `Product "${productId}" does not have configurable colors.`,
-        });
-      }
-
-      const lineTotal = firestorePrice * quantity;
-      totalAmount += lineTotal;
-
-      resolvedItems.push({
-        productId,
-        firestoreDocId: product.docId,
-        collectionName: product.collectionName,
-        couple,
-        // New couple products use independent stock maps. Existing documents
-        // have one shared map, which must keep counting both garments together.
-        independentCoupleStock: couple && Boolean(product.data.mensSizes || product.data.womensSizes),
-        ...(couple
-          ? { selectedMensSize, selectedWomensSize }
-          : { selectedSize }),
-        ...(selectedColor ? { selectedColor } : {}),
-        name: product.data.name || product.data.title || product.docId,
-        price: firestorePrice,
-        quantity,
-        lineTotal,
-        image: product.data.img1 || product.data.image || '',
-      });
+    const resolvedItems = await resolveCheckoutItems(items, dependencies.resolveProduct || resolveProductFromFirestore);
+    await (dependencies.validateInventory || validateCheckoutInventory)(resolvedItems);
+    const verifiedState = await (dependencies.lookupPin || lookupPin)(checkoutDetails.shipping.pinCode);
+    if (normalizeState(verifiedState) !== checkoutDetails.shipping.state) {
+      throw checkoutValidationError(400, 'Shipping state does not match the PIN code.');
     }
-
-    // This is a checkout-time validation only; inventory is deducted atomically
-    // after Cashfree confirms payment. The paid-order transaction repeats this
-    // check so concurrent shoppers cannot oversell a size.
-    const requestedByVariant = new Map();
-    for (const item of resolvedItems) {
-      const selections = item.couple
-        ? [
-            { role: item.independentCoupleStock ? 'mens' : 'legacy', size: item.selectedMensSize },
-            { role: item.independentCoupleStock ? 'womens' : 'legacy', size: item.selectedWomensSize },
-          ]
-        : [{ role: 'standard', size: item.selectedSize }];
-      for (const selection of selections) {
-        const key = `${item.collectionName}\u0000${item.firestoreDocId}\u0000${selection.role}\u0000${selection.size}`;
-        const current = requestedByVariant.get(key) || { item, role: selection.role, size: selection.size, quantity: 0 };
-        requestedByVariant.set(key, { ...current, quantity: current.quantity + item.quantity });
-      }
-    }
-    for (const request of requestedByVariant.values()) {
-      const productData = (await db.collection(request.item.collectionName).doc(request.item.firestoreDocId).get()).data();
-      const coupleAdapters = request.item.couple ? coupleStockAdapters(productData) : null;
-      const adapter = request.role === 'mens'
-        ? (coupleAdapters.mens.configured.size ? coupleAdapters.mens : coupleAdapters.legacy)
-        : request.role === 'womens'
-          ? (coupleAdapters.womens.configured.size ? coupleAdapters.womens : coupleAdapters.legacy)
-          : request.role === 'legacy'
-            ? coupleAdapters.legacy
-            : stockAdapter(productData);
-      const available = adapter.configured.has(request.size) ? adapter.quantities[request.size] ?? 0 : 0;
-      if (!adapter.editable || available < request.quantity) {
-        return res.status(409).json({ success: false, message: `${request.item.name} (${request.size}) is out of stock or has insufficient stock.` });
-      }
-    }
-
-    // Catalog prices are the intended payable prices. Shipping is currently
-    // free and no additional tax is charged at checkout.
-    const pricing = calculateCheckoutPricing(resolvedItems, 0);
-    const { subtotalAmount, taxAmount, shippingAmount } = pricing;
-    totalAmount = pricing.totalAmount;
+    const pricing = calculateCheckoutPricing(resolvedItems, shippingCharge(verifiedState, resolvedItems));
+    const { subtotalAmount, taxAmount, shippingAmount, totalAmount } = pricing;
+    const amountPaise = monetaryPaise(totalAmount);
 
     if (totalAmount <= 0) {
       return res.status(400).json({
@@ -1753,24 +1621,38 @@ app.post('/api/create-order', async (req, res) => {
       createdAt: new Date().toISOString(),
     };
 
-    const order = await gateway.createOrder({
+    const receipt = `receipt_${crypto.randomUUID()}`.slice(0, 40);
+    console.log('[Payment Amount] Calculated', JSON.stringify({ receipt, subtotalPaise: monetaryPaise(subtotalAmount),
+      shippingPaise: monetaryPaise(shippingAmount), taxPaise: monetaryPaise(taxAmount), discountPaise: 0, amountPaise, currency: 'INR' }));
+    const order = await paymentGateway.createOrder({
       amount: totalAmount,
       currency: 'INR',
-      receipt: `receipt_${Date.now()}`,
+      receipt,
       items: resolvedItems,
     });
 
     // The Razorpay order ID is the single idempotency key used by checkout,
     // callback verification, webhooks, and the final Firestore order document.
-    if (db && order.orderId) {
+    const amountValid = typeof order.orderId === 'string' && order.orderId.length > 0
+      && order.currency === 'INR' && monetaryPaise(order.amount) === amountPaise
+      && order.gatewayData?.razorpayOrderId === order.orderId && order.gatewayData?.amount === amountPaise;
+    console.log('[Payment Amount]', JSON.stringify({
+      orderId: order.orderId, subtotalPaise: monetaryPaise(subtotalAmount), shippingPaise: monetaryPaise(shippingAmount),
+      taxPaise: monetaryPaise(taxAmount), discountPaise: 0, amountPaise,
+      razorpayAmountPaise: order.gatewayData?.amount, currency: order.currency, amountValid,
+    }));
+    if (!amountValid) throw new Error('Payment amount validation failed. Refresh checkout and try again.');
+    if (order.orderId) {
       pendingOrderData.razorpayOrderId = order.orderId;
-      await db.collection('pendingOrders').doc(order.orderId).set(pendingOrderData);
+      await database.collection('pendingOrders').doc(order.orderId).set(pendingOrderData);
     }
 
     return res.status(200).json({
       success: true,
       orderId: order.orderId,
       amount: order.amount,
+      amountPaise,
+      pricing,
       currency: order.currency,
       gatewayData: order.gatewayData || {},
     });
@@ -1782,7 +1664,9 @@ app.post('/api/create-order', async (req, res) => {
       message: error.message || 'Failed to create payment order.',
     });
   }
-});
+}
+
+app.post('/api/create-order', (req, res) => createPaymentOrderRequest(req, res));
 
 // ============================================================================
 // SHARED HELPERS
@@ -2331,4 +2215,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, calculateCheckoutPricing, validateCheckoutDetails, pendingOrderItem, paidOrderItem, parseNewProductSizes, coupleStockAdapters, createPaidOrderWithFulfillment, createRazorpayPaidOrder, verifyRazorpayPaymentRequest, handleRazorpayWebhookRequest, claimRazorpayEvent };
+module.exports = { createPaymentOrderRequest, resolveCheckoutItems, app, calculateCheckoutPricing, validateCheckoutDetails, pendingOrderItem, paidOrderItem, parseNewProductSizes, coupleStockAdapters, createPaidOrderWithFulfillment, createRazorpayPaidOrder, verifyRazorpayPaymentRequest, handleRazorpayWebhookRequest, claimRazorpayEvent };

@@ -130,9 +130,9 @@ export function ProductDetailsPage({
 
   const images = useMemo(() => (product ? productImages(product) : []), [product]);
   const colors = useMemo(() => product?.colors ?? [], [product]);
-  const sizes = useMemo(() => product?.sizes ?? [], [product]);
-  const mensSizes = useMemo(() => product?.mensSizes ?? sizes, [product, sizes]);
-  const womensSizes = useMemo(() => product?.womensSizes ?? sizes, [product, sizes]);
+  const sizes = useMemo(() => sortClothingSizes(product?.sizes ?? []), [product]);
+  const mensSizes = useMemo(() => sortClothingSizes(product?.mensSizes ?? sizes), [product, sizes]);
+  const womensSizes = useMemo(() => sortClothingSizes(product?.womensSizes ?? sizes), [product, sizes]);
   const sizeGuide = product?.sizeGuide?.length ? product.sizeGuide : DEFAULT_SIZE_GUIDE;
   const selectedSizeData = sizes.find((size) => size.name === selectedSize);
   const selectedMensSizeData = mensSizes.find((size) => size.name === selectedMensSize);
