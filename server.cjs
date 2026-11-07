@@ -2331,4 +2331,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, calculateCheckoutPricing, pendingOrderItem, paidOrderItem, parseNewProductSizes, coupleStockAdapters };
+module.exports = { app, calculateCheckoutPricing, validateCheckoutDetails, pendingOrderItem, paidOrderItem, parseNewProductSizes, coupleStockAdapters, createPaidOrderWithFulfillment, createRazorpayPaidOrder, verifyRazorpayPaymentRequest, handleRazorpayWebhookRequest, claimRazorpayEvent };

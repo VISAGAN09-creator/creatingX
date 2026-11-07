@@ -16,7 +16,7 @@ test('validates a Razorpay webhook HMAC over the original bytes only', () => {
   const script = [
     "const gateway = require('./gateway/razorpay.cjs');",
     'const body = Buffer.from(process.argv[1]);',
-    'console.log(gateway.verifyWebhookSignature(body, process.argv[2]));',
+    'process.stdout.write(String(gateway.verifyWebhookSignature(body, process.argv[2])));',
   ].join('');
   const valid = execFileSync(process.execPath, ['-e', script, body, signature], {
     cwd: path.join(__dirname, '..'),
@@ -37,7 +37,7 @@ test('accepts only captured Razorpay payments for finalisation', () => {
     "const gateway = require('./gateway/razorpay.cjs');",
     "const orderId = 'order_test'; const paymentId = 'pay_test';",
     "const signature = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET).update(orderId + '|' + paymentId).digest('hex');",
-    "gateway.verifyPayment({ orderId, paymentData: { razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature }, orderDetails: { totalAmount: 123.45 } }).then((result) => console.log(JSON.stringify(result)));",
+    "gateway.verifyPayment({ orderId, paymentData: { razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature }, orderDetails: { totalAmount: 123.45 } }).then((result) => process.stdout.write(JSON.stringify(result)));",
   ].join('');
   const verify = (status) => JSON.parse(execFileSync(process.execPath, ['-e', script, status], {
     cwd: path.join(__dirname, '..'),

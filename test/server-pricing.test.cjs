@@ -1,7 +1,10 @@
 const assert = require('node:assert/strict');
 const os = require('node:os');
 const test = require('node:test');
+const originalCwd = process.cwd();
+process.chdir(os.tmpdir());
 const { calculateCheckoutPricing, coupleStockAdapters, paidOrderItem, parseNewProductSizes, pendingOrderItem } = require('../server.cjs');
+process.chdir(originalCwd);
 
 test('charges a ₹1.00 server-resolved item as ₹1.00 with free shipping', () => {
   assert.deepEqual(calculateCheckoutPricing([{ lineTotal: 1 }]), {
