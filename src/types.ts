@@ -23,6 +23,9 @@ export type Product = {
   galleryImages?: string[];
   colors?: ProductColor[];
   sizes?: ProductSize[];
+  /** Independent stock-backed sizes for newly created couple products. */
+  mensSizes?: ProductSize[];
+  womensSizes?: ProductSize[];
   /** True only when the Firestore `couple` field explicitly enables paired sizing. */
   isCouple?: boolean;
   sizeGuide?: ProductSizeGuideRow[];

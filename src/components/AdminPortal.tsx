@@ -9,6 +9,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { AdminOrders } from './AdminOrders';
 import { InventoryManagement } from './InventoryManagement';
+import { ProductCreation } from './ProductCreation';
 
 type AdminPortalProps = { onExit: () => void };
 
@@ -21,7 +22,7 @@ export function AdminPortal({ onExit }: AdminPortalProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [serverAccess, setServerAccess] = useState<'idle' | 'checking' | 'allowed' | 'denied'>('idle');
-  const [adminPage, setAdminPage] = useState<'orders' | 'inventory'>('orders');
+  const [adminPage, setAdminPage] = useState<'orders' | 'inventory' | 'create'>('orders');
 
   useEffect(() => {
     if (status !== 'authorized' || !user) {
@@ -84,8 +85,11 @@ export function AdminPortal({ onExit }: AdminPortalProps) {
   }
 
   if (status === 'authorized' && serverAccess === 'allowed' && user) {
+    if (adminPage === 'create') {
+      return <ProductCreation adminEmail={user.email} onSignOut={handleSignOut} onExit={onExit} onOpenInventory={() => setAdminPage('inventory')} onOpenOrders={() => setAdminPage('orders')} />;
+    }
     return adminPage === 'inventory'
-      ? <InventoryManagement adminEmail={user.email} onSignOut={handleSignOut} onExit={onExit} onOpenOrders={() => setAdminPage('orders')} />
+      ? <InventoryManagement adminEmail={user.email} onSignOut={handleSignOut} onExit={onExit} onOpenOrders={() => setAdminPage('orders')} onOpenCreate={() => setAdminPage('create')} />
       : <AdminOrders adminEmail={user.email} onSignOut={handleSignOut} onExit={onExit} onOpenInventory={() => setAdminPage('inventory')} />;
   }
 

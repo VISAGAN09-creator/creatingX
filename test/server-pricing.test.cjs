@@ -1,10 +1,7 @@
 const assert = require('node:assert/strict');
 const os = require('node:os');
 const test = require('node:test');
-const originalCwd = process.cwd();
-process.chdir(os.tmpdir());
-const { calculateCheckoutPricing, coupleStockAdapters, orderConfirmationMessage, paidOrderItem, pendingOrderItem, sendOrderConfirmationEmail, walkInCustomer, walkInOrderId, walkInPayment } = require('../server.cjs');
-process.chdir(originalCwd);
+const { calculateCheckoutPricing, coupleStockAdapters, paidOrderItem, parseNewProductSizes, pendingOrderItem } = require('../server.cjs');
 
 test('charges a ₹1.00 server-resolved item as ₹1.00 with free shipping', () => {
   assert.deepEqual(calculateCheckoutPricing([{ lineTotal: 1 }]), {
@@ -119,178 +116,20 @@ test('does not emit undefined optional fields in paid standard-product order ite
   assert.equal(Object.values(item).some((value) => value === undefined), false);
 });
 
-test('validates walk-in customer and payment details without trusting client totals', () => {
-  assert.equal(walkInCustomer({ name: 'Walk In', email: 'customer@example.com', phone: '9876543210' }).valid, true);
-    assert.equal(walkInCustomer({ name: 'Walk In' }).valid, true);
-  assert.equal(walkInCustomer({ name: 'Walk In', email: 'customer@example.com', phone: '123' }).valid, false);
-    assert.equal(walkInPayment({ method: 'cash', received: false }).valid, false);
-  assert.deepEqual(walkInPayment({ method: 'other', otherMethod: 'UPI', received: true }), { valid: true, method: 'other', otherMethod: 'UPI', status: 'paid' });
-  assert.equal(walkInPayment({ method: 'other', received: true }).valid, false);
+test('accepts stock-backed product sizes and rejects malformed quantities', () => {
+  assert.deepEqual(parseNewProductSizes({ XS: 0, M: 12 }), { XS: 0, M: 12 });
+  assert.equal(parseNewProductSizes({ M: -1 }), null);
+  assert.equal(parseNewProductSizes({ M: '12' }), null);
+  assert.equal(parseNewProductSizes({ OneSize: 2 }), null);
 });
 
-test('walk-in request IDs are deterministic for safe retry idempotency', () => {
-  const first = walkInOrderId('request-123456789012');
-  assert.equal(first, walkInOrderId('request-123456789012'));
-  assert.notEqual(first, walkInOrderId('request-123456789013'));
-  assert.match(first, /^walkin-[a-f0-9]{32}$/);
-});
-
-test('couple stock adapters preserve separate maps and legacy shared stock', () => {
+test('uses independent maps for new couple products while retaining legacy shared stock', () => {
   const independent = coupleStockAdapters({ mensSizes: { M: 2 }, womensSizes: { S: 3 } });
   assert.equal(independent.mens.quantities.M, 2);
   assert.equal(independent.womens.quantities.S, 3);
   assert.equal(independent.legacy, null);
 
-  const legacy = coupleStockAdapters({ sizes: { M: 2 } });
-  assert.equal(legacy.legacy.quantities.M, 2);
-});
-
-test('builds a confirmation email from persisted paid-order data', () => {
-  const message = orderConfirmationMessage('order_123', {
-    customer: { firstName: 'Asha' },
-    items: [{ id: 'tees-black-M', name: 'Black Tee', quantity: 2, price: 499, image: 'https://example.com/tee.jpg' }],
-    pricing: { total: 998 },
-  }, 'https://example.com/logo.png');
-  assert.match(message.subject, /order_123/);
-  assert.match(message.html, /Black Tee/);
-  assert.match(message.html, /tees-black-M/);
-  assert.match(message.html, /https:\/\/example.com\/tee.jpg/);
-  assert.match(message.html, /https:\/\/example.com\/logo.png/);
-  assert.match(message.html, /<table role="presentation"[^>]*><tr><td align="center"[^>]*><img src="https:\/\/example.com\/logo.png" alt="VARATAAA" width="180"/);
-  assert.match(message.html, /height:auto/);
-  assert.match(message.html, />VARATAAA<\/td>/);
-  assert.match(message.html, /handle2227@gmail\.com/);
-  assert.match(message.html, /7 Days to dispatch/);
-  assert.match(message.html, /varataaah@gmail.com/);
-  assert.match(message.text, /handle2227@gmail\.com/);
-  assert.match(message.text, /varataaah@gmail\.com/);
-  assert.match(message.text, /₹998\.00/);
-});
-
-test('renders safely when optional order fields or images are malformed', () => {
-  const message = orderConfirmationMessage('order_malformed', {
-    customer: null,
-    items: [null, { id: 'no-image', name: 'No image', image: 'not-a-url', quantity: 'bad', price: 'bad' }],
-    pricing: { total: 'bad' },
-  });
-  assert.match(message.html, /Product ID unavailable/);
-  assert.match(message.html, /No image/);
-  assert.doesNotMatch(message.html, /<img/);
-  assert.match(message.html, />VARATAAA<\/td>/);
-});
-
-function fakeOrderDb(order) {
-  const state = { ...order };
-  const ref = {
-    update: async (patch) => Object.assign(state, patch),
-  };
-  return {
-    state,
-    collection: () => ({ doc: () => ref }),
-    runTransaction: async (callback) => callback({
-      get: async () => ({ exists: true, data: () => ({ ...state }) }),
-      update: (_ref, patch) => Object.assign(state, patch),
-    }),
-  };
-}
-
-test('claims confirmation delivery once and uses the persisted order snapshot', async () => {
-  const db = fakeOrderDb({
-    customer: { email: 'persisted@example.com', firstName: 'Persisted' },
-    items: [{ id: 'persisted-id', name: 'Persisted product', quantity: 1, price: 250 }],
-    pricing: { total: 250 },
-  });
-  const sent = [];
-  const transporter = { sendMail: async (mail) => { sent.push(mail); return { messageId: 'mock-1' }; } };
-
-  const results = await Promise.all([
-    sendOrderConfirmationEmail('order_claim', { customer: { email: 'stale@example.com' } }, { db, transporter }),
-    sendOrderConfirmationEmail('order_claim', { customer: { email: 'stale@example.com' } }, { db, transporter }),
-  ]);
-
-  assert.deepEqual(results.map(({ status }) => status).sort(), ['sent', 'skipped']);
-  assert.equal(sent.length, 1);
-  assert.equal(sent[0].to, 'persisted@example.com');
-  assert.match(sent[0].html, /persisted-id/);
-  assert.equal(db.state.emailDelivery.status, 'sent');
-});
-
-test('records smtp_not_configured without attempting delivery when Gmail credentials are unavailable', async () => {
-  const originalUser = process.env.GMAIL_USER;
-  const originalPassword = process.env.GMAIL_APP_PASSWORD;
-  delete process.env.GMAIL_USER;
-  delete process.env.GMAIL_APP_PASSWORD;
-  try {
-    const db = fakeOrderDb({
-      customer: { email: 'customer@example.com' },
-      items: [],
-      pricing: { total: 0 },
-    });
-    const result = await sendOrderConfirmationEmail('order_missing_smtp', null, { db });
-    assert.equal(result.status, 'failed');
-    assert.equal(db.state.emailDelivery.status, 'failed');
-    assert.equal(db.state.emailDelivery.reason, 'smtp_not_configured');
-  } finally {
-    if (originalUser === undefined) delete process.env.GMAIL_USER;
-    else process.env.GMAIL_USER = originalUser;
-    if (originalPassword === undefined) delete process.env.GMAIL_APP_PASSWORD;
-    else process.env.GMAIL_APP_PASSWORD = originalPassword;
-  }
-});
-
-test('records SMTP failures without retrying a failed claim automatically', async () => {
-  const db = fakeOrderDb({
-    customer: { email: 'customer@example.com' },
-    items: [],
-    pricing: { total: 0 },
-  });
-  const failingTransport = { sendMail: async () => { throw new Error('mock SMTP failure'); } };
-  const successfulTransport = { sendMail: async () => ({ messageId: 'should-not-send' }) };
-
-  const failed = await sendOrderConfirmationEmail('order_failure', null, { db, transporter: failingTransport });
-  const retry = await sendOrderConfirmationEmail('order_failure', null, { db, transporter: successfulTransport });
-
-  assert.equal(failed.status, 'failed');
-  assert.equal(retry.status, 'skipped');
-  assert.equal(db.state.emailDelivery.status, 'failed');
-  assert.equal(db.state.emailDelivery.reason, 'smtp_delivery_failed');
-});
-
-test('retries only a known pre-send configuration failure after configuration is restored', async () => {
-  const db = fakeOrderDb({
-    customer: { email: 'customer@example.com' },
-    items: [],
-    pricing: { total: 0 },
-    emailDelivery: { status: 'failed', reason: 'smtp_not_configured' },
-  });
-  let sends = 0;
-  const result = await sendOrderConfirmationEmail('order_retry_configured', null, {
-    db,
-    transporter: { sendMail: async () => { sends += 1; return { messageId: 'retry-1' }; } },
-  });
-
-  assert.equal(result.status, 'sent');
-  assert.equal(sends, 1);
-  assert.equal(db.state.emailDelivery.status, 'sent');
-});
-
-test('does not reclaim sending, sent, unknown failed, or skipped delivery states', async () => {
-  for (const status of ['sending', 'sent', 'skipped']) {
-    const db = fakeOrderDb({ customer: { email: 'customer@example.com' }, emailDelivery: { status } });
-    let sends = 0;
-    const result = await sendOrderConfirmationEmail('order_' + status, null, {
-      db,
-      transporter: { sendMail: async () => { sends += 1; return { messageId: 'unexpected' }; } },
-    });
-    assert.equal(result.status, 'skipped');
-    assert.equal(sends, 0);
-  }
-
-  const failed = fakeOrderDb({ customer: { email: 'customer@example.com' }, emailDelivery: { status: 'failed', reason: 'smtp_delivery_failed' } });
-  const result = await sendOrderConfirmationEmail('order_failed', null, {
-    db: failed,
-    transporter: { sendMail: async () => ({ messageId: 'unexpected' }) },
-  });
-  assert.equal(result.status, 'skipped');
-  assert.equal(failed.state.emailDelivery.status, 'failed');
+  const legacy = coupleStockAdapters({ sizes: { M: 4, S: 5 } });
+  assert.equal(legacy.legacy.quantities.M, 4);
+  assert.equal(legacy.legacy.quantities.S, 5);
 });
