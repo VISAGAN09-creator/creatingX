@@ -514,8 +514,8 @@ function fulfillmentStatusFromOrder(order) {
   return isFulfillmentStatus(order?.fulfillmentStatus) ? order.fulfillmentStatus : 'production';
 }
 
-function fulfillmentOrderRef(status, orderId) {
-  return db.collection(FULFILLMENT_COLLECTIONS[status]).doc(orderId);
+function fulfillmentOrderRef(status, orderId, database = db) {
+  return database.collection(FULFILLMENT_COLLECTIONS[status]).doc(orderId);
 }
 
 function timestampToIso(value) {
@@ -583,8 +583,8 @@ function inventoryGroups(items) {
   return [...groups.values()];
 }
 
-async function createPaidOrderWithFulfillment(orderId, orderData, inventoryItems = []) {
-  const orderRef = db.collection('orders').doc(orderId);
+async function createPaidOrderWithFulfillment(orderId, orderData, inventoryItems = [], database = db) {
+  const orderRef = database.collection('orders').doc(orderId);
   const now = new Date().toISOString();
   const completedOrder = {
     ...orderData,
@@ -592,7 +592,7 @@ async function createPaidOrderWithFulfillment(orderId, orderData, inventoryItems
     fulfillmentUpdatedAt: now,
   };
 
-  return db.runTransaction(async (transaction) => {
+  return database.runTransaction(async (transaction) => {
     const existing = await transaction.get(orderRef);
     if (existing.exists) {
       return { created: false, order: existing.data() };
@@ -601,8 +601,8 @@ async function createPaidOrderWithFulfillment(orderId, orderData, inventoryItems
     const groups = inventoryGroups(inventoryItems);
     const stockDocuments = await Promise.all(groups.map(async (group) => ({
       group,
-      ref: db.collection(group.collectionName).doc(group.documentId),
-      snapshot: await transaction.get(db.collection(group.collectionName).doc(group.documentId)),
+      ref: database.collection(group.collectionName).doc(group.documentId),
+      snapshot: await transaction.get(database.collection(group.collectionName).doc(group.documentId)),
     })));
 
     for (const stockDocument of stockDocuments) {
@@ -645,7 +645,7 @@ async function createPaidOrderWithFulfillment(orderId, orderData, inventoryItems
     }
 
     transaction.create(orderRef, completedOrder);
-    transaction.set(fulfillmentOrderRef('production', orderId), completedOrder);
+    transaction.set(fulfillmentOrderRef('production', orderId, database), completedOrder);
     return { created: true, order: completedOrder };
   });
 }
@@ -1763,12 +1763,63 @@ function paymentResponse(orderId, order) {
   };
 }
 
-async function createRazorpayPaidOrder(orderId, verification, source) {
-  const paidOrderRef = db.collection('orders').doc(orderId);
-  const existing = await paidOrderRef.get();
-  if (existing.exists) return { created: false, order: existing.data() };
+function capturedInventoryConflictError() {
+  const error = new Error('Payment was captured, but your order needs manual review. Do not pay again. Contact support with your order ID.');
+  error.code = 'captured-inventory-conflict';
+  error.statusCode = 409;
+  return error;
+}
 
-  const pendingRef = db.collection('pendingOrders').doc(orderId);
+function assertRecordedRazorpayPayment(orderId, order, paymentId) {
+  if (order?.payment?.gateway !== 'razorpay'
+    || order.payment.razorpayOrderId !== orderId
+    || order.payment.razorpayPaymentId !== paymentId) {
+    const error = new Error('Captured payment does not match the recorded order payment. Contact support with your order ID.');
+    error.statusCode = 409;
+    throw error;
+  }
+}
+
+async function recordCapturedInventoryConflict(database, pendingRef, verification, source, reason) {
+  const now = new Date().toISOString();
+  await database.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(pendingRef);
+    if (!snapshot.exists) throw new Error('Captured payment context is missing.');
+    const previous = snapshot.data() || {};
+    const capturedPaymentIds = [...new Set([
+      ...(Array.isArray(previous.capturedPaymentIds) ? previous.capturedPaymentIds : []),
+      verification.gatewayPaymentId,
+    ])];
+    transaction.set(pendingRef, {
+      status: 'captured_inventory_conflict',
+      paymentStatus: 'captured',
+      capturedPaymentIds,
+      paymentException: {
+        reason,
+        razorpayOrderId: verification.gatewayOrderId,
+        razorpayPaymentId: verification.gatewayPaymentId,
+        source,
+        detectedAt: previous.paymentException?.detectedAt || now,
+      },
+      updatedAt: now,
+    }, { merge: true });
+  });
+  console.error(`[Payment Review] Captured payment requires manual inventory reconciliation for ${pendingRef.id}.`);
+}
+
+async function createRazorpayPaidOrder(orderId, verification, source, dependencies = {}) {
+  const database = dependencies.database || db;
+  const finalize = dependencies.finalize || createPaidOrderWithFulfillment;
+  const sendConfirmation = dependencies.sendConfirmation || sendOrderConfirmationEmail;
+  const paidOrderRef = database.collection('orders').doc(orderId);
+  const existing = await paidOrderRef.get();
+  if (existing.exists) {
+    const recorded = existing.data();
+    assertRecordedRazorpayPayment(orderId, recorded, verification.gatewayPaymentId);
+    return { created: false, order: recorded };
+  }
+
+  const pendingRef = database.collection('pendingOrders').doc(orderId);
   const pendingSnap = await pendingRef.get();
   const pending = pendingSnap.exists ? pendingSnap.data() : null;
   if (!pending || pending.razorpayOrderId !== orderId) {
@@ -1788,6 +1839,14 @@ async function createRazorpayPaidOrder(orderId, verification, source) {
   if (verification.gatewayOrderId !== orderId || verification.orderCurrency !== 'INR'
     || !Number.isFinite(amount) || Math.round(amount * 100) !== Math.round(expectedTotal * 100)) {
     throw new Error('Razorpay amount does not match the server-calculated order total.');
+  }
+
+  // A captured payment that could not allocate stock needs an explicit human
+  // decision. A repeated callback or webhook must not silently create an order
+  // after a refund or other manual reconciliation has begun.
+  if (pending.status === 'captured_inventory_conflict') {
+    await recordCapturedInventoryConflict(database, pendingRef, verification, source, pending.paymentException?.reason || 'inventory-insufficient');
+    throw capturedInventoryConflictError();
   }
 
   const customer = pending.customer || {};
@@ -1822,14 +1881,22 @@ async function createRazorpayPaidOrder(orderId, verification, source) {
     createdAt: new Date().toISOString(),
     ...(source === 'webhook' ? { source } : {}),
   };
-  const result = await createPaidOrderWithFulfillment(orderId, order, items);
+  let result;
+  try {
+    result = await finalize(orderId, order, items, database);
+  } catch (error) {
+    if (error.code !== 'inventory-insufficient' && error.code !== 'inventory-invalid-order') throw error;
+    await recordCapturedInventoryConflict(database, pendingRef, verification, source, error.code);
+    throw capturedInventoryConflictError();
+  }
+  assertRecordedRazorpayPayment(orderId, result.order, verification.gatewayPaymentId);
   if (result.created) {
     try { await pendingRef.delete(); } catch (_) { /* paid order remains authoritative */ }
   }
   // The helper's claim is the sole duplicate-email guard. Calling it for an
   // idempotent paid-order result lets a fixed missing-configuration failure
   // retry safely, while ambiguous SMTP failures remain protected.
-  await sendOrderConfirmationEmail(orderId, result.order);
+  await sendConfirmation(orderId, result.order, { db: database });
   return result;
 }
 
@@ -1849,8 +1916,11 @@ async function claimRazorpayEvent(database, eventId, eventType, orderId) {
  * Buffer via the route-specific express.raw middleware above; it never signs a
  * parsed or re-serialised body.
  */
-app.post('/api/razorpay-webhook', async (req, res) => {
-  if (!gateway.verifyWebhookSignature(req.body, req.get('x-razorpay-signature'))) {
+async function handleRazorpayWebhookRequest(req, res, dependencies = {}) {
+  const database = dependencies.database || db;
+  const paymentGateway = dependencies.paymentGateway || gateway;
+  const finalize = dependencies.finalize || createRazorpayPaidOrder;
+  if (!paymentGateway.verifyWebhookSignature(req.body, req.get('x-razorpay-signature'))) {
     return res.status(401).json({ success: false, message: 'Invalid webhook signature.' });
   }
   let event;
@@ -1861,66 +1931,116 @@ app.post('/api/razorpay-webhook', async (req, res) => {
   const eventType = event?.event;
   const payment = event?.payload?.payment?.entity;
   const orderId = payment?.order_id;
-  if (!db) return res.status(503).json({ success: false, message: 'Server database is not initialized.' });
+  if (!database) return res.status(503).json({ success: false, message: 'Server database is not initialized.' });
   if (!eventId || !eventType || !orderId) {
     return res.status(400).json({ success: false, message: 'Webhook payload is incomplete.' });
   }
 
   try {
-    const claim = await claimRazorpayEvent(db, eventId, eventType, orderId);
+    const claim = await claimRazorpayEvent(database, eventId, eventType, orderId);
     if (claim.duplicate) return res.status(200).json({ success: true, message: 'Already processed.' });
     if (eventType === 'payment.failed') {
-      await db.collection('pendingOrders').doc(orderId).set({
-        status: 'payment_failed', paymentStatus: 'failed', updatedAt: new Date().toISOString(),
-      }, { merge: true });
-      await claim.ref.set({ status: 'processed', outcome: 'failed', processedAt: new Date().toISOString() }, { merge: true });
-      return res.status(200).json({ success: true, message: 'Payment failure recorded.' });
+      const failureOutcome = await database.runTransaction(async (transaction) => {
+        const paidOrder = await transaction.get(database.collection('orders').doc(orderId));
+        const pendingRef = database.collection('pendingOrders').doc(orderId);
+        const pending = await transaction.get(pendingRef);
+        if (paidOrder.exists || pending.data()?.paymentStatus === 'captured') return 'ignored_after_capture';
+        if (!pending.exists) return 'missing_context';
+        transaction.set(pendingRef, {
+          status: 'payment_failed', paymentStatus: 'failed', updatedAt: new Date().toISOString(),
+        }, { merge: true });
+        return 'failed';
+      });
+      await claim.ref.set({ status: 'processed', outcome: failureOutcome, processedAt: new Date().toISOString() }, { merge: true });
+      return res.status(200).json({ success: true, message: failureOutcome === 'failed' ? 'Payment failure recorded.' : 'Payment failure acknowledged.' });
     }
     if (eventType !== 'payment.captured' || !payment?.id) {
       await claim.ref.set({ status: 'processed', outcome: 'ignored', processedAt: new Date().toISOString() }, { merge: true });
       return res.status(200).json({ success: true, message: 'Event ignored.' });
     }
-    const verification = await gateway.verifyWebhookPayment({ orderId, paymentId: payment.id });
+    const verification = await paymentGateway.verifyWebhookPayment({ orderId, paymentId: payment.id });
     if (!verification.verified) {
       await claim.ref.set({ status: 'pending_confirmation', updatedAt: new Date().toISOString() }, { merge: true });
       return res.status(503).json({ success: false, message: 'Payment is not captured yet.' });
     }
-    const result = await createRazorpayPaidOrder(orderId, verification, 'webhook');
+    let result;
+    try {
+      result = await finalize(orderId, verification, 'webhook');
+    } catch (error) {
+      if (error.code !== 'captured-inventory-conflict') throw error;
+      await claim.ref.set({ status: 'processed', outcome: 'manual_review', processedAt: new Date().toISOString() }, { merge: true });
+      return res.status(200).json({ success: true, message: 'Captured payment recorded for manual review.' });
+    }
     await claim.ref.set({ status: 'processed', outcome: result.created ? 'created' : 'already_paid', processedAt: new Date().toISOString() }, { merge: true });
     return res.status(200).json({ success: true, message: result.created ? 'Order processed.' : 'Already processed.' });
   } catch (error) {
     console.error('[Razorpay Webhook Error]', error.message);
     return res.status(error.statusCode || 500).json({ success: false, message: error.message || 'Webhook processing error.' });
   }
-});
+}
 
-app.post('/api/verify-payment', async (req, res) => {
+app.post('/api/razorpay-webhook', (req, res) => handleRazorpayWebhookRequest(req, res));
+
+async function verifyRazorpayPaymentRequest(req, res, dependencies = {}) {
+  const database = dependencies.database || db;
+  const paymentGateway = dependencies.paymentGateway || gateway;
+  const finalize = dependencies.finalize || createRazorpayPaidOrder;
   const { orderId, payment } = req.body || {};
-  if (!db) return res.status(500).json({ success: false, message: 'Server database is not initialized.' });
+  if (!database) return res.status(500).json({ success: false, message: 'Server database is not initialized.' });
   if (!orderId || typeof orderId !== 'string' || !payment || typeof payment !== 'object') {
     return res.status(400).json({ success: false, message: 'Validation Error: payment verification details are required.' });
   }
   try {
-    const pending = await db.collection('pendingOrders').doc(orderId).get();
+    const pending = await database.collection('pendingOrders').doc(orderId).get();
     if (!pending.exists || pending.data()?.razorpayOrderId !== orderId) {
-      return res.status(409).json({ success: false, message: 'Payment order context is missing. Please contact support with your order ID.' });
+      // A captured webhook may have finalized and deleted pending context before
+      // the browser returns. Authenticate the original callback and match the
+      // recorded payment before releasing any protected order details.
+      const paidSnapshot = await database.collection('orders').doc(orderId).get();
+      const paidOrder = paidSnapshot.exists ? paidSnapshot.data() : null;
+      const paidTotal = Number(paidOrder?.pricing?.total);
+      if (paidOrder?.status !== 'paid' || paidOrder?.payment?.gateway !== 'razorpay'
+        || paidOrder?.payment?.razorpayOrderId !== orderId || !Number.isFinite(paidTotal) || paidTotal <= 0) {
+        return res.status(409).json({ success: false, message: 'Payment order context is missing. Please contact support with your order ID.' });
+      }
+      const verification = await paymentGateway.verifyPayment({
+        orderId, paymentData: payment, orderDetails: { totalAmount: paidTotal },
+      });
+      if (!verification.verified || verification.gatewayPaymentId !== paidOrder.payment.razorpayPaymentId
+        || verification.gatewayOrderId !== orderId || verification.orderCurrency !== 'INR'
+        || Math.round(Number(verification.orderAmount) * 100) !== Math.round(paidTotal * 100)) {
+        return res.status(401).json({ success: false, paymentStatus: 'unverified', message: 'Payment could not be verified for this order.' });
+      }
+      return res.status(200).json(paymentResponse(orderId, paidOrder));
     }
-    const verification = await gateway.verifyPayment({ orderId, paymentData: payment, orderDetails: pending.data() });
+    const verification = await paymentGateway.verifyPayment({ orderId, paymentData: payment, orderDetails: pending.data() });
     if (!verification.verified) {
-      await pending.ref.set({ paymentStatus: verification.paymentStatus || 'pending', updatedAt: new Date().toISOString() }, { merge: true });
+      await database.runTransaction(async (transaction) => {
+        const current = await transaction.get(pending.ref);
+        if (!current.exists || current.data()?.paymentStatus === 'captured') return;
+        transaction.set(pending.ref, { paymentStatus: verification.paymentStatus || 'pending', updatedAt: new Date().toISOString() }, { merge: true });
+      });
       return res.status(200).json({
         success: false,
         paymentStatus: verification.paymentStatus || 'pending',
         message: verification.paymentStatus === 'failed' ? 'Payment failed. Please try again.' : 'Payment is still pending confirmation.',
       });
     }
-    const result = await createRazorpayPaidOrder(orderId, verification, 'checkout');
+    const result = await finalize(orderId, verification, 'checkout', { database });
     return res.status(200).json(paymentResponse(orderId, result.order));
   } catch (error) {
+    if (error.code === 'captured-inventory-conflict') {
+      return res.status(409).json({
+        success: false, orderId, orderStatus: 'requires_review', paymentStatus: 'captured',
+        message: error.message,
+      });
+    }
     console.error('[Razorpay Verification Error]', error.message);
     return res.status(error.statusCode || 500).json({ success: false, message: error.message || 'Payment verification failed.' });
   }
-});
+}
+
+app.post('/api/verify-payment', (req, res) => verifyRazorpayPaymentRequest(req, res));
 
 /**
  * NEWSLETTER SUBSCRIPTION ENDPOINT
@@ -1987,4 +2107,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, calculateCheckoutPricing, validateCheckoutDetails, pendingOrderItem, paidOrderItem, walkInCustomer, walkInPayment, walkInOrderId, coupleStockAdapters, orderConfirmationMessage, sendOrderConfirmationEmail, claimRazorpayEvent };
+module.exports = { app, calculateCheckoutPricing, validateCheckoutDetails, pendingOrderItem, paidOrderItem, walkInCustomer, walkInPayment, walkInOrderId, coupleStockAdapters, createPaidOrderWithFulfillment, createRazorpayPaidOrder, verifyRazorpayPaymentRequest, handleRazorpayWebhookRequest, orderConfirmationMessage, sendOrderConfirmationEmail, claimRazorpayEvent };

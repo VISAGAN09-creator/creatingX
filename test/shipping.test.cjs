@@ -1,7 +1,11 @@
 const assert = require('node:assert/strict');
+const os = require('node:os');
 const test = require('node:test');
 const { states, shippingCharge, lookupPin } = require('../shipping.cjs');
+const originalCwd = process.cwd();
+process.chdir(os.tmpdir());
 const { calculateCheckoutPricing, validateCheckoutDetails } = require('../server.cjs');
+process.chdir(originalCwd);
 
 test('all 28 states and 8 Union Territories have a shipping rate', () => {
   assert.equal(states.length, 36);

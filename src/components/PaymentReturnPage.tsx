@@ -11,6 +11,7 @@ type PaymentReturnPageProps = {
 type VerificationState =
   | { status: 'loading' }
   | { status: 'success'; firestoreOrderId: string; order: { items: { id: string; name: string; price: number; quantity: number }[]; totalAmount: number; customer: { name?: string; firstName?: string; lastName?: string; email: string } } | null }
+  | { status: 'review'; message: string; orderId: string }
   | { status: 'failed'; message: string; paymentStatus?: string }
   | { status: 'error'; message: string };
 
@@ -57,6 +58,13 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
             localStorage.removeItem('cart');
             sessionStorage.removeItem('razorpay_payment_response');
           } catch { /* ignore */ }
+        } else if (data.orderStatus === 'requires_review' && data.paymentStatus === 'captured') {
+          setState({
+            status: 'review',
+            message: data.message || 'Your payment was received, but your order needs manual review. Please do not pay again.',
+            orderId: data.orderId || orderId,
+          });
+          try { localStorage.removeItem('cart'); } catch { /* ignore */ }
         } else {
           setState({
             status: 'failed',
@@ -177,6 +185,22 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
             >
               Continue Shopping
             </button>
+          </>
+        )}
+
+        {state.status === 'review' && (
+          <>
+            <div className="h-16 w-16 bg-[#f39c12]/10 text-[#f39c12] rounded-full flex items-center justify-center mb-6">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="w-8 h-8">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+              </svg>
+            </div>
+            <h1 className="font-display text-3xl font-bold mb-3">Payment Received</h1>
+            <p className="text-[#666666] mb-3">{state.message}</p>
+            <p className="text-xs font-mono text-[#999999] mb-8 bg-[#f5f5f5] px-3 py-1.5 rounded-md">Order ID: {state.orderId}</p>
+            <a className="w-full h-14 bg-black text-white text-xs font-bold uppercase tracking-[0.16em] flex items-center justify-center" href={`mailto:varataaah@gmail.com?subject=${encodeURIComponent(`Order ${state.orderId} needs review`)}`}>
+              Contact Support
+            </a>
           </>
         )}
 
