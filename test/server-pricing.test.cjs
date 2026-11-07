@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { calculateCheckoutPricing, coupleStockAdapters, paidOrderItem, pendingOrderItem, walkInCustomer, walkInOrderId, walkInPayment } = require('../server.cjs');
+const { calculateCheckoutPricing, coupleStockAdapters, orderConfirmationMessage, paidOrderItem, pendingOrderItem, sendOrderConfirmationEmail, walkInCustomer, walkInOrderId, walkInPayment } = require('../server.cjs');
 
 test('charges a ₹1.00 server-resolved item as ₹1.00 with free shipping', () => {
   assert.deepEqual(calculateCheckoutPricing([{ lineTotal: 1 }]), {
@@ -118,4 +118,100 @@ test('couple stock adapters preserve separate maps and legacy shared stock', () 
 
   const legacy = coupleStockAdapters({ sizes: { M: 2 } });
   assert.equal(legacy.legacy.quantities.M, 2);
+});
+
+test('builds a confirmation email from persisted paid-order data', () => {
+  const message = orderConfirmationMessage('order_123', {
+    customer: { firstName: 'Asha' },
+    items: [{ id: 'tees-black-M', name: 'Black Tee', quantity: 2, price: 499, image: 'https://example.com/tee.jpg' }],
+    pricing: { total: 998 },
+  }, 'https://example.com/logo.png');
+  assert.match(message.subject, /order_123/);
+  assert.match(message.html, /Black Tee/);
+  assert.match(message.html, /tees-black-M/);
+  assert.match(message.html, /https:\/\/example.com\/tee.jpg/);
+  assert.match(message.html, /https:\/\/example.com\/logo.png/);
+  assert.match(message.html, /handle2227@gmail\.com/);
+  assert.match(message.html, /7 Days to dispatch/);
+  assert.match(message.html, /varataaah@gmail.com/);
+  assert.match(message.text, /handle2227@gmail\.com/);
+  assert.match(message.text, /varataaah@gmail\.com/);
+  assert.match(message.text, /₹998\.00/);
+});
+
+test('renders safely when optional order fields or images are malformed', () => {
+  const message = orderConfirmationMessage('order_malformed', {
+    customer: null,
+    items: [null, { id: 'no-image', name: 'No image', image: 'not-a-url', quantity: 'bad', price: 'bad' }],
+    pricing: { total: 'bad' },
+  });
+  assert.match(message.html, /Product ID unavailable/);
+  assert.match(message.html, /No image/);
+  assert.doesNotMatch(message.html, /<img/);
+});
+
+function fakeOrderDb(order) {
+  const state = { ...order };
+  const ref = {
+    update: async (patch) => Object.assign(state, patch),
+  };
+  return {
+    state,
+    collection: () => ({ doc: () => ref }),
+    runTransaction: async (callback) => callback({
+      get: async () => ({ exists: true, data: () => ({ ...state }) }),
+      update: (_ref, patch) => Object.assign(state, patch),
+    }),
+  };
+}
+
+test('claims confirmation delivery once and uses the persisted order snapshot', async () => {
+  const db = fakeOrderDb({
+    customer: { email: 'persisted@example.com', firstName: 'Persisted' },
+    items: [{ id: 'persisted-id', name: 'Persisted product', quantity: 1, price: 250 }],
+    pricing: { total: 250 },
+  });
+  const sent = [];
+  const transporter = { sendMail: async (mail) => { sent.push(mail); return { messageId: 'mock-1' }; } };
+
+  const results = await Promise.all([
+    sendOrderConfirmationEmail('order_claim', { customer: { email: 'stale@example.com' } }, { db, transporter }),
+    sendOrderConfirmationEmail('order_claim', { customer: { email: 'stale@example.com' } }, { db, transporter }),
+  ]);
+
+  assert.deepEqual(results.map(({ status }) => status).sort(), ['sent', 'skipped']);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].to, 'persisted@example.com');
+  assert.match(sent[0].html, /persisted-id/);
+  assert.equal(db.state.emailDelivery.status, 'sent');
+});
+
+test('records SMTP failures without retrying a failed claim automatically', async () => {
+  const db = fakeOrderDb({
+    customer: { email: 'customer@example.com' },
+    items: [],
+    pricing: { total: 0 },
+  });
+  const failingTransport = { sendMail: async () => { throw new Error('mock SMTP failure'); } };
+  const successfulTransport = { sendMail: async () => ({ messageId: 'should-not-send' }) };
+
+  const failed = await sendOrderConfirmationEmail('order_failure', null, { db, transporter: failingTransport });
+  const retry = await sendOrderConfirmationEmail('order_failure', null, { db, transporter: successfulTransport });
+
+  assert.equal(failed.status, 'failed');
+  assert.equal(retry.status, 'skipped');
+  assert.equal(db.state.emailDelivery.status, 'failed');
+});
+
+test('does not reclaim sending, sent, failed, or skipped delivery states', async () => {
+  for (const status of ['sending', 'sent', 'failed', 'skipped']) {
+    const db = fakeOrderDb({ customer: { email: 'customer@example.com' }, emailDelivery: { status } });
+    let sends = 0;
+    const result = await sendOrderConfirmationEmail('order_' + status, null, {
+      db,
+      transporter: { sendMail: async () => { sends += 1; return { messageId: 'unexpected' }; } },
+    });
+    assert.equal(result.status, 'skipped');
+    assert.equal(sends, 0);
+  }
 });

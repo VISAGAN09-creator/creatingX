@@ -1556,6 +1556,124 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
+const ORDER_EMAIL_STATUS_FIELD = 'emailDelivery';
+let gmailTransporter = null;
+
+function validEmail(value) {
+  return typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function orderConfirmationMessage(orderId, order, logoUrl = null) {
+  const formatter = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 });
+  const items = Array.isArray(order?.items) ? order.items : [];
+  const itemRows = items.map((item) => {
+    const safeItem = item && typeof item === 'object' ? item : {};
+    const productId = escapeHtml(safeItem.id || 'Product ID unavailable');
+    const name = escapeHtml(safeItem.name || 'Product');
+    const quantity = Number(safeItem.quantity) || 0;
+    const lineTotal = formatter.format((Number(safeItem.price) || 0) * quantity);
+    const image = typeof safeItem.image === 'string' && /^https?:\/\//i.test(safeItem.image)
+      ? `<img src="${escapeHtml(safeItem.image)}" alt="${name}" width="96" style="display:block;width:96px;height:auto;border:0;">`
+      : '';
+    return `<tr><td style="padding:12px 0;border-bottom:1px solid #e5e5e5;vertical-align:top;">${image}</td><td style="padding:12px 0 12px 14px;border-bottom:1px solid #e5e5e5;vertical-align:top;"><strong>${name}</strong><br><span style="color:#666;font-size:12px;">Product ID: ${productId}</span><br><span style="color:#666;font-size:12px;">Quantity: ${quantity}</span></td><td style="padding:12px 0;border-bottom:1px solid #e5e5e5;text-align:right;vertical-align:top;">${lineTotal}</td></tr>`;
+  }).join('');
+  const textItems = items.map((item) => {
+    const safeItem = item && typeof item === 'object' ? item : {};
+    return `- ${safeItem.name || 'Product'} (Product ID: ${safeItem.id || 'unavailable'}) x ${safeItem.quantity || 0}`;
+  }).join('\n');
+  const total = formatter.format(Number(order?.pricing?.total) || 0);
+  const customerName = escapeHtml(order?.customer?.firstName || order?.customer?.name || 'Customer');
+  const logo = typeof logoUrl === 'string' && /^https:\/\//i.test(logoUrl)
+    ? `<img src="${escapeHtml(logoUrl)}" alt="VARATAAA" width="180" style="display:block;width:180px;max-width:100%;height:auto;border:0;">`
+    : '<div style="font-size:26px;font-weight:700;letter-spacing:2px;">VARATAAA</div>';
+  return {
+    subject: `VARATAAA order confirmation — ${orderId}`,
+    text: `Hi ${order?.customer?.firstName || order?.customer?.name || 'Customer'},\n\nYour payment has been confirmed.\nOrder ID: ${orderId}\n\n${textItems}\n\nTotal paid: ${total}\nDispatch estimate: 7 Days to dispatch\n\nQuestions? handle2227@gmail.com or varataaah@gmail.com`,
+    html: `<div style="margin:0 auto;max-width:600px;padding:24px;font-family:Arial,sans-serif;color:#171717;"><div style="margin:0 0 18px;">${logo}</div><h2 style="margin:0 0 16px;font-size:20px;">Order confirmed</h2><p>Hi ${customerName},</p><p>Your payment has been confirmed. We are preparing your order.</p><p><strong>Order ID:</strong> ${escapeHtml(orderId)}</p><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:20px 0;">${itemRows}</table><p style="font-size:18px;"><strong>Total paid:</strong> ${total}</p><p><strong>Dispatch estimate:</strong> 7 Days to dispatch</p><p style="margin-top:32px;color:#555;font-size:13px;">Need help? Contact <a href="mailto:handle2227@gmail.com" style="color:#171717;">handle2227@gmail.com</a> or <a href="mailto:varataaah@gmail.com" style="color:#171717;">varataaah@gmail.com</a></p></div>`,
+  };
+}
+
+function websiteLogoStoragePath(value) {
+  const candidate = typeof value === 'string'
+    ? value
+    : value && typeof value === 'object' && typeof value.storagePath === 'string'
+      ? value.storagePath
+      : '';
+  const path = candidate.trim().replace(/^\/+/, '');
+  return path || null;
+}
+
+/** Resolves the same assets/website logo used by the storefront into an HTTPS email URL. */
+async function resolveWebsiteLogoUrl(database = db) {
+  if (!database) return null;
+  try {
+    const snapshot = await database.collection('assets').doc('website').get();
+    if (!snapshot.exists) return null;
+    const storagePath = websiteLogoStoragePath(snapshot.data()?.logo);
+    if (!storagePath) return null;
+
+    const bucket = admin.storage().bucket();
+    if (!bucket.name) return null;
+    const file = bucket.file(storagePath);
+    const [metadata] = await file.getMetadata();
+    const token = metadata?.metadata?.firebaseStorageDownloadTokens?.split(',')[0]?.trim();
+    if (token) {
+      return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(storagePath)}?alt=media&token=${encodeURIComponent(token)}`;
+    }
+
+    const [signedUrl] = await file.getSignedUrl({
+      action: 'read',
+      expires: Date.now() + (6 * 24 * 60 * 60 * 1000),
+    });
+    return /^https:\/\//i.test(signedUrl) ? signedUrl : null;
+  } catch {
+    return null;
+  }
+}
+
+async function sendOrderConfirmationEmail(orderId, _order, dependencies = {}) {
+  const database = dependencies.db || db;
+  if (!database) return { status: 'unavailable' };
+  const orderRef = database.collection('orders').doc(orderId);
+  const now = new Date().toISOString();
+  const attemptId = crypto.randomUUID();
+
+  const claim = await database.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(orderRef);
+    if (!snapshot.exists) return { claimed: false };
+    const persistedOrder = snapshot.data() || {};
+    const existing = persistedOrder[ORDER_EMAIL_STATUS_FIELD];
+    if (existing?.status === 'sent' || existing?.status === 'sending' || existing?.status === 'skipped' || existing?.status === 'failed') return { claimed: false };
+    const recipient = persistedOrder?.customer?.email;
+    if (!validEmail(recipient)) {
+      transaction.update(orderRef, { [ORDER_EMAIL_STATUS_FIELD]: { status: 'skipped', updatedAt: now, reason: 'missing_or_invalid_recipient' } });
+      return { claimed: false };
+    }
+    transaction.update(orderRef, { [ORDER_EMAIL_STATUS_FIELD]: { status: 'sending', attemptId, updatedAt: now } });
+    return { claimed: true, order: persistedOrder, recipient };
+  });
+
+  if (!claim.claimed) return { status: 'skipped' };
+  try {
+    let transporter = dependencies.transporter;
+    if (!transporter && (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD)) throw new Error('smtp_not_configured');
+    if (!transporter && !gmailTransporter) {
+      const nodemailer = require('nodemailer');
+      gmailTransporter = nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD } });
+    }
+    transporter = transporter || gmailTransporter;
+    const logoUrl = await resolveWebsiteLogoUrl(database);
+    const message = orderConfirmationMessage(orderId, claim.order, logoUrl);
+    const result = await transporter.sendMail({ from: process.env.GMAIL_USER || 'VARATAAA', to: claim.recipient, ...message });
+    await orderRef.update({ [ORDER_EMAIL_STATUS_FIELD]: { status: 'sent', attemptId, sentAt: new Date().toISOString(), messageId: result.messageId || null } });
+    return { status: 'sent' };
+  } catch (error) {
+    console.warn(`[Email] Order confirmation delivery failed for ${orderId}:`, error.message === 'smtp_not_configured' ? 'smtp_not_configured' : 'smtp_delivery_failed');
+    try { await orderRef.update({ [ORDER_EMAIL_STATUS_FIELD]: { status: 'failed', attemptId, updatedAt: new Date().toISOString(), reason: error.message === 'smtp_not_configured' ? 'smtp_not_configured' : 'smtp_delivery_failed' } }); } catch (_) { /* order payment remains successful */ }
+    return { status: 'failed' };
+  }
+}
+
 /**
  * STEP 2: VERIFY PAYMENT ENDPOINT
  * POST /api/verify-payment
@@ -1719,36 +1837,7 @@ app.post('/api/verify-payment', async (req, res) => {
         orderDetails = { items: finalOrderData.items, totalAmount: finalOrderData.pricing.total, customer: finalOrderData.customer };
         console.log(`[Firestore] Order document created: ${firestoreOrderId}`);
 
-        // Send confirmation email
-        try {
-          const itemsListHtml = finalOrderData.items
-            .map(line => `<li>${escapeHtml(line.name)} x ${line.quantity} - ${new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format(line.price * line.quantity)}</li>`)
-            .join('');
-
-          if (finalOrderData.customer.email) {
-            await db.collection('mail').add({
-              to: finalOrderData.customer.email,
-              message: {
-                subject: `Order Confirmation - Order #${firestoreOrderId.slice(0, 8).toUpperCase()}`,
-                html: `
-                  <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #1a1a1a;">
-                    <h2 style="font-size: 24px; font-weight: bold; border-bottom: 2px solid #1a1a1a; padding-bottom: 15px; margin-bottom: 20px;">Order Confirmed!</h2>
-                    <p>Hi ${escapeHtml(finalOrderData.customer.firstName)},</p>
-                    <p>Thank you for shopping with us! Your payment was successful.</p>
-                    <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                      <h3 style="margin-top: 0; font-size: 16px;">Order Summary</h3>
-                      <ul>${itemsListHtml}</ul>
-                      <p style="margin-bottom: 0; font-weight: bold;">Total Paid: ${new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format(finalOrderData.pricing.total)}</p>
-                    </div>
-                    <p style="font-size: 12px; color: #888888; margin-top: 40px; border-top: 1px solid #e0e0e0; padding-top: 15px;">If you have any questions, contact customer support.</p>
-                  </div>
-                `,
-              },
-            });
-          }
-        } catch (emailErr) {
-          console.warn('[Email] Failed to create mail trigger:', emailErr.message);
-        }
+        await sendOrderConfirmationEmail(cashfreeOrderId, orderWrite.order);
 
         // Clean up pending order
         try {
@@ -1897,6 +1986,7 @@ app.post('/api/cashfree-webhook', async (req, res) => {
     }
 
     console.log(`[Webhook] Order created for ${cashfreeOrderId}`);
+    await sendOrderConfirmationEmail(cashfreeOrderId, orderWrite.order);
 
     // Clean up pending order
     try { await db.collection('pendingOrders').doc(cashfreeOrderId).delete(); } catch (e) { /* ignore */ }
@@ -1973,4 +2063,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, calculateCheckoutPricing, pendingOrderItem, paidOrderItem, walkInCustomer, walkInPayment, walkInOrderId, coupleStockAdapters };
+module.exports = { app, calculateCheckoutPricing, pendingOrderItem, paidOrderItem, walkInCustomer, walkInPayment, walkInOrderId, coupleStockAdapters, orderConfirmationMessage, sendOrderConfirmationEmail };

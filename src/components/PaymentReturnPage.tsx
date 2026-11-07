@@ -124,6 +124,19 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
               </p>
             )}
 
+            {(() => {
+              const confirmationEmail = state.order?.customer?.email || checkoutEmail;
+              return (
+                <p className="mb-8 w-full rounded-md bg-[#f7f7f7] px-4 py-3 text-sm text-[#555555]">
+                  {confirmationEmail ? (
+                    <>Your order confirmation will be sent to <a className="font-semibold text-[#1a1a1a] underline" href={`mailto:${confirmationEmail}`}>{confirmationEmail}</a>.</>
+                  ) : (
+                    'Your order confirmation will be sent to the email address you provided at checkout.'
+                  )}
+                </p>
+              );
+            })()}
+
             {state.order && (
               <div className="w-full border-t border-b border-[#e0e0e0] py-5 mb-8 text-left space-y-3">
                 {state.order.items?.map((item, i) => (

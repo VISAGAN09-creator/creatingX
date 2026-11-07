@@ -94,6 +94,7 @@ export function Footer({ activePage, onNavigate }: FooterProps) {
             <div className="mt-5 space-y-2 text-sm text-metal-dark">
               <p><span className="font-semibold text-metal-text">Contact:</span> <a href="tel:7358012011" className="transition hover:text-black">7358012011</a></p>
               <p><span className="font-semibold text-metal-text">Email:</span> <a href="mailto:varataaah@gmail.com" className="transition hover:text-black">varataaah@gmail.com</a></p>
+              <p><span className="font-semibold text-metal-text">Email:</span> <a href="mailto:handle2227@gmail.com" className="transition hover:text-black">handle2227@gmail.com</a></p>
             </div>
           </div>
 

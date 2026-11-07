@@ -11,4 +11,6 @@
 const functions = require('firebase-functions');
 const { app } = require('./server.cjs');
 
-exports.api = functions.https.onRequest(app);
+exports.api = functions
+  .runWith({ secrets: ['GMAIL_USER', 'GMAIL_APP_PASSWORD'] })
+  .https.onRequest(app);
