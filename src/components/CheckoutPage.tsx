@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import policy from '../../shipping-rates.json';
 import type { CartLine } from '../types';
 import { formatPrice } from '../utils/format';
+import { mainWebsitePath, policyPagePath } from '../utils/sitePaths';
 import { paymentApiPath } from '../lib/paymentApi';
 import { BrandLogo } from './BrandLogo';
 import { SmartImage } from './SmartImage';
@@ -408,7 +409,7 @@ export function CheckoutPage({ lines, onClearCart, onBack }: CheckoutPageProps) 
     return (
       <section className="relative z-[1] min-h-screen bg-white font-sans text-sm leading-normal text-[#1a1a1a] flex flex-col justify-between">
         <header className="border-b border-[#e0e0e0] px-4 py-5 text-center flex justify-center">
-          <a href="/varataaa" className="flex items-center justify-center" aria-label="VARATAAA home">
+          <a href={mainWebsitePath} className="flex items-center justify-center" aria-label="VARATAAA home">
             <BrandLogo
               containerClassName="h-10 w-[140px] sm:h-11"
               imageClassName="h-full w-full object-contain"
@@ -520,7 +521,7 @@ export function CheckoutPage({ lines, onClearCart, onBack }: CheckoutPageProps) 
       )}
 
       <header className="border-b border-[#e0e0e0] px-4 py-5 text-center flex justify-center">
-        <a href="/varataaa" className="flex items-center justify-center" aria-label="VARATAAA home">
+        <a href={mainWebsitePath} className="flex items-center justify-center" aria-label="VARATAAA home">
           <BrandLogo
             containerClassName="h-10 w-[140px] sm:h-11"
             imageClassName="h-full w-full object-contain"
@@ -772,10 +773,10 @@ export function CheckoutPage({ lines, onClearCart, onBack }: CheckoutPageProps) 
 
             <div className="mt-6 text-center">
               {[
-                ['Refund policy', '/varataaa/refund-policy'],
-                ['Shipping policy', '/varataaa/shipping-policy'],
-                ['Privacy policy', '/varataaa/privacy-policy'],
-                ['Terms of service', '/varataaa/terms-and-conditions'],
+                ['Refund policy', policyPagePath('refund-policy')],
+                ['Shipping policy', policyPagePath('shipping-policy')],
+                ['Privacy policy', policyPagePath('privacy-policy')],
+                ['Terms of service', policyPagePath('terms-and-conditions')],
               ].map(([link, href]) => (
                 <a
                   key={link}

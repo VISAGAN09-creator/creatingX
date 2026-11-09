@@ -3,6 +3,7 @@ import { Menu, ShoppingBag, X, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { navLinks } from '../data/siteData';
 import { scrollToHash } from '../utils/scroll';
+import { mainWebsitePath } from '../utils/sitePaths';
 import { BrandLogo } from './BrandLogo';
 import { MagneticButton } from './Magnetic';
 
@@ -53,7 +54,7 @@ export function Navbar({ cartCount, onCartOpen, onSearchOpen, onSizeGuideOpen, o
   return (
     <header className="fixed left-0 top-0 z-[1000] w-full border-b border-metal-light bg-white/90 px-5 py-2.5 backdrop-blur-xl sm:px-8 lg:px-12">
       <nav className="mx-auto flex max-w-shell items-center justify-between gap-5">
-        <a href="/varataaa" className="flex items-center" aria-label="VARATAAA home">
+        <a href={mainWebsitePath} className="flex items-center" aria-label="VARATAAA home">
           {activePage === 'totd' ? (
             <span className="font-display text-lg sm:text-xl font-bold tracking-wider text-black uppercase">
               Thoughts Of The Day
@@ -69,9 +70,7 @@ export function Navbar({ cartCount, onCartOpen, onSearchOpen, onSizeGuideOpen, o
 
         <ul className="hidden list-none items-center gap-8 lg:flex xl:gap-10">
           {navLinks.map((link) => {
-            const isLinkActive =
-              (link.href === '#customize' && activePage === 'customize') ||
-              (link.href === '#totd' && activePage === 'totd');
+            const isLinkActive = link.href === '#totd' && activePage === 'totd';
             return (
               <li key={link.href}>
                 <button

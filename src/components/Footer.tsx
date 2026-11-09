@@ -4,6 +4,8 @@ import { footerColumns } from '../data/siteData';
 import { BrandLogo } from './BrandLogo';
 import { MagneticButton } from './Magnetic';
 import { scrollToHash } from '../utils/scroll';
+import { policyPagePath } from '../utils/sitePaths';
+import { CUSTOMIZER_ENABLED } from '../config/features';
 
 type FooterProps = {
   activePage?: string;
@@ -33,6 +35,7 @@ export function Footer({ activePage, onNavigate, onSizeGuideOpen }: FooterProps)
     }
 
     if (link === 'Custom Prints') {
+      if (!CUSTOMIZER_ENABLED) return;
       if (onNavigate) {
         onNavigate('#customize');
       } else {
@@ -119,11 +122,11 @@ export function Footer({ activePage, onNavigate, onSizeGuideOpen }: FooterProps)
                 {column.title}
               </h3>
               <ul className="space-y-3">
-                {column.links.map((link) => (
+                {column.links.filter((link) => CUSTOMIZER_ENABLED || link !== 'Custom Prints').map((link) => (
                   <li key={link}>
                     <a
                       href={column.title === 'Support'
-                        ? `/varataaa/${link === 'Terms & Service' ? 'terms-and-conditions' : link === 'Shipping' ? 'shipping-policy' : 'refund-policy'}`
+                        ? policyPagePath(link === 'Terms & Service' ? 'terms-and-conditions' : link === 'Shipping' ? 'shipping-policy' : 'refund-policy')
                         : '#'}
                       onClick={(event) => handleLinkClick(event, column.title, link)}
                      

@@ -1,22 +1,18 @@
 import { ArrowRight } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { features } from '../data/siteData';
 import { MagneticAnchor } from './Magnetic';
 import { Reveal } from './Reveal';
 import { SmartImage } from './SmartImage';
 
-type CustomizeProps = {
-  onStartDesigning?: () => void;
-};
+export function Customize() {
+  const [comingSoonOpen, setComingSoonOpen] = useState(false);
 
-export function Customize({ onStartDesigning }: CustomizeProps) {
-  const handleStart = (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (onStartDesigning) {
-      onStartDesigning();
-    } else {
-      window.location.hash = '#customize';
-    }
-  };
+  useEffect(() => {
+    if (!comingSoonOpen) return undefined;
+    const timer = window.setTimeout(() => setComingSoonOpen(false), 2500);
+    return () => window.clearTimeout(timer);
+  }, [comingSoonOpen]);
 
   return (
     <section
@@ -57,14 +53,19 @@ export function Customize({ onStartDesigning }: CustomizeProps) {
             })}
           </div>
 
-          <a
-            href="#customize"
-            onClick={handleStart}
+          <button
+            type="button"
+            onClick={() => setComingSoonOpen(true)}
             className="liquid-metal metal-sheen mt-10 inline-flex min-h-14 items-center gap-4 bg-black px-8 py-4 text-sm font-semibold uppercase tracking-[0.05em] text-white transition-shadow duration-300 hover:shadow-metal sm:px-10 cursor-pointer"
           >
             Start Designing
             <ArrowRight size={20} strokeWidth={2} />
-          </a>
+          </button>
+          {comingSoonOpen && (
+            <div role="status" className="fixed bottom-8 left-1/2 z-[2000] -translate-x-1/2 rounded-lg bg-black px-7 py-3.5 text-sm font-medium text-white shadow-lg">
+              Coming soon.
+            </div>
+          )}
         </Reveal>
 
         <Reveal className="relative flex h-[430px] items-center justify-center sm:h-[540px] lg:h-[600px]">

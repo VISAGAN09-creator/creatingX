@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { TOTD_ENABLED } from './config/features';
+import { CUSTOMIZER_ENABLED, TOTD_ENABLED } from './config/features';
 import { About } from './components/About';
 import { AdminPortal } from './components/AdminPortal';
 import { CartDrawer } from './components/CartDrawer';
@@ -27,6 +27,7 @@ import { useCatalog } from './hooks/useCatalog';
 import { useRouter } from './hooks/useRouter';
 import { cartCanCheckout, cartSubtotal, resolveCartLines } from './utils/cartCatalog';
 import { scrollToHash } from './utils/scroll';
+import { mainWebsiteSectionPath } from './utils/sitePaths';
 
 // ============================================================================
 // App — thin composition shell
@@ -101,7 +102,7 @@ export default function App() {
 
   const navigateFromPolicy = (href: string) => {
     if (router.activePage === 'terms-and-conditions' || router.activePage === 'privacy-policy' || router.activePage === 'refund-policy' || router.activePage === 'shipping-policy') {
-      window.location.href = `/varataaa/${href}`;
+      window.location.href = mainWebsiteSectionPath(href);
       return;
     }
     router.navigateToHomeSection(href);
@@ -191,7 +192,7 @@ export default function App() {
             onOpenProduct={router.openProductDetail}
             onBack={() => router.navigateToHomeSection('#hero')}
           />
-        ) : router.activePage === 'customize' ? (
+        ) : CUSTOMIZER_ENABLED && router.activePage === 'customize' ? (
           <TShirtCustomizer
             onBack={() => router.navigateToHomeSection('#hero')}
           />
@@ -217,7 +218,7 @@ export default function App() {
               onOpenProduct={router.openProductDetail}
               onViewAll={() => router.openProductPage()}
             />
-            <Customize onStartDesigning={router.openCustomizePage} />
+            {CUSTOMIZER_ENABLED && <Customize />}
             <About />
           </>
         )}

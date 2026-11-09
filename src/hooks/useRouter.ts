@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { TOTD_ENABLED } from '../config/features';
+import { CUSTOMIZER_ENABLED, TOTD_ENABLED } from '../config/features';
 import type { Product } from '../types';
+import { shouldScheduleHomeSectionScroll } from '../utils/homeSections';
 import { scrollToHash } from '../utils/scroll';
+import { mainWebsiteSectionPath } from '../utils/sitePaths';
 
 // ============================================================================
 // Page types supported by the application router.
@@ -51,6 +53,10 @@ function isDisabledTotdRoute(hash: string) {
   return !TOTD_ENABLED && (hash === '#totd' || hash.toLowerCase().startsWith('#product-totd-'));
 }
 
+function isDisabledCustomizerRoute(hash: string) {
+  return !CUSTOMIZER_ENABLED && hash === '#customize';
+}
+
 /**
  * Parse the current `window.location.hash` into the matching AppPage.
  */
@@ -66,7 +72,7 @@ function pageFromHash(): AppPage {
   if (hash.startsWith('#product-')) return 'productDetail';
   if (hash === '#totd') return 'totd';
   if (hash === '#products') return 'products';
-  if (hash === '#customize') return 'customize';
+  if (hash === '#customize' && CUSTOMIZER_ENABLED) return 'customize';
   return 'home';
 }
 
@@ -136,8 +142,25 @@ export function useRouter(): UseRouterReturn {
   const [paymentReturnOrderId, setPaymentReturnOrderId] = useState<string | null>(orderIdFromPaymentReturnHash);
   const [scrollToRestore, setScrollToRestore] = useState<number | null>(null);
   const activePageRef = useRef(activePage);
+  const sectionScrollFrameRef = useRef<number | null>(null);
 
   activePageRef.current = activePage;
+
+  const scheduleHomeSectionScroll = useCallback((hash: string, restoringHistory = false) => {
+    if (sectionScrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(sectionScrollFrameRef.current);
+      sectionScrollFrameRef.current = null;
+    }
+    if (!shouldScheduleHomeSectionScroll(hash, restoringHistory)) return;
+
+    sectionScrollFrameRef.current = window.requestAnimationFrame(() => {
+      sectionScrollFrameRef.current = null;
+      // A later navigation may have changed the fragment before React
+      // committed this frame. Never scroll an outdated destination.
+      if (window.location.hash !== hash) return;
+      scrollToHash(hash);
+    });
+  }, []);
 
   // ---- Hash ↔ state sync (fully self-contained) ----------------------------
 
@@ -154,6 +177,10 @@ export function useRouter(): UseRouterReturn {
     window.history.scrollRestoration = 'manual';
 
     const syncPageFromHash = (stateValue?: unknown, restoreScroll = false) => {
+      if (sectionScrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(sectionScrollFrameRef.current);
+        sectionScrollFrameRef.current = null;
+      }
       const hash = window.location.hash;
       const metadata = routerMetadata(stateValue);
 
@@ -173,12 +200,12 @@ export function useRouter(): UseRouterReturn {
         return;
       }
 
-      if (isDisabledTotdRoute(hash)) {
+      if (isDisabledTotdRoute(hash) || isDisabledCustomizerRoute(hash)) {
         setSelectedProductId(null);
         setSelectedCatalogFilter(null);
         setActivePage('home');
         window.history.replaceState({ ...historyState(), varataaaRouter: { route: 'home', scrollY: 0 } }, '', '#hero');
-        scrollToHash('#hero');
+        scheduleHomeSectionScroll('#hero');
         return;
       }
 
@@ -205,9 +232,11 @@ export function useRouter(): UseRouterReturn {
         setSelectedCatalogFilter(null);
         setActivePage('totd');
       } else if (hash === '#customize') {
-        setSelectedProductId(null);
-        setSelectedCatalogFilter(null);
-        setActivePage('customize');
+        if (CUSTOMIZER_ENABLED) {
+          setSelectedProductId(null);
+          setSelectedCatalogFilter(null);
+          setActivePage('customize');
+        }
       } else {
         setSelectedProductId(null);
         if (hash !== '#products') setSelectedCatalogFilter(null);
@@ -215,6 +244,7 @@ export function useRouter(): UseRouterReturn {
       }
 
       if (restoreScroll) setScrollToRestore(metadata?.scrollY ?? 0);
+      else scheduleHomeSectionScroll(hash);
     };
 
     const onPopState = (event: PopStateEvent) => syncPageFromHash(event.state, true);
@@ -238,6 +268,7 @@ export function useRouter(): UseRouterReturn {
       window.removeEventListener('hashchange', onHashChange);
       window.removeEventListener('popstate', onPopState);
       window.removeEventListener('pagehide', onPageHide);
+      if (sectionScrollFrameRef.current !== null) window.cancelAnimationFrame(sectionScrollFrameRef.current);
     };
   }, []);
 
@@ -258,12 +289,24 @@ export function useRouter(): UseRouterReturn {
   }, []);
 
   const openCustomizePage = useCallback(() => {
+    if (!CUSTOMIZER_ENABLED) {
+      setActivePage('home');
+      setSelectedProductId(null);
+      setSelectedCatalogFilter(null);
+      window.history.replaceState(
+        { ...historyState(), varataaaRouter: { route: 'home', scrollY: 0 } },
+        '',
+        mainWebsiteSectionPath('#hero'),
+      );
+      scheduleHomeSectionScroll('#hero');
+      return;
+    }
     setActivePage('customize');
     setSelectedProductId(null);
     setSelectedCatalogFilter(null);
     window.history.pushState(null, '', '#customize');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
+  }, [scheduleHomeSectionScroll]);
 
   const openCheckoutPage = useCallback(() => {
     setActivePage('checkout');
@@ -314,7 +357,7 @@ export function useRouter(): UseRouterReturn {
         setSelectedProductId(null);
         setSelectedCatalogFilter(null);
         window.history.pushState(null, '', '#hero');
-        window.setTimeout(() => scrollToHash('#hero'), 0);
+        scheduleHomeSectionScroll('#hero');
         return;
       }
       setActivePage('totd');
@@ -332,8 +375,8 @@ export function useRouter(): UseRouterReturn {
     setSelectedProductId(null);
     setSelectedCatalogFilter(null);
     window.history.pushState(null, '', href);
-    window.setTimeout(() => scrollToHash(href), 0);
-  }, [openCustomizePage]);
+    scheduleHomeSectionScroll(href);
+  }, [openCustomizePage, scheduleHomeSectionScroll]);
 
   const closeProductDetail = useCallback(() => {
     if (routerMetadata()?.origin) {
@@ -369,13 +412,12 @@ export function useRouter(): UseRouterReturn {
   }, [navigateToHomeSection, openCustomizePage, productReturnPage]);
 
   const exitAdmin = useCallback(() => {
-    const storePath = window.location.pathname.startsWith('/varataaa/admin') ? '/varataaa/' : '/';
     setActivePage('home');
     setSelectedProductId(null);
     setSelectedCatalogFilter(null);
-    window.history.pushState(null, '', `${storePath}#hero`);
-    window.setTimeout(() => scrollToHash('#hero'), 0);
-  }, []);
+    window.history.pushState(null, '', mainWebsiteSectionPath('#hero'));
+    scheduleHomeSectionScroll('#hero');
+  }, [scheduleHomeSectionScroll]);
 
   return {
     activePage,

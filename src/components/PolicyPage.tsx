@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { ArrowLeft, Mail } from 'lucide-react';
+import { mainWebsiteSectionPath, type PolicyPageSlug } from '../utils/sitePaths';
 
-export type PolicySlug = 'terms-and-conditions' | 'privacy-policy' | 'refund-policy' | 'shipping-policy';
+export type PolicySlug = PolicyPageSlug;
 
 type PolicySectionProps = {
   title: string;
@@ -203,7 +204,7 @@ export function PolicyPage({ slug }: { slug: PolicySlug }) {
   return (
     <article className="relative z-[1] bg-white px-5 pb-20 pt-28 sm:px-8 sm:pb-28 sm:pt-36 lg:px-12">
       <div className="mx-auto w-full max-w-4xl">
-        <a href="/varataaa/#hero" className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-metal-dark transition hover:text-black">
+        <a href={mainWebsiteSectionPath('#hero')} className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-metal-dark transition hover:text-black">
           <ArrowLeft size={15} aria-hidden="true" /> Back to VARATAAA
         </a>
         <header className="mt-10 border-b border-metal-light pb-9">

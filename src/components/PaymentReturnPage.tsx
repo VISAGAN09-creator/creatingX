@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatPrice } from '../utils/format';
 import { paymentApiPath } from '../lib/paymentApi';
+import { mainWebsitePath } from '../utils/sitePaths';
 import { BrandLogo } from './BrandLogo';
 
 type PaymentReturnPageProps = {
@@ -96,7 +97,7 @@ export function PaymentReturnPage({ orderId, onBack }: PaymentReturnPageProps) {
   return (
     <section className="relative z-[1] min-h-screen bg-white font-sans text-sm leading-normal text-[#1a1a1a] flex flex-col justify-between">
       <header className="border-b border-[#e0e0e0] px-4 py-5 text-center flex justify-center">
-        <a href="/varataaa" className="flex items-center justify-center" aria-label="VARATAAA home">
+        <a href={mainWebsitePath} className="flex items-center justify-center" aria-label="VARATAAA home">
           <BrandLogo
             containerClassName="h-10 w-[140px] sm:h-11"
             imageClassName="h-full w-full object-contain"

@@ -22,3 +22,4 @@ functions/.env
 functions/node_modules/
 src/assets/
 .firebase/
+rzp-key.csv
