@@ -11,6 +11,7 @@ import { cn } from '../lib/utils';
 import { formatPrice } from '../utils/format';
 import { Button } from './ui/button';
 import { WalkInOrderForm } from './WalkInOrderForm';
+import { buildOrdersCsv, customerName, formatOrderDate } from '../utils/ordersCsv';
 
 type AdminOrdersProps = {
   adminEmail: string | null;
@@ -27,22 +28,9 @@ const statusLabels: Record<FulfillmentStatus, string> = {
 
 const statuses = Object.keys(statusLabels) as FulfillmentStatus[];
 
-function customerName(order: AdminOrder) {
-  const name = order.customer.name || [order.customer.firstName, order.customer.lastName].filter(Boolean).join(' ').trim();
-  return name || order.customer.email || 'Customer details unavailable';
-}
-
 function initials(name: string) {
   const letters = name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('');
   return letters ? letters.toUpperCase() : '?';
-}
-
-function formatOrderDate(value: string | null) {
-  if (!value) return 'Date unavailable';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'Date unavailable' : new Intl.DateTimeFormat('en-IN', {
-    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
-  }).format(date);
 }
 
 function itemSummary(order: AdminOrder) {
@@ -58,51 +46,8 @@ function statusClass(status: FulfillmentStatus) {
   return 'border-amber-400/40 bg-amber-400/10 text-amber-100';
 }
 
-function csvCell(value: unknown) {
-  const text = String(value ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  const protectedText = /^\s*[=+\-@]/.test(text) ? `'${text}` : text;
-  return `"${protectedText.replace(/"/g, '""')}"`;
-}
-
-function orderAddress(order: AdminOrder) {
-  return [
-    order.shipping.doorNo,
-    order.shipping.addressLine1 ?? order.shipping.address,
-    order.shipping.addressLine2 ?? order.shipping.apartment,
-    order.shipping.city,
-    order.shipping.state,
-    order.shipping.pinCode,
-    order.shipping.country,
-  ].filter(Boolean).join(', ');
-}
-
-function orderItemsForCsv(order: AdminOrder) {
-  return order.items.map((item) => {
-    const options = [item.size && `Size: ${item.size}`, item.mensSize && `Men's: ${item.mensSize}`, item.womensSize && `Women's: ${item.womensSize}`, item.color && `Color: ${item.color}`].filter(Boolean).join(', ');
-    return `${item.name || 'Unnamed item'} × ${item.quantity ?? 1}${options ? ` (${options})` : ''}`;
-  }).join(' | ');
-}
-
 function downloadOrdersCsv(orders: AdminOrder[]) {
-  const rows = [
-    ['Order ID', 'Order Type', 'Order Date', 'Customer Name', 'Customer Email', 'Phone Number', 'Shipping Address', 'Products / Items', 'Order Total (INR)', 'Payment Method', 'Payment Status', 'Fulfillment Status', 'Gateway Order ID'],
-    ...orders.map((order) => [
-      order.orderId,
-      order.orderType === 'walk-in' ? 'Walk-in' : 'Online',
-      formatOrderDate(order.createdAt),
-      customerName(order),
-      order.customer.email || '',
-      order.customer.phone || '',
-      orderAddress(order),
-      orderItemsForCsv(order),
-      order.pricing.total ?? '',
-      order.payment.method === 'other' ? order.payment.otherMethod || 'Other' : order.payment.method || order.payment.gateway || '',
-      order.paymentStatus || '',
-      statusLabels[order.fulfillmentStatus],
-      order.payment.razorpayOrderId || order.payment.cashfreeOrderId || '',
-    ]),
-  ];
-  const csv = `\ufeff${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}`;
+  const csv = buildOrdersCsv(orders);
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');

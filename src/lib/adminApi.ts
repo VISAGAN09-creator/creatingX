@@ -283,6 +283,20 @@ export async function fetchProductCollections(signal?: AbortSignal): Promise<str
   return result.collections;
 }
 
+export async function createProductCollection(name: string): Promise<{ collectionName: string; created: boolean }> {
+  const { body } = await adminFetch('/admin/product-collections', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
+  });
+  const result = body as { success?: boolean; collectionName?: string; created?: boolean; message?: string } | null;
+  if (!result?.success || !result.collectionName) throw new Error(result?.message || 'Unable to create collection.');
+  return { collectionName: result.collectionName, created: result.created === true };
+}
+
+export async function deleteInventoryProduct(product: InventoryProduct): Promise<void> {
+  const { body } = await adminFetch(`/admin/products/${encodeURIComponent(product.collectionName)}/${encodeURIComponent(product.documentId)}`, { method: 'DELETE' });
+  if (!(body as { success?: boolean } | null)?.success) throw new Error('Unable to delete product.');
+}
+
 export async function createProduct(payload: NewProductPayload): Promise<string> {
   const { body } = await adminFetch('/admin/products', {
     method: 'POST',

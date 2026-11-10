@@ -1433,6 +1433,60 @@ app.get('/api/admin/product-collections', async (req, res) => {
   }
 });
 
+function selectCollectionAddition(name, names) {
+  const existing = names.find((value) => value.toLocaleLowerCase() === name.toLocaleLowerCase());
+  if (existing) return { collectionName: existing, created: false };
+  if (names.some((value) => slugify(value) === slugify(name))) return { conflict: true };
+  return { collectionName: name, created: true };
+}
+
+app.post('/api/admin/product-collections', async (req, res) => {
+  if (!db) return res.status(503).json({ success: false, message: 'Product collections are unavailable because the database is not configured.' });
+  const name = sanitizeString(req.body?.name, 200).replace(/\s+/g, ' ');
+  if (!name || !slugify(name) || name.includes('/') || name === '.' || name === '..' || name.startsWith('__') || name.startsWith('_')) {
+    return res.status(400).json({ success: false, message: 'Enter a valid collection name without slashes or a leading underscore.' });
+  }
+  try {
+    const configRef = db.doc('_config/collections');
+    const result = await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(configRef);
+      const config = snapshot.exists ? snapshot.data() : {};
+      const field = Array.isArray(config.productCollections) ? 'productCollections'
+        : Array.isArray(config.collections) ? 'collections'
+          : Array.isArray(config.names) ? 'names' : 'productCollections';
+      const names = ['products', 'TOTD', ...(Array.isArray(config[field]) ? config[field] : [])]
+        .filter((value) => typeof value === 'string' && value.trim()).map((value) => value.trim());
+      const decision = selectCollectionAddition(name, names);
+      if (!decision.created) return decision;
+      transaction.set(configRef, { [field]: [...(Array.isArray(config[field]) ? config[field] : []), name] }, { merge: true });
+      return decision;
+    });
+    if (result.conflict) return res.status(409).json({ success: false, message: 'A collection with the same website identifier already exists.' });
+    return res.status(result.created ? 201 : 200).json({ success: true, ...result });
+  } catch (error) {
+    console.error('[Admin Products] Failed to create collection:', error.message);
+    return res.status(500).json({ success: false, message: 'Unable to create the collection.' });
+  }
+});
+
+app.delete('/api/admin/products/:collectionName/:documentId', async (req, res) => {
+  if (!db) return res.status(503).json({ success: false, message: 'Product deletion is unavailable because the database is not configured.' });
+  const { collectionName, documentId } = req.params;
+  try {
+    if (!(await inventoryCollectionNames()).includes(collectionName) || !documentId || documentId.includes('/')) {
+      return res.status(400).json({ success: false, message: 'Choose a valid product.' });
+    }
+    const reference = db.collection(collectionName).doc(documentId);
+    const snapshot = await reference.get();
+    if (!snapshot.exists) return res.status(404).json({ success: false, message: 'Product not found. Refresh inventory.' });
+    await reference.delete({ lastUpdateTime: snapshot.updateTime });
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('[Admin Products] Failed to delete product:', error.message);
+    return res.status(500).json({ success: false, message: 'Unable to delete the product. Refresh inventory and try again.' });
+  }
+});
+
 app.post('/api/admin/products', async (req, res) => {
   if (!db) return res.status(503).json({ success: false, message: 'Product creation is unavailable because the database is not configured.' });
 
@@ -2215,4 +2269,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { createPaymentOrderRequest, resolveCheckoutItems, app, calculateCheckoutPricing, validateCheckoutDetails, pendingOrderItem, paidOrderItem, parseNewProductSizes, coupleStockAdapters, createPaidOrderWithFulfillment, createRazorpayPaidOrder, verifyRazorpayPaymentRequest, handleRazorpayWebhookRequest, claimRazorpayEvent };
+module.exports = { createPaymentOrderRequest, resolveCheckoutItems, app, calculateCheckoutPricing, validateCheckoutDetails, pendingOrderItem, paidOrderItem, parseNewProductSizes, coupleStockAdapters, createPaidOrderWithFulfillment, createRazorpayPaidOrder, verifyRazorpayPaymentRequest, handleRazorpayWebhookRequest, claimRazorpayEvent, selectCollectionAddition };

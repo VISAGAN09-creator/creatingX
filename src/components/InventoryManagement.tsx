@@ -2,6 +2,7 @@ import { LoaderCircle, LogOut, RefreshCw, Search, ShieldCheck } from 'lucide-rea
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   fetchInventory,
+  deleteInventoryProduct,
   INVENTORY_SIZES,
   type InventoryProduct,
   type InventorySize,
@@ -9,6 +10,7 @@ import {
 } from '../lib/adminApi';
 import { SmartImage } from './SmartImage';
 import { Button } from './ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 
 type InventoryDrafts = Record<string, Partial<Record<InventorySize, string>>>;
 type MetadataDraft = Partial<{ name: string; price: string; latest: boolean; hero: boolean; couple: boolean }>;
@@ -85,6 +87,7 @@ function InventoryMobileCard({
   hasDraft,
   onInventoryDraft,
   onMetadataDraft,
+  onDelete,
 }: {
   product: InventoryProduct;
   inventoryDrafts: InventoryDrafts;
@@ -94,6 +97,7 @@ function InventoryMobileCard({
   hasDraft: boolean;
   onInventoryDraft: (product: InventoryProduct, size: InventorySize, value: string) => void;
   onMetadataDraft: SetMetadataDraft;
+  onDelete: (product: InventoryProduct) => void;
 }) {
   const metadata = metadataDrafts[product.productId] ?? {};
   const displayName = metadata.name ?? product.name;
@@ -195,6 +199,7 @@ function InventoryMobileCard({
       </details>
 
       {hasDraft && <p className="mt-3 text-sm text-amber-200">Unsaved changes for this product.</p>}
+      <button type="button" onClick={() => onDelete(product)} disabled={saving} className="mt-3 rounded-lg border border-red-400/30 px-3 py-2 text-sm text-red-200 hover:bg-red-400/10 disabled:opacity-50">Delete</button>
     </article>
   );
 }
@@ -214,6 +219,8 @@ export function InventoryManagement({ adminEmail, onSignOut, onExit, onOpenOrder
   const [collection, setCollection] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [productToDelete, setProductToDelete] = useState<InventoryProduct | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -291,6 +298,25 @@ export function InventoryManagement({ adminEmail, onSignOut, onExit, onOpenOrder
     setInvalid(new Set());
     setError(null);
     setNotice('Unsaved inventory changes were discarded.');
+  };
+
+  const confirmDelete = async () => {
+    const product = productToDelete;
+    if (!product || deletingId || saving) return;
+    setDeletingId(product.productId); setError(null); setNotice(null);
+    try {
+      await deleteInventoryProduct(product);
+      setProducts((current) => current.filter((item) => item.productId !== product.productId));
+      setInventoryDrafts((current) => { const next = { ...current }; delete next[product.productId]; return next; });
+      setMetadataDrafts((current) => { const next = { ...current }; delete next[product.productId]; return next; });
+      setInvalid((current) => new Set([...current].filter((key) => !key.startsWith(`${product.productId}\u0000`))));
+      setProductToDelete(null);
+      setNotice(`${product.name} was deleted from the catalog.`);
+      try { await loadInventory(); } catch (refreshError) {
+        setError(refreshError instanceof Error ? `Product deleted, but inventory refresh failed: ${refreshError.message}` : 'Product deleted, but inventory refresh failed.');
+      }
+    } catch (deleteError) { setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete product.'); }
+    finally { setDeletingId(null); }
   };
 
   const saveChanges = async () => {
@@ -390,7 +416,7 @@ export function InventoryManagement({ adminEmail, onSignOut, onExit, onOpenOrder
             const metadata = metadataDrafts[product.productId] ?? {};
             const displayName = metadata.name ?? product.name;
             const displayPrice = metadata.price ?? (product.price === null ? '' : String(product.price));
-            return <tr key={product.productId} className={`border-b border-white/[0.07] ${hasDraft ? 'bg-amber-300/[0.045]' : 'hover:bg-white/[0.025]'}`}><td className="sticky left-0 z-[1] bg-[#17181b] px-5 py-3 align-top"><div className="flex min-w-0 gap-3"><div className="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-black/30"><SmartImage src={product.image} alt={product.name} fallbackLabel="No image" className="h-full w-full object-cover text-[8px]" /></div><div className="min-w-0 flex-1"><input aria-label={`${product.name} product name`} value={displayName} onChange={(event) => setMetadataDraft(product, 'name', event.target.value)} disabled={saving || !product.nameField} className={`h-9 w-full rounded-md border bg-[#111214] px-2.5 text-sm font-medium text-white outline-none disabled:cursor-not-allowed disabled:opacity-50 ${invalid.has(draftKey(product.productId, 'name')) ? 'border-red-400' : 'border-white/15 focus:border-white/50'}`} /><p className="mt-1 text-xs text-zinc-500">{product.collectionName}{!product.nameField && ' · name field needs migration'}{!product.editable && ' · stock field needs migration'}</p>{hasDraft && <p className="mt-1 text-xs text-amber-200">Unsaved change</p>}</div></div></td><td className="px-3 py-3 align-top"><input aria-label={`${product.name} price`} value={displayPrice} onChange={(event) => setMetadataDraft(product, 'price', event.target.value)} disabled={saving} inputMode="decimal" className={`h-9 w-full rounded-md border bg-[#111214] px-2 text-right text-sm text-white outline-none disabled:cursor-not-allowed disabled:opacity-50 ${invalid.has(draftKey(product.productId, 'price')) ? 'border-red-400' : 'border-white/15 focus:border-white/50'}`} /></td>{(['latest', 'hero', 'couple'] as const).map((field) => { const value = metadata[field] ?? product.flags[field]; return <td key={field} className="px-3 py-3 align-top"><select aria-label={`${product.name} ${field}`} value={value ? 'yes' : 'no'} onChange={(event) => setMetadataDraft(product, field, event.target.value === 'yes')} disabled={saving} className="h-9 w-full rounded-md border border-white/15 bg-[#111214] px-2 text-sm text-white outline-none focus:border-white/50 disabled:cursor-not-allowed disabled:opacity-50"><option value="yes">Yes</option><option value="no">No</option></select></td>; })}{INVENTORY_SIZES.map((size) => { const saved = product.sizes[size]; const value = visibleQuantity(product, inventoryDrafts, size); const inputInvalid = invalid.has(draftKey(product.productId, size)); const changed = value !== saved && value !== String(saved ?? ''); return <td key={size} className="px-2 py-3 text-center">{saved === null ? <span className="text-zinc-600" title="Size not configured">—</span> : <input aria-label={`${product.name}, ${size} stock`} value={value ?? ''} onChange={(event) => setInventoryDraft(product, size, event.target.value)} disabled={saving || !product.editable} inputMode="numeric" className={`h-9 w-16 rounded-md border bg-[#111214] px-2 text-center text-sm text-white outline-none disabled:cursor-not-allowed disabled:opacity-50 ${inputInvalid ? 'border-red-400' : changed ? 'border-amber-300 bg-amber-300/10' : saved === 0 ? 'border-red-400/40 text-red-200' : 'border-white/15 focus:border-white/50'}`} />}</td>; })}<td className="px-5 py-4 text-right font-semibold text-zinc-100">{total}</td></tr>;
+            return <tr key={product.productId} className={`border-b border-white/[0.07] ${hasDraft ? 'bg-amber-300/[0.045]' : 'hover:bg-white/[0.025]'}`}><td className="sticky left-0 z-[1] bg-[#17181b] px-5 py-3 align-top"><div className="flex min-w-0 gap-3"><div className="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-black/30"><SmartImage src={product.image} alt={product.name} fallbackLabel="No image" className="h-full w-full object-cover text-[8px]" /></div><div className="min-w-0 flex-1"><input aria-label={`${product.name} product name`} value={displayName} onChange={(event) => setMetadataDraft(product, 'name', event.target.value)} disabled={saving || !product.nameField} className={`h-9 w-full rounded-md border bg-[#111214] px-2.5 text-sm font-medium text-white outline-none disabled:cursor-not-allowed disabled:opacity-50 ${invalid.has(draftKey(product.productId, 'name')) ? 'border-red-400' : 'border-white/15 focus:border-white/50'}`} /><p className="mt-1 text-xs text-zinc-500">{product.collectionName}{!product.nameField && ' · name field needs migration'}{!product.editable && ' · stock field needs migration'}</p>{hasDraft && <p className="mt-1 text-xs text-amber-200">Unsaved change</p>}<button type="button" disabled={saving || Boolean(deletingId)} onClick={() => setProductToDelete(product)} className="mt-2 rounded-lg border border-red-400/30 px-2 py-1 text-xs text-red-200 hover:bg-red-400/10 disabled:opacity-50">Delete</button></div></div></td><td className="px-3 py-3 align-top"><input aria-label={`${product.name} price`} value={displayPrice} onChange={(event) => setMetadataDraft(product, 'price', event.target.value)} disabled={saving} inputMode="decimal" className={`h-9 w-full rounded-md border bg-[#111214] px-2 text-right text-sm text-white outline-none disabled:cursor-not-allowed disabled:opacity-50 ${invalid.has(draftKey(product.productId, 'price')) ? 'border-red-400' : 'border-white/15 focus:border-white/50'}`} /></td>{(['latest', 'hero', 'couple'] as const).map((field) => { const value = metadata[field] ?? product.flags[field]; return <td key={field} className="px-3 py-3 align-top"><select aria-label={`${product.name} ${field}`} value={value ? 'yes' : 'no'} onChange={(event) => setMetadataDraft(product, field, event.target.value === 'yes')} disabled={saving} className="h-9 w-full rounded-md border border-white/15 bg-[#111214] px-2 text-sm text-white outline-none focus:border-white/50 disabled:cursor-not-allowed disabled:opacity-50"><option value="yes">Yes</option><option value="no">No</option></select></td>; })}{INVENTORY_SIZES.map((size) => { const saved = product.sizes[size]; const value = visibleQuantity(product, inventoryDrafts, size); const inputInvalid = invalid.has(draftKey(product.productId, size)); const changed = value !== saved && value !== String(saved ?? ''); return <td key={size} className="px-2 py-3 text-center">{saved === null ? <span className="text-zinc-600" title="Size not configured">—</span> : <input aria-label={`${product.name}, ${size} stock`} value={value ?? ''} onChange={(event) => setInventoryDraft(product, size, event.target.value)} disabled={saving || !product.editable} inputMode="numeric" className={`h-9 w-16 rounded-md border bg-[#111214] px-2 text-center text-sm text-white outline-none disabled:cursor-not-allowed disabled:opacity-50 ${inputInvalid ? 'border-red-400' : changed ? 'border-amber-300 bg-amber-300/10' : saved === 0 ? 'border-red-400/40 text-red-200' : 'border-white/15 focus:border-white/50'}`} />}</td>; })}<td className="px-5 py-4 text-right font-semibold text-zinc-100">{total}</td></tr>;
           })}</tbody></table></div></div>
 
         <div className="space-y-4 lg:hidden">
@@ -410,10 +436,17 @@ export function InventoryManagement({ adminEmail, onSignOut, onExit, onOpenOrder
                 hasDraft={pendingProducts.some((pendingProduct) => pendingProduct.productId === product.productId)}
                 onInventoryDraft={setInventoryDraft}
                 onMetadataDraft={setMetadataDraft}
+                onDelete={setProductToDelete}
               />
             ))
           )}
         </div>
+        <Dialog open={Boolean(productToDelete)} onOpenChange={(open) => { if (!open && !deletingId) setProductToDelete(null); }}>
+          <DialogContent className="border-white/15 bg-[#17181b] text-white">
+            <DialogHeader><DialogTitle>Delete Product</DialogTitle><DialogDescription className="text-zinc-300">Are you sure you want to delete <strong>{productToDelete?.name}</strong>? It will be removed from the store. Existing orders will remain.</DialogDescription></DialogHeader>
+            <div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={Boolean(deletingId)} onClick={() => setProductToDelete(null)}>Cancel</Button><Button type="button" disabled={Boolean(deletingId)} onClick={() => void confirmDelete()} className="bg-red-600 text-white hover:bg-red-700">{deletingId ? 'Deleting?' : 'Delete Product'}</Button></div>
+          </DialogContent>
+        </Dialog>
       </section>
     </main>
   );
